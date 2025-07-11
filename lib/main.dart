@@ -1,9 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+
+// Import all your screen files
+import 'package:my_project/screens/splash_screen.dart';
+import 'package:my_project/screens/welcome_screen.dart';
 import 'package:my_project/auth/signup_screen.dart';
 import 'package:my_project/auth/login_screen.dart';
 import 'package:my_project/auth/forgot_password_screen.dart';
 import 'package:my_project/screens/home_screen.dart';
+
 import 'firebase_options.dart';
 
 void main() async {
@@ -20,13 +25,19 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Flutter Auth',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      initialRoute: '/login',
+      theme: ThemeData(primarySwatch: Colors.deepPurple),
+
+      // Set the initial route to our new splash screen
+      initialRoute: '/',
+
+      // Define all the routes for your app
       routes: {
-        '/signup': (context) => SignupScreen(),
-        '/login': (context) => LoginScreen(),
-        '/forgot-password': (context) => ForgotPasswordScreen(),
-        '/home': (context) => HomeScreen(),
+        '/': (context) => const SplashScreen(),
+        '/welcome': (context) => const WelcomeScreen(),
+        '/signup': (context) => const SignupScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }

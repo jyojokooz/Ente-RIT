@@ -14,7 +14,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/login');
+    // Navigate to the welcome screen and remove all previous routes
+    Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
   }
 
   @override
