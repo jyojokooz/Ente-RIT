@@ -29,30 +29,35 @@ class _SignupScreenState extends State<SignupScreen> {
         );
 
         // Optional: send email verification
-        // await userCredential.user!.sendEmailVerification();
+        await userCredential.user?.sendEmailVerification();
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created successfully')),
+          const SnackBar(
+            content: Text(
+              'Account created successfully. Please verify your email.',
+            ),
+          ),
         );
 
         Navigator.pushReplacementNamed(context, '/home');
       } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message ?? 'Signup failed')));
       } finally {
-        setState(() => isLoading = false);
+        if (mounted) setState(() => isLoading = false);
       }
     }
   }
 
-  /// Sign up or Sign in with Google
   Future<void> _signupWithGoogle() async {
-    final GoogleSignIn _googleSignIn = GoogleSignIn();
+    final GoogleSignIn googleSignIn = GoogleSignIn(); // ✅ Fixed name
 
     try {
-      await _googleSignIn.signOut(); // to force account selection
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      await googleSignIn.signOut(); // force account selection
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
 
       final googleAuth = await googleUser.authentication;
@@ -64,7 +69,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       final userCredential = await _auth.signInWithCredential(credential);
 
-      // Check if this is a new user
+      if (!mounted) return;
       if (userCredential.additionalUserInfo?.isNewUser ?? false) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -79,6 +84,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Google Sign-In failed: ${e.toString()}")),
       );

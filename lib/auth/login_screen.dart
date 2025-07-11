@@ -26,24 +26,28 @@ class _LoginScreenState extends State<LoginScreen> {
           email: email.trim(),
           password: password.trim(),
         );
+
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/home');
       } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login failed')));
       } finally {
-        setState(() => isLoading = false);
+        if (mounted) setState(() => isLoading = false);
       }
     }
   }
 
   /// Login with Google
   Future<void> _loginWithGoogle() async {
-    final GoogleSignIn _googleSignIn = GoogleSignIn();
+    final GoogleSignIn googleSignIn =
+        GoogleSignIn(); // ✅ Removed leading underscore
 
     try {
-      await _googleSignIn.signOut(); // To ensure account selection
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      await googleSignIn.signOut(); // To ensure account selection
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return; // Cancelled by user
 
       final googleAuth = await googleUser.authentication;
@@ -55,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final userCredential = await _auth.signInWithCredential(credential);
 
+      if (!mounted) return;
       if (userCredential.user != null) {
         ScaffoldMessenger.of(
           context,
@@ -62,6 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacementNamed(context, '/home');
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Google Login failed: ${e.toString()}")),
       );
