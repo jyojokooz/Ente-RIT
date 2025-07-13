@@ -1,11 +1,8 @@
-// lib/edit_profile_screen.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  // No longer needs any parameters.
   const EditProfileScreen({super.key});
 
   @override
@@ -14,14 +11,13 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  // Initialize controllers without text. They will be populated after loading.
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _bioController = TextEditingController();
   final _linksController = TextEditingController();
 
   final user = FirebaseAuth.instance.currentUser;
-  bool _isLoading = true; // State for the loading indicator
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -35,17 +31,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
-
     try {
       final docSnapshot =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user!.uid)
               .get();
-
       if (mounted) {
         if (docSnapshot.exists) {
-          // If a profile document exists, use its data.
           final data = docSnapshot.data()!;
           _nameController.text = data['displayName'] ?? user?.displayName ?? '';
           _usernameController.text =
@@ -65,10 +58,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        // Hide loading indicator once data is loaded or an error occurs.
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -81,6 +71,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  /// Saves the form data to Firestore and updates Firebase Auth.
   Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate() && user != null) {
       ScaffoldMessenger.of(
@@ -91,7 +82,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         final userDocRef = FirebaseFirestore.instance
             .collection('users')
             .doc(user!.uid);
+
+        // Also update the display name in Firebase Auth for consistency
         await user!.updateDisplayName(_nameController.text);
+
         final userData = {
           'displayName': _nameController.text,
           'username': _usernameController.text,
@@ -99,6 +93,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'links': _linksController.text,
           'email': user!.email,
         };
+        // Use `set` with `merge: true` to create or update the document
         await userDocRef.set(userData, SetOptions(merge: true));
 
         if (!mounted) return;
@@ -107,7 +102,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
         );
-        // Pop the screen and return true to indicate a successful update.
+        // Pop screen and return `true` to signal a successful update
         Navigator.of(context).pop(true);
       } catch (e) {
         if (!mounted) return;
@@ -125,12 +120,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       appBar: AppBar(
         title: const Text('Edit Profile'),
         actions: [
-          // Disable the save button while loading to prevent issues.
+          // Disable save button while loading
           if (!_isLoading)
             IconButton(icon: const Icon(Icons.check), onPressed: _saveProfile),
         ],
       ),
-      // Show a loading indicator while fetching data.
+      // Show a loading indicator while fetching data
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
