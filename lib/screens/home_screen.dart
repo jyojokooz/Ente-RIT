@@ -1,10 +1,9 @@
-// lib/screens/home_screen.dart (NO CHANGES NEEDED, PROVIDED FOR CONTEXT)
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+// We don't need the cloudinary_public import here anymore for deletion
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'comments_screen.dart'; // Already correctly imported
+import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
 import 'post_card.dart';
@@ -21,7 +20,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DocumentSnapshot> _posts = [];
   bool _isLoading = true;
 
-  // ... stories list ...
   final List<Map<String, dynamic>> stories = [
     {'name': 'You', 'image': 'https://i.pravatar.cc/150?img=11', 'isYou': true},
     {'name': 'Benjamin', 'image': 'https://i.pravatar.cc/150?img=32'},
@@ -38,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchPosts() async {
-    // ... no changes here
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
@@ -64,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onCommentTapped(String postId) {
-    // This is already correct. It navigates and then refreshes.
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
@@ -73,7 +69,64 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ... build method and all other _build methods are unchanged ...
+  // --- THIS IS THE CORRECTED DELETE FUNCTION ---
+  Future<void> _deletePost(String postId) async {
+    // We no longer need the postImageUrl
+    final bool? didRequestDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey.shade900,
+          title: const Text('Delete Post?'),
+          content: const Text(
+            'Are you sure you want to permanently delete this post?',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (didRequestDelete == true) {
+      try {
+        // --- FIX APPLIED HERE ---
+        // We ONLY delete the post from Firestore. We no longer attempt
+        // to delete the image from Cloudinary from the client-side.
+        await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(postId)
+            .delete();
+
+        // Refresh the UI by fetching the posts again
+        _fetchPosts();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post deleted successfully.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete post: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color screenBackgroundColor = Colors.black;
@@ -144,6 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         postSnapshot: postSnapshot,
                         onCommentPressed:
                             () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
                       );
                     }, childCount: _posts.length),
                   ),

@@ -6,11 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
+  final Function() onDeletePressed; // <-- Add this
 
   const PostCard({
     super.key,
     required this.postSnapshot,
     required this.onCommentPressed,
+    required this.onDeletePressed, // <-- Add this
   });
 
   @override
@@ -22,6 +24,8 @@ class _PostCardState extends State<PostCard> {
   late List<dynamic> likesList;
   late bool isLiked;
   late int likeCount;
+  late int commentCount;
+  late bool isAuthor; // <-- Add this state variable
 
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
@@ -34,38 +38,42 @@ class _PostCardState extends State<PostCard> {
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.postSnapshot != oldWidget.postSnapshot) {
-      _updateStateFromSnapshot();
-    }
+    _updateStateFromSnapshot();
   }
 
   void _updateStateFromSnapshot() {
-    postData = widget.postSnapshot.data() as Map<String, dynamic>;
+    setState(() {
+      postData = widget.postSnapshot.data() as Map<String, dynamic>;
 
-    if (postData['likes'] is List) {
-      likesList = List<dynamic>.from(postData['likes']);
-    } else {
-      likesList = [];
-    }
+      // Check if current user is the author of the post
+      final postAuthorId = postData['userId'];
+      isAuthor = currentUserId == postAuthorId;
 
-    likeCount = likesList.length;
-    isLiked = likesList.contains(currentUserId);
+      if (postData['likes'] is List) {
+        likesList = List<dynamic>.from(postData['likes']);
+      } else {
+        likesList = [];
+      }
+
+      likeCount = likesList.length;
+      isLiked = likesList.contains(currentUserId);
+      commentCount = postData['comments'] ?? 0;
+    });
   }
 
   Future<void> _toggleLike() async {
-    // Optimistic UI update for instant feedback
+    // ... this function remains unchanged
     setState(() {
       isLiked = !isLiked;
       if (isLiked) {
         likeCount++;
-        likesList.add(currentUserId); // Manually update local list
+        likesList.add(currentUserId);
       } else {
         likeCount--;
-        likesList.remove(currentUserId); // Manually update local list
+        likesList.remove(currentUserId);
       }
     });
 
-    // Update Firestore in the background
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postSnapshot.id);
@@ -91,7 +99,6 @@ class _PostCardState extends State<PostCard> {
     final String userImage = postData['userImageUrl'] ?? '';
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
-    final int commentCount = postData['comments'] ?? 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -113,13 +120,25 @@ class _PostCardState extends State<PostCard> {
                   child: userImage.isEmpty ? const Icon(Icons.person) : null,
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  name,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextColor,
+                Expanded(
+                  // Use Expanded to push the icon to the end
+                  child: Text(
+                    name,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor,
+                    ),
                   ),
                 ),
+                // --- SHOW DELETE/MORE ICON ONLY IF USER IS THE AUTHOR ---
+                if (isAuthor)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.more_horiz,
+                      color: secondaryTextColor,
+                    ),
+                    onPressed: widget.onDeletePressed,
+                  ),
               ],
             ),
             if (caption.isNotEmpty)
@@ -160,10 +179,8 @@ class _PostCardState extends State<PostCard> {
                   children: [
                     GestureDetector(
                       onTap: widget.onCommentPressed,
-                      // Make the tap area larger and more obvious
                       child: Container(
-                        color:
-                            Colors.transparent, // Makes the whole area tappable
+                        color: Colors.transparent,
                         child: Row(
                           children: [
                             const Icon(
@@ -171,33 +188,40 @@ class _PostCardState extends State<PostCard> {
                               size: 22,
                               color: secondaryTextColor,
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              commentCount.toString(),
-                              style: const TextStyle(color: secondaryTextColor),
-                            ),
+                            if (commentCount > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 5.0),
+                                child: Text(
+                                  commentCount.toString(),
+                                  style: const TextStyle(
+                                    color: secondaryTextColor,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     IconButton(
-                      visualDensity: VisualDensity.compact, // Reduces padding
+                      visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.all(0),
                       icon: Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
                         color:
                             isLiked ? primaryAccentColor : secondaryTextColor,
                       ),
-
                       iconSize: 24,
                       onPressed: _toggleLike,
                     ),
-                    const SizedBox(width: 2),
-                    Text(
-                      likeCount.toString(),
-                      style: const TextStyle(color: secondaryTextColor),
-                    ),
+                    if (likeCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2.0),
+                        child: Text(
+                          likeCount.toString(),
+                          style: const TextStyle(color: secondaryTextColor),
+                        ),
+                      ),
                   ],
                 ),
                 Row(
