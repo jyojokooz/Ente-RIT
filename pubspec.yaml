@@ -94,4 +94,5 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
   assets:
+    - assets/welcome_illustration.png
     - assets/google_logo.png

@@ -20,16 +20,13 @@ class _SignupScreenState extends State<SignupScreen> {
 
   /// Sign up with email and password
   Future<void> _signupWithEmailPassword() async {
-    // Note: The UI shows "Username", but the backend logic uses email.
     if (_formKey.currentState!.validate()) {
       setState(() => isLoading = true);
-
       try {
         await _auth.createUserWithEmailAndPassword(
           email: email.trim(),
           password: password.trim(),
         );
-
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -55,50 +52,24 @@ class _SignupScreenState extends State<SignupScreen> {
   /// Sign up or log in with Google
   Future<void> _signupWithGoogle() async {
     final GoogleSignIn googleSignIn = GoogleSignIn();
-
     try {
-      // Signing out forces the account picker to always show up.
       await googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      // If the user cancels the sign-in
       if (googleUser == null) return;
-
       setState(() => isLoading = true);
-
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-
-      final userCredential = await _auth.signInWithCredential(credential);
-
+      await _auth.signInWithCredential(credential);
       if (!mounted) return;
-
-      // Check if the user is new to show a welcome message
-      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Google account signed up successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Logged in with Google'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Google Sign-In failed: ${e.toString()}"),
+          content: Text("Google Sign-In failed. Please try again."),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -109,13 +80,24 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Define colors from the UI design
-    const Color primaryColor = Color(0xFF5A4BDA);
-    const Color backgroundColor = Color(0xFFE6E6FA); // A light lavender
-    const Color screenBackgroundColor = Color(0xFFC8BFE7);
+    // --- COLOR & THEME UPDATES ---
+    const Color screenBackgroundColor = Colors.black;
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color secondaryTextColor = Colors.white70;
+    const Color buttonTextColor = Colors.black;
 
     return Scaffold(
       backgroundColor: screenBackgroundColor,
+      // Add a back button for easy navigation
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: primaryTextColor),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -126,47 +108,40 @@ class _SignupScreenState extends State<SignupScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- Illustration ---
                   Image.asset(
                     'assets/rocket_person.png',
                     height: 200,
                     errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
+                      return Icon(
                         Icons.rocket_launch,
                         size: 150,
-                        color: primaryColor,
+                        color: primaryAccentColor, // Updated color
                       );
                     },
                   ),
                   const SizedBox(height: 20),
-
-                  // --- Greeting Text ---
                   Text(
                     'Hi there!',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 18,
-                      color: Colors.white,
+                      color: secondaryTextColor, // Updated color
                     ),
                   ),
                   const SizedBox(height: 4),
-
-                  // --- Main Title ---
                   Text(
                     "Let's Get Started",
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: primaryTextColor, // Updated color
                     ),
                   ),
                   const SizedBox(height: 30),
-
-                  // --- Username (Email) Field ---
                   TextFormField(
                     decoration: InputDecoration(
-                      hintText: 'Username',
+                      hintText: 'Email Address', // Changed hint for clarity
                       prefixIcon: const Icon(
                         Icons.person_outline,
                         color: Colors.grey,
@@ -189,8 +164,6 @@ class _SignupScreenState extends State<SignupScreen> {
                                 : 'Please enter a valid email',
                   ),
                   const SizedBox(height: 15),
-
-                  // --- Password Field ---
                   TextFormField(
                     decoration: InputDecoration(
                       hintText: 'Password',
@@ -214,19 +187,17 @@ class _SignupScreenState extends State<SignupScreen> {
                                 : 'Password must be at least 6 characters',
                   ),
                   const SizedBox(height: 30),
-
-                  // --- Loading Indicator or Buttons ---
                   if (isLoading)
                     const Center(
                       child: CircularProgressIndicator(color: Colors.white),
                     )
                   else ...[
-                    // --- Create an Account Button ---
+                    // Primary Action Button
                     ElevatedButton(
                       onPressed: _signupWithEmailPassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
+                        backgroundColor: primaryAccentColor, // Yellow button
+                        foregroundColor: buttonTextColor, // Black text
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
@@ -241,16 +212,13 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                     const SizedBox(height: 15),
-
-                    // --- 'Or' Divider ---
                     Text(
                       'Or',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(color: Colors.white70),
+                      style: GoogleFonts.poppins(color: secondaryTextColor),
                     ),
                     const SizedBox(height: 15),
-
-                    // --- Google Sign-Up Button ---
+                    // Google Button - already white, style is perfect
                     ElevatedButton.icon(
                       icon: Image.asset('assets/google_logo.png', height: 22.0),
                       label: Text(
@@ -271,30 +239,32 @@ class _SignupScreenState extends State<SignupScreen> {
                         elevation: 1,
                       ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // --- Log In Button (Now at the end) ---
-                    ElevatedButton(
-                      onPressed:
-                          () =>
-                              Navigator.pushReplacementNamed(context, '/login'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: backgroundColor,
-                        foregroundColor: primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: Text(
-                        "Log In",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
                   ],
+                  const SizedBox(height: 40),
+                  // Navigation to Login Screen
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Already have an account? ",
+                        style: GoogleFonts.poppins(color: secondaryTextColor),
+                      ),
+                      GestureDetector(
+                        onTap:
+                            () => Navigator.pushReplacementNamed(
+                              context,
+                              '/login',
+                            ),
+                        child: Text(
+                          "Log In",
+                          style: GoogleFonts.poppins(
+                            color: primaryAccentColor, // Yellow link text
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 20),
                 ],
               ),

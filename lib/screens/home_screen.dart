@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'profile_screen.dart'; // This relative import works because both files are in lib/screens/
+import 'package:google_fonts/google_fonts.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,10 +11,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Get the current user from Firebase Auth
   final user = FirebaseAuth.instance.currentUser;
 
-  // Mock data for the stories
   final List<Map<String, dynamic>> stories = [
     {'name': 'You', 'image': 'https://i.pravatar.cc/150?img=11', 'isYou': true},
     {'name': 'Benjamin', 'image': 'https://i.pravatar.cc/150?img=32'},
@@ -25,23 +24,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color screenBackgroundColor = Colors.black;
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color secondaryTextColor = Colors.white70;
+    final Color cardBackgroundColor = Colors.grey.shade900;
+    const Color buttonTextColor = Colors.black;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: screenBackgroundColor,
       floatingActionButton: FloatingActionButton(
         onPressed: () {},
-        backgroundColor: const Color(0xFFF3D8E4),
+        backgroundColor: primaryAccentColor,
         elevation: 4.0,
-        child: const Icon(Icons.add, color: Color(0xFF6B55C9), size: 30),
+        child: const Icon(Icons.add, color: buttonTextColor, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _buildBottomAppBar(),
+      bottomNavigationBar: _buildBottomAppBar(
+        cardBackgroundColor,
+        secondaryTextColor,
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: 16.0),
           children: [
-            _buildTopBar(),
+            _buildTopBar(primaryTextColor, cardBackgroundColor),
             const SizedBox(height: 16),
-            _buildStoriesSection(),
+            _buildStoriesSection(secondaryTextColor, cardBackgroundColor),
             const SizedBox(height: 16),
             _buildPostCard(
               name: 'Claire Dangais',
@@ -51,6 +60,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1470',
               likes: 122,
               comments: 10,
+              cardColor: cardBackgroundColor,
+              textColor: primaryTextColor,
+              secondaryColor: secondaryTextColor,
+              accentColor: primaryAccentColor,
             ),
             _buildPostCard(
               name: 'Farita Smith',
@@ -60,6 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1470',
               likes: 451,
               comments: 53,
+              cardColor: cardBackgroundColor,
+              textColor: primaryTextColor,
+              secondaryColor: secondaryTextColor,
+              accentColor: primaryAccentColor,
             ),
           ],
         ),
@@ -67,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
@@ -77,40 +94,32 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.grey[100],
+              color: iconBgColor,
             ),
-            child: const Icon(
-              Icons.camera_alt_outlined,
-              color: Colors.black87,
-              size: 28,
-            ),
+            child: Icon(Icons.camera_alt_outlined, color: textColor, size: 28),
           ),
-          const Text(
+          Text(
             'Explore',
-            style: TextStyle(
+            style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              fontFamily: 'sans-serif',
+              color: textColor,
             ),
           ),
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.grey[100],
+              color: iconBgColor,
             ),
-            child: const Icon(
-              Icons.notifications_none,
-              color: Colors.black87,
-              size: 28,
-            ),
+            child: Icon(Icons.notifications_none, color: textColor, size: 28),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStoriesSection() {
+  Widget _buildStoriesSection(Color textColor, Color avatarBgColor) {
     return SizedBox(
       height: 100,
       child: ListView.builder(
@@ -128,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     CircleAvatar(
                       radius: 35,
-                      backgroundColor: Colors.grey[300],
+                      backgroundColor: avatarBgColor,
                       backgroundImage: NetworkImage(story['image']),
                     ),
                     if (story['isYou'] == true)
@@ -137,18 +146,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 70,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white.withAlpha(153),
+                          // --- FIX APPLIED HERE ---
+                          color: Colors.black.withAlpha(128),
                         ),
                         child: const Icon(
                           Icons.add,
-                          color: Colors.black54,
+                          color: Colors.white,
                           size: 30,
                         ),
                       ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(story['name']),
+                Text(
+                  story['name'],
+                  style: GoogleFonts.poppins(color: textColor, fontSize: 12),
+                ),
               ],
             ),
           );
@@ -164,13 +177,17 @@ class _HomeScreenState extends State<HomeScreen> {
     required String postImage,
     required int likes,
     required int comments,
+    required Color cardColor,
+    required Color textColor,
+    required Color secondaryColor,
+    required Color accentColor,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: Container(
         padding: const EdgeInsets.all(12.0),
         decoration: BoxDecoration(
-          color: const Color(0xFFF0F5FD),
+          color: cardColor,
           borderRadius: BorderRadius.circular(25.0),
         ),
         child: Column(
@@ -188,9 +205,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
                     ),
-                    Text(username, style: const TextStyle(color: Colors.grey)),
+                    Text(
+                      username,
+                      style: GoogleFonts.poppins(color: secondaryColor),
+                    ),
                   ],
                 ),
               ],
@@ -211,20 +234,34 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.chat_bubble_outline, size: 22),
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 22,
+                      color: secondaryColor,
+                    ),
                     const SizedBox(width: 5),
-                    Text(comments.toString()),
+                    Text(
+                      comments.toString(),
+                      style: TextStyle(color: secondaryColor),
+                    ),
                     const SizedBox(width: 20),
-                    const Icon(Icons.favorite, color: Colors.red, size: 22),
+                    Icon(Icons.favorite, color: accentColor, size: 22),
                     const SizedBox(width: 5),
-                    Text(likes.toString()),
+                    Text(
+                      likes.toString(),
+                      style: TextStyle(color: secondaryColor),
+                    ),
                   ],
                 ),
                 Row(
-                  children: const [
-                    Icon(Icons.send_outlined, size: 22),
-                    SizedBox(width: 20),
-                    Icon(Icons.bookmark_border_outlined, size: 22),
+                  children: [
+                    Icon(Icons.send_outlined, size: 22, color: secondaryColor),
+                    const SizedBox(width: 20),
+                    Icon(
+                      Icons.bookmark_border_outlined,
+                      size: 22,
+                      color: secondaryColor,
+                    ),
                   ],
                 ),
               ],
@@ -235,46 +272,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // In lib/screens/home_screen.dart
-
-  // ... (keep the rest of the file the same)
-
-  // UPDATED BottomAppBar
-  BottomAppBar _buildBottomAppBar() {
-    const Color iconColor = Color(0xFF7B6BC4);
+  BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
       notchMargin: 10.0,
-      color: const Color(0xFFE4E1FF),
+      color: bgColor,
       child: SizedBox(
         height: 60,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             IconButton(
-              icon: const Icon(Icons.home, color: iconColor),
+              icon: Icon(Icons.home, color: iconColor),
               onPressed: () {},
             ),
             IconButton(
-              icon: const Icon(Icons.chat_bubble_outline, color: iconColor),
+              icon: Icon(Icons.chat_bubble_outline, color: iconColor),
               onPressed: () {},
             ),
-            const SizedBox(width: 40), // The space for the FAB
-            // THIS IS THE CORRECTED PROFILE BUTTON NAVIGATION
+            const SizedBox(width: 40),
             IconButton(
-              icon: const Icon(Icons.person_outline, color: iconColor),
+              icon: Icon(Icons.person_outline, color: iconColor),
               onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    // FIX: ProfileScreen no longer takes userEmail
                     builder: (context) => const ProfileScreen(),
                   ),
                 );
               },
             ),
             IconButton(
-              icon: const Icon(Icons.notifications_none, color: iconColor),
+              icon: Icon(Icons.notifications_none, color: iconColor),
               onPressed: () {},
             ),
           ],

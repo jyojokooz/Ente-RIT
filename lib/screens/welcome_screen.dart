@@ -6,9 +6,12 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Re-using colors from your other screens for consistency
-    const Color primaryColor = Color(0xFF5A4BDA);
-    const Color screenBackgroundColor = Color(0xFFC8BFE7);
+    // --- COLOR UPDATES ---
+    // Taking the theme directly from the splash screen
+    const Color screenBackgroundColor = Colors.black;
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color buttonTextColor = Colors.black;
 
     return Scaffold(
       backgroundColor: screenBackgroundColor,
@@ -19,48 +22,53 @@ class WelcomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --- THIS IS THE UPDATED SECTION ---
-              // Using your new, wide logo
+              // The logo image
               Image.asset(
                 'assets/kampus_konnect_logo_wide.png',
-                // We remove the height constraint so the image can display at its natural aspect ratio
                 errorBuilder: (context, error, stackTrace) {
-                  // Fallback in case the image fails to load
+                  // Fallback icon now uses the new accent color
                   return const Icon(
                     Icons.connect_without_contact,
                     size: 200,
-                    color: primaryColor,
+                    color: primaryAccentColor,
                   );
                 },
               ),
               const SizedBox(height: 40),
 
+              // Title text
               Text(
                 "Welcome to KAMPUS KONNECT!",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: primaryTextColor, // Changed to white
                 ),
               ),
               const SizedBox(height: 10),
+
+              // Subtitle text
               Text(
                 "Log in or create an account to get started.",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.white70),
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  color: Colors.white70, // Kept for good contrast
+                ),
               ),
               const SizedBox(height: 50),
 
-              // Log In Button
+              // --- BUTTON UPDATES ---
+
+              // Log In Button (Secondary Action) - Now a white button
               ElevatedButton(
                 onPressed: () {
-                  // Navigate to the Login Screen
                   Navigator.pushNamed(context, '/login');
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE6E6FA),
-                  foregroundColor: primaryColor,
+                  backgroundColor: Colors.white, // A clean white button
+                  foregroundColor: buttonTextColor, // With black text
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -69,6 +77,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: Text(
                   "Log In",
                   style: GoogleFonts.poppins(
+                    color: buttonTextColor, // Explicitly set text color
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -76,15 +85,14 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
-              // Create Account Button
+              // Create Account Button (Primary Action) - Now a yellow button
               ElevatedButton(
                 onPressed: () {
-                  // Navigate to the Signup Screen
                   Navigator.pushNamed(context, '/signup');
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
+                  backgroundColor: primaryAccentColor, // The vibrant yellow
+                  foregroundColor: buttonTextColor, // With black text
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -93,6 +101,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: Text(
                   "Create an Account",
                   style: GoogleFonts.poppins(
+                    color: buttonTextColor, // Explicitly set text color
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
