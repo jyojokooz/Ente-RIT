@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'create_post_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,6 +14,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser;
+  List<DocumentSnapshot> _posts = [];
+  bool _isLoading = true;
 
   final List<Map<String, dynamic>> stories = [
     {'name': 'You', 'image': 'https://i.pravatar.cc/150?img=11', 'isYou': true},
@@ -21,6 +25,37 @@ class _HomeScreenState extends State<HomeScreen> {
     {'name': 'Jason', 'image': 'https://i.pravatar.cc/150?img=60'},
     {'name': 'Clara', 'image': 'https://i.pravatar.cc/150?img=21'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPosts();
+  }
+
+  Future<void> _fetchPosts() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final querySnapshot =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .orderBy('timestamp', descending: true)
+              .get();
+      if (mounted) {
+        setState(() {
+          _posts = querySnapshot.docs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load posts: ${e.toString()}')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: screenBackgroundColor,
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+          );
+          if (result == true) {
+            _fetchPosts();
+          }
+        },
         backgroundColor: primaryAccentColor,
         elevation: 4.0,
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
@@ -45,40 +88,54 @@ class _HomeScreenState extends State<HomeScreen> {
         secondaryTextColor,
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          children: [
-            _buildTopBar(primaryTextColor, cardBackgroundColor),
-            const SizedBox(height: 16),
-            _buildStoriesSection(secondaryTextColor, cardBackgroundColor),
-            const SizedBox(height: 16),
-            _buildPostCard(
-              name: 'Claire Dangais',
-              username: '@ClaireD15',
-              userImage: 'https://i.pravatar.cc/150?img=26',
-              postImage:
-                  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1470',
-              likes: 122,
-              comments: 10,
-              cardColor: cardBackgroundColor,
-              textColor: primaryTextColor,
-              secondaryColor: secondaryTextColor,
-              accentColor: primaryAccentColor,
-            ),
-            _buildPostCard(
-              name: 'Farita Smith',
-              username: '@SmithFa',
-              userImage: 'https://i.pravatar.cc/150?img=49',
-              postImage:
-                  'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1470',
-              likes: 451,
-              comments: 53,
-              cardColor: cardBackgroundColor,
-              textColor: primaryTextColor,
-              secondaryColor: secondaryTextColor,
-              accentColor: primaryAccentColor,
-            ),
-          ],
+        child: RefreshIndicator(
+          onRefresh: _fetchPosts,
+          backgroundColor: cardBackgroundColor,
+          color: primaryAccentColor,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildTopBar(primaryTextColor, cardBackgroundColor),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: _buildStoriesSection(
+                  secondaryTextColor,
+                  cardBackgroundColor,
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              _isLoading
+                  ? SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: primaryAccentColor,
+                      ),
+                    ),
+                  )
+                  : _posts.isEmpty
+                  ? SliverFillRemaining(
+                    child: Center(
+                      child: Text(
+                        'No posts yet. Be the first!',
+                        style: GoogleFonts.poppins(color: secondaryTextColor),
+                      ),
+                    ),
+                  )
+                  : SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final post = _posts[index].data() as Map<String, dynamic>;
+                      return _buildPostCard(
+                        postData: post,
+                        cardColor: cardBackgroundColor,
+                        textColor: primaryTextColor,
+                        secondaryColor: secondaryTextColor,
+                        accentColor: primaryAccentColor,
+                      );
+                    }, childCount: _posts.length),
+                  ),
+            ],
+          ),
         ),
       ),
     );
@@ -86,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -146,7 +203,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 70,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          // --- FIX APPLIED HERE ---
                           color: Colors.black.withAlpha(128),
                         ),
                         child: const Icon(
@@ -171,17 +227,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPostCard({
-    required String name,
-    required String username,
-    required String userImage,
-    required String postImage,
-    required int likes,
-    required int comments,
+    required Map<String, dynamic> postData,
     required Color cardColor,
     required Color textColor,
     required Color secondaryColor,
     required Color accentColor,
   }) {
+    final String name = postData['userName'] ?? 'Unknown User';
+    final String userImage =
+        postData['userImageUrl'] ?? 'https://i.pravatar.cc/150';
+    final String postImage = postData['postImageUrl'] ?? '';
+    final String caption = postData['caption'] ?? '';
+    final int likes = postData['likes'] ?? 0;
+    final int comments = postData['comments'] ?? 0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: Container(
@@ -197,7 +256,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundImage: NetworkImage(userImage),
+                  backgroundImage:
+                      userImage.isNotEmpty ? NetworkImage(userImage) : null,
+                  child: userImage.isEmpty ? const Icon(Icons.person) : null,
                 ),
                 const SizedBox(width: 10),
                 Column(
@@ -210,24 +271,41 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: textColor,
                       ),
                     ),
-                    Text(
-                      username,
-                      style: GoogleFonts.poppins(color: secondaryColor),
-                    ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(15.0),
-              child: Image.network(
-                postImage,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 200,
+            if (caption.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                child: Text(
+                  caption,
+                  // --- FIX APPLIED HERE ---
+                  style: GoogleFonts.poppins(
+                    color: textColor.withAlpha((255 * 0.9).toInt()),
+                  ),
+                ),
               ),
-            ),
+            if (postImage.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(15.0),
+                child: Image.network(
+                  postImage,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 300,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      height: 300,
+                      color: Colors.grey.shade800,
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.yellow),
+                      ),
+                    );
+                  },
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

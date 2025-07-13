@@ -1,13 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-// Import all your screen files
+// Assuming all your UI files are in these subfolders
 import 'package:my_project/screens/splash_screen.dart';
 import 'package:my_project/screens/welcome_screen.dart';
 import 'package:my_project/auth/signup_screen.dart';
 import 'package:my_project/auth/login_screen.dart';
 import 'package:my_project/auth/forgot_password_screen.dart';
 import 'package:my_project/screens/home_screen.dart';
+import 'package:my_project/screens/create_post_screen.dart';
 
 import 'firebase_options.dart';
 
@@ -24,13 +25,15 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Flutter Auth',
-      theme: ThemeData(primarySwatch: Colors.deepPurple),
-
-      // Set the initial route to our new splash screen
+      title: 'Flutter Social App',
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.deepPurple,
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: const ColorScheme.dark().copyWith(
+          secondary: Colors.yellow, // Example accent color
+        ),
+      ),
       initialRoute: '/',
-
-      // Define all the routes for your app
       routes: {
         '/': (context) => const SplashScreen(),
         '/welcome': (context) => const WelcomeScreen(),
@@ -38,6 +41,8 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/home': (context) => const HomeScreen(),
+        '/create-post':
+            (context) => const CreatePostScreen(), // Keep this route
       },
     );
   }
