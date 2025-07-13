@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'edit_profile_screen.dart';
 
@@ -23,7 +24,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _profileImageFile = File(pickedFile.path);
       });
-      // TODO: Here you would upload _profileImageFile to a server like Firebase Storage
     }
   }
 
@@ -33,22 +33,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _coverImageFile = File(pickedFile.path);
       });
-      // TODO: Here you would upload _coverImageFile to a server like Firebase Storage
     }
   }
 
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
-      // FIX: Guard with mounted check and enclose in a block
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to log out: ${e.toString()}')),
       );
@@ -61,24 +55,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final displayName = user?.displayName ?? 'Your Name';
     final username = user?.email?.split('@').first ?? 'username';
 
+    const Color screenBackgroundColor = Colors.black;
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color secondaryTextColor = Colors.white70;
+    final Color cardBackgroundColor = Colors.grey.shade900;
+    const Color buttonTextColor = Colors.black;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
+      backgroundColor: screenBackgroundColor,
       body: Stack(
         children: [
           ListView(
             padding: EdgeInsets.zero,
             children: [
-              _buildHeaderAndProfile(displayName, username),
-              _buildPhotoGallery(),
+              _buildHeaderAndProfile(
+                displayName,
+                username,
+                cardBackgroundColor,
+                primaryTextColor,
+                secondaryTextColor,
+                primaryAccentColor,
+                buttonTextColor,
+              ),
+              _buildPhotoGallery(cardBackgroundColor),
             ],
           ),
-          _buildTopActionButtons(),
+          _buildTopActionButtons(cardBackgroundColor, primaryTextColor),
         ],
       ),
     );
   }
 
-  Widget _buildTopActionButtons() {
+  // --- FIX APPLIED IN THIS METHOD ---
+  Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -86,26 +96,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             CircleAvatar(
-              backgroundColor: Colors.white.withAlpha(200),
+              backgroundColor: bgColor,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.black87),
+                // Removed 'const' because iconColor is a variable
+                icon: Icon(Icons.arrow_back, color: iconColor),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Colors.white.withAlpha(200),
+                  backgroundColor: bgColor,
                   child: IconButton(
-                    icon: const Icon(Icons.mail_outline, color: Colors.black87),
+                    // Removed 'const' because iconColor is a variable
+                    icon: Icon(Icons.mail_outline, color: iconColor),
                     onPressed: () {},
                   ),
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
-                  backgroundColor: Colors.white.withAlpha(200),
+                  backgroundColor: bgColor,
                   child: IconButton(
-                    icon: const Icon(Icons.logout, color: Colors.black87),
+                    // Removed 'const' because iconColor is a variable
+                    icon: Icon(Icons.logout, color: iconColor),
                     onPressed: _logout,
                   ),
                 ),
@@ -117,7 +130,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeaderAndProfile(String displayName, String username) {
+  Widget _buildHeaderAndProfile(
+    String displayName,
+    String username,
+    Color cardColor,
+    Color textColor,
+    Color secondaryColor,
+    Color accentColor,
+    Color btnTextColor,
+  ) {
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
@@ -126,12 +147,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           margin: const EdgeInsets.only(top: 150),
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            padding: const EdgeInsets.only(top: 70, left: 20, right: 20, bottom: 20),
+            padding: const EdgeInsets.only(
+              top: 70,
+              left: 20,
+              right: 20,
+              bottom: 20,
+            ),
             decoration: BoxDecoration(
-              color: const Color(0xFFEBF2FA),
+              color: cardColor,
               borderRadius: BorderRadius.circular(30),
             ),
-            child: _buildProfileInfo(displayName, username),
+            child: _buildProfileInfo(
+              displayName,
+              username,
+              textColor,
+              secondaryColor,
+              accentColor,
+              btnTextColor,
+            ),
           ),
         ),
         Positioned(
@@ -147,33 +180,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
           top: 100,
           child: GestureDetector(
             onTap: _pickProfileImage,
-            child: _buildProfilePicture(),
+            child: _buildProfilePicture(cardColor),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildProfileInfo(String displayName, String username) {
+  Widget _buildProfileInfo(
+    String displayName,
+    String username,
+    Color textColor,
+    Color secondaryColor,
+    Color accentColor,
+    Color btnTextColor,
+  ) {
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildStatsColumn("0", "Followers"),
+            _buildStatsColumn("0", "Followers", textColor, secondaryColor),
             const SizedBox(width: 80),
-            _buildStatsColumn("0", "Following"),
+            _buildStatsColumn("0", "Following", textColor, secondaryColor),
           ],
         ),
         const SizedBox(height: 10),
-        Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
-        Text('@$username', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+        Text(
+          displayName,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: textColor,
+          ),
+        ),
+        Text(
+          '@$username',
+          style: GoogleFonts.poppins(color: secondaryColor, fontSize: 16),
+        ),
         const SizedBox(height: 12),
         Text(
           _bio.isEmpty ? 'No bio yet. Tap "Edit Profile" to add one.' : _bio,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: _bio.isEmpty ? Colors.grey : Colors.black54,
+          style: GoogleFonts.poppins(
+            color: _bio.isEmpty ? Colors.grey : secondaryColor,
             fontSize: 14,
           ),
         ),
@@ -184,7 +234,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               final result = await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => EditProfileScreen(currentBio: _bio)),
+                MaterialPageRoute(
+                  builder: (context) => EditProfileScreen(currentBio: _bio),
+                ),
               );
               if (result != null && result is String) {
                 setState(() {
@@ -193,15 +245,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5C85E4),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: accentColor,
+              foregroundColor: btnTextColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            child: const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 16)),
+            child: Text(
+              'Edit Profile',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 24),
-        _buildTabs(),
+        _buildTabs(accentColor, textColor, secondaryColor),
       ],
     );
   }
@@ -211,7 +272,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_coverImageFile != null) {
       imageProvider = FileImage(_coverImageFile!);
     } else {
-      imageProvider = const NetworkImage('https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1470');
+      imageProvider = const NetworkImage(
+        'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1470',
+      );
     }
     return Container(
       height: 240,
@@ -221,7 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfilePicture() {
+  Widget _buildProfilePicture(Color borderColor) {
     ImageProvider imageProvider;
     if (_profileImageFile != null) {
       imageProvider = FileImage(_profileImageFile!);
@@ -231,41 +294,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFEBF2FA), width: 5),
+        border: Border.all(color: borderColor, width: 5),
       ),
       child: CircleAvatar(radius: 45, backgroundImage: imageProvider),
     );
   }
 
-  // --- FIX: Full implementations for all helper methods ---
-  Widget _buildStatsColumn(String value, String label) {
+  Widget _buildStatsColumn(
+    String value,
+    String label,
+    Color textColor,
+    Color secondaryColor,
+  ) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+            color: textColor,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.black54, fontSize: 14)),
+        Text(
+          label,
+          style: GoogleFonts.poppins(color: secondaryColor, fontSize: 14),
+        ),
       ],
     );
   }
 
-  Widget _buildTabs() {
+  Widget _buildTabs(
+    Color activeColor,
+    Color activeTextColor,
+    Color inactiveTextColor,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
         Column(
           children: [
-            const Text('All', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              'All',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: activeColor,
+              ),
+            ),
             const SizedBox(height: 4),
-            Container(width: 25, height: 3, color: Colors.black87),
+            Container(width: 25, height: 3, color: activeColor),
           ],
         ),
-        Text('Photos', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
-        Text('Videos', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+        Text(
+          'Photos',
+          style: GoogleFonts.poppins(color: inactiveTextColor, fontSize: 16),
+        ),
+        Text(
+          'Videos',
+          style: GoogleFonts.poppins(color: inactiveTextColor, fontSize: 16),
+        ),
       ],
     );
   }
 
-  Widget _buildPhotoGallery() {
+  Widget _buildPhotoGallery(Color cardColor) {
     final List<String> imageUrls = [
       'https://images.unsplash.com/photo-1573443742690-35347e30559a?auto=format&fit=crop&w=400',
       'https://images.unsplash.com/photo-1562932832-9b2f67274488?auto=format&fit=crop&w=400',
@@ -279,21 +373,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.all(16.0),
       child: Container(
         padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25.0)),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(25.0),
+        ),
         child: Column(
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(flex: 2, child: AspectRatio(aspectRatio: 2 / 3, child: _buildGalleryImage(imageUrls[0]))),
+                Expanded(
+                  flex: 2,
+                  child: AspectRatio(
+                    aspectRatio: 2 / 3,
+                    child: _buildGalleryImage(imageUrls[0]),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 3,
                   child: Column(
                     children: [
-                      AspectRatio(aspectRatio: 3 / 2, child: _buildGalleryImage(imageUrls[1])),
+                      AspectRatio(
+                        aspectRatio: 3 / 2,
+                        child: _buildGalleryImage(imageUrls[1]),
+                      ),
                       const SizedBox(height: 8),
-                      AspectRatio(aspectRatio: 3 / 2, child: _buildGalleryImage(imageUrls[2])),
+                      AspectRatio(
+                        aspectRatio: 3 / 2,
+                        child: _buildGalleryImage(imageUrls[2]),
+                      ),
                     ],
                   ),
                 ),
@@ -302,13 +411,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: AspectRatio(aspectRatio: 1, child: _buildGalleryImage(imageUrls[3]))),
+                Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _buildGalleryImage(imageUrls[3]),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: AspectRatio(aspectRatio: 1, child: _buildGalleryImage(imageUrls[4]))),
+                Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _buildGalleryImage(imageUrls[4]),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: AspectRatio(aspectRatio: 1, child: _buildGalleryImage(imageUrls[5]))),
+                Expanded(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: _buildGalleryImage(imageUrls[5]),
+                  ),
+                ),
               ],
-            )
+            ),
           ],
         ),
       ),
