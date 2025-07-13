@@ -1,4 +1,7 @@
+// lib/profile_screen.dart
+
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,7 +19,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
   File? _profileImageFile;
   File? _coverImageFile;
+
+  // State variables for user data
+  String _displayName = 'Your Name';
+  String _username = 'username';
   String _bio = '';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final docSnapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+      if (mounted) {
+        if (docSnapshot.exists) {
+          final data = docSnapshot.data() as Map<String, dynamic>;
+          setState(() {
+            _displayName =
+                data['displayName'] ?? user.displayName ?? 'Your Name';
+            _username =
+                data['username'] ?? user.email?.split('@').first ?? 'username';
+            _bio = data['bio'] ?? '';
+          });
+        } else {
+          // Fallback to auth data if no Firestore doc exists
+          setState(() {
+            _displayName = user.displayName ?? 'Your Name';
+            _username = user.email?.split('@').first ?? 'username';
+            _bio = 'No bio yet. Tap "Edit Profile" to add one.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _pickProfileImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
@@ -51,10 +116,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final displayName = user?.displayName ?? 'Your Name';
-    final username = user?.email?.split('@').first ?? 'username';
-
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     const Color primaryTextColor = Colors.white;
@@ -64,30 +125,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: screenBackgroundColor,
-      body: Stack(
-        children: [
-          ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _buildHeaderAndProfile(
-                displayName,
-                username,
-                cardBackgroundColor,
-                primaryTextColor,
-                secondaryTextColor,
-                primaryAccentColor,
-                buttonTextColor,
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: primaryAccentColor),
+              )
+              : Stack(
+                children: [
+                  ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      _buildHeaderAndProfile(
+                        _displayName,
+                        _username,
+                        cardBackgroundColor,
+                        primaryTextColor,
+                        secondaryTextColor,
+                        primaryAccentColor,
+                        buttonTextColor,
+                      ),
+                      _buildPhotoGallery(cardBackgroundColor),
+                    ],
+                  ),
+                  _buildTopActionButtons(cardBackgroundColor, primaryTextColor),
+                ],
               ),
-              _buildPhotoGallery(cardBackgroundColor),
-            ],
-          ),
-          _buildTopActionButtons(cardBackgroundColor, primaryTextColor),
-        ],
-      ),
     );
   }
 
-  // --- FIX APPLIED IN THIS METHOD ---
   Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
     return SafeArea(
       child: Padding(
@@ -98,7 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CircleAvatar(
               backgroundColor: bgColor,
               child: IconButton(
-                // Removed 'const' because iconColor is a variable
                 icon: Icon(Icons.arrow_back, color: iconColor),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -108,7 +172,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   backgroundColor: bgColor,
                   child: IconButton(
-                    // Removed 'const' because iconColor is a variable
                     icon: Icon(Icons.mail_outline, color: iconColor),
                     onPressed: () {},
                   ),
@@ -117,7 +180,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   backgroundColor: bgColor,
                   child: IconButton(
-                    // Removed 'const' because iconColor is a variable
                     icon: Icon(Icons.logout, color: iconColor),
                     onPressed: _logout,
                   ),
@@ -232,16 +294,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () async {
+              // Navigate to EditProfileScreen. It will fetch its own data.
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EditProfileScreen(currentBio: _bio),
+                  builder: (context) => const EditProfileScreen(),
                 ),
               );
-              if (result != null && result is String) {
-                setState(() {
-                  _bio = result;
-                });
+              // If the result is true, the profile was updated.
+              // Reload our data to show the changes.
+              if (result == true) {
+                _loadUserData();
               }
             },
             style: ElevatedButton.styleFrom(
