@@ -3,11 +3,9 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-// --- FIX APPLIED HERE: Corrected the import path ---
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
-// Reuse the Cloudinary constants from your profile screen
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
@@ -42,9 +40,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
     if (_isUploading) return;
 
-    setState(() {
-      _isUploading = true;
-    });
+    setState(() => _isUploading = true);
 
     try {
       final user = FirebaseAuth.instance.currentUser!;
@@ -53,7 +49,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         cloudinaryUploadPreset,
       );
 
-      // 1. Upload image to Cloudinary
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
           _imageFile!.path,
@@ -63,8 +58,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       );
 
       final imageUrl = response.secureUrl;
-
-      // 2. Fetch user's profile data to include in the post
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
@@ -72,24 +65,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               .get();
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // 3. Create post data map
+      // --- FIX APPLIED HERE ---
       final postData = {
         'postImageUrl': imageUrl,
         'caption': _captionController.text,
         'userId': user.uid,
         'userName': userData['displayName'] ?? 'A User',
-        'userImageUrl':
-            userData['profilePhotoUrl'] ?? '', // Use a default if not set
-        'timestamp': FieldValue.serverTimestamp(), // For sorting
-        'likes': 0,
+        'userImageUrl': userData['profilePhotoUrl'] ?? '',
+        'timestamp': FieldValue.serverTimestamp(),
+        'likes': [], // Correctly initialize as an empty list
         'comments': 0,
       };
 
-      // 4. Save to Firestore
       await FirebaseFirestore.instance.collection('posts').add(postData);
 
       if (!mounted) return;
-      // Pop screen and return `true` to signal a refresh
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -98,13 +88,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
+        setState(() => _isUploading = false);
       }
     }
   }
 
+  // ... rest of the CreatePostScreen file is unchanged ...
   @override
   void dispose() {
     _captionController.dispose();
@@ -122,7 +111,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         actions: [
-          // Disable button while uploading
           if (_isUploading)
             const Padding(
               padding: EdgeInsets.all(16.0),
@@ -156,7 +144,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             GestureDetector(
               onTap: _pickImage,
               child: AspectRatio(
-                aspectRatio: 1, // Square aspect ratio
+                aspectRatio: 1,
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
@@ -169,7 +157,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                             )
                             : null,
                   ),
-
                   child:
                       _imageFile == null
                           ? const Center(
