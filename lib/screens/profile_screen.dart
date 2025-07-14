@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'admin_panel_screen.dart'; // <-- ADD THIS IMPORT
 import 'edit_profile_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
@@ -22,14 +23,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _profileImageFile;
   File? _coverImageFile;
 
-  // --- STATE VARIABLES ---
   String _displayName = 'Your Name';
   String _username = 'username';
   String _bio = '';
   String? _profilePhotoUrl;
   String? _coverPhotoUrl;
   bool _isLoading = true;
-  List<DocumentSnapshot> _userPosts = []; // To store the user's posts
+  List<DocumentSnapshot> _userPosts = [];
+  bool _isAdmin = false; // <-- ADD STATE FOR ADMIN STATUS
 
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
@@ -43,8 +44,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserDataAndPosts();
   }
 
-  // Fetches both user data and their posts in parallel
   Future<void> _loadUserDataAndPosts() async {
+    // ...
     if (!mounted) return;
     setState(() => _isLoading = true);
     final user = FirebaseAuth.instance.currentUser;
@@ -54,11 +55,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      // 1. Future for user profile data
       final userDocFuture =
           FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-
-      // 2. Future for user posts data (this is the query that needed the index)
       final postsQueryFuture =
           FirebaseFirestore.instance
               .collection('posts')
@@ -66,14 +64,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .orderBy('timestamp', descending: true)
               .get();
 
-      // Await both futures at the same time for better performance
       final results = await Future.wait([userDocFuture, postsQueryFuture]);
 
       final docSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
 
       if (mounted) {
-        // Update user profile state
         if (docSnapshot.exists) {
           final data = docSnapshot.data()!;
           _displayName = data['displayName'] ?? user.displayName ?? 'Your Name';
@@ -82,28 +78,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _bio = data['bio'] ?? '';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
+          _isAdmin = data['isAdmin'] ?? false; // <-- FETCH ADMIN STATUS
         } else {
-          // Fallback if no user document exists
           _displayName = user.displayName ?? 'Your Name';
           _username = user.email?.split('@').first ?? 'username';
+          _isAdmin = false;
         }
-
-        // Update user posts state
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading profile: ${e.toString()}')),
-        );
-      }
+      //...
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- The rest of the methods are for functionality and remain the same ---
-
+  // ... All other helper methods (_uploadImage, _pickImage, _logout, etc.) remain exactly the same ...
   Future<void> _uploadImage(File imageFile, String imageType) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -186,6 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... build method is the same ...
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
@@ -218,6 +209,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildProfileInfo() {
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color secondaryTextColor = Colors.white70;
+    const Color buttonTextColor = Colors.black;
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildStatsColumn(
+              "0",
+              "Followers",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
+            _buildStatsColumn(
+              _userPosts.length.toString(),
+              "Posts",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
+            _buildStatsColumn(
+              "0",
+              "Following",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          _displayName,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: primaryTextColor,
+          ),
+        ),
+        Text(
+          '@$_username',
+          style: GoogleFonts.poppins(color: secondaryTextColor, fontSize: 16),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _bio.isEmpty ? 'No bio yet. Tap "Edit Profile" to add one.' : _bio,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: _bio.isEmpty ? Colors.grey : secondaryTextColor,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // --- ADDED ADMIN BUTTON LOGIC ---
+        if (_isAdmin) ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              label: Text(
+                'Admin Panel',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AdminPanelScreen(),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EditProfileScreen(),
+                ),
+              );
+              if (result == true) {
+                _loadUserDataAndPosts();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryAccentColor,
+              foregroundColor: buttonTextColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: Text(
+              'Edit Profile',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
+      ],
+    );
+  }
+
+  // ... All other _build methods (_buildTopActionButtons, _buildHeaderAndProfile, etc.) are unchanged ...
   Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
     return SafeArea(
       child: Padding(
@@ -282,97 +400,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _buildProfilePicture(cardColor),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildProfileInfo() {
-    const Color primaryAccentColor = Colors.yellow;
-    const Color primaryTextColor = Colors.white;
-    const Color secondaryTextColor = Colors.white70;
-    const Color buttonTextColor = Colors.black;
-
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatsColumn(
-              "0",
-              "Followers",
-              primaryTextColor,
-              secondaryTextColor,
-            ),
-            _buildStatsColumn(
-              _userPosts.length.toString(),
-              "Posts",
-              primaryTextColor,
-              secondaryTextColor,
-            ),
-            _buildStatsColumn(
-              "0",
-              "Following",
-              primaryTextColor,
-              secondaryTextColor,
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          _displayName,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            color: primaryTextColor,
-          ),
-        ),
-        Text(
-          '@$_username',
-          style: GoogleFonts.poppins(color: secondaryTextColor, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          _bio.isEmpty ? 'No bio yet. Tap "Edit Profile" to add one.' : _bio,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            color: _bio.isEmpty ? Colors.grey : secondaryTextColor,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const EditProfileScreen(),
-                ),
-              );
-              if (result == true) {
-                _loadUserDataAndPosts();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryAccentColor,
-              foregroundColor: buttonTextColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: Text(
-              'Edit Profile',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
       ],
     );
   }
@@ -501,7 +528,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
           final postData = _userPosts[index].data() as Map<String, dynamic>;
           final imageUrl = postData['postImageUrl'] as String?;
-
           if (imageUrl == null || imageUrl.isEmpty) {
             return Container(
               color: cardColor,
@@ -511,7 +537,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
           }
-
           return ClipRRect(
             borderRadius: BorderRadius.circular(15.0),
             child: Image.network(
