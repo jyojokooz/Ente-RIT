@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'classify_screen.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
@@ -18,9 +19,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   List<DocumentSnapshot> _posts = [];
   bool _isLoading = true;
-
-  // --- REMOVED: The static stories list is no longer needed ---
-  // final List<Map<String, dynamic>> stories = [ ... ];
 
   @override
   void initState() {
@@ -117,6 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
+    const Color secondaryTextColor =
+        Colors.white70; // <-- Define secondary color
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
@@ -137,9 +137,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      // --- FIX: PASS THE CORRECT COLORS ---
       bottomNavigationBar: _buildBottomAppBar(
         cardBackgroundColor,
-        Colors.white70,
+        secondaryTextColor,
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -151,11 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(
                 child: _buildTopBar(Colors.white, cardBackgroundColor),
               ),
-
-              // --- REMOVED: Stories section and SizedBox are gone from here ---
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 8),
-              ), // Reduced spacing a bit
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
               _isLoading
                   ? const SliverFillRemaining(
                     child: Center(
@@ -169,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Center(
                       child: Text(
                         'No posts yet. Be the first!',
-                        style: GoogleFonts.poppins(color: Colors.white70),
+                        style: GoogleFonts.poppins(color: secondaryTextColor),
                       ),
                     ),
                   )
@@ -197,7 +194,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Keeping these icons as placeholders for future features
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -220,19 +216,14 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: BoxShape.circle,
               color: iconBgColor,
             ),
-            child: Icon(
-              Icons.message_outlined,
-              color: textColor,
-              size: 28,
-            ), // Changed to a message icon
+            child: Icon(Icons.message_outlined, color: textColor, size: 28),
           ),
         ],
       ),
     );
   }
 
-  // --- REMOVED: The entire _buildStoriesSection widget is no longer needed ---
-
+  // --- THIS METHOD IS NOW CORRECTED ---
   BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
@@ -243,18 +234,28 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
+            // 1. Home Icon is back
             IconButton(
               icon: Icon(Icons.home, color: iconColor),
-              onPressed: () {},
+              onPressed: () {
+                // Since this IS the home screen, pressing it does nothing.
+                // In a real app, you might scroll to the top.
+              },
             ),
+            // 2. New Classify Icon
             IconButton(
-              icon: Icon(
-                Icons.search,
-                color: iconColor,
-              ), // Changed to a search icon
-              onPressed: () {},
+              icon: Icon(Icons.category_outlined, color: iconColor),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ClassifyScreen(),
+                  ),
+                );
+              },
             ),
-            const SizedBox(width: 40),
+            const SizedBox(width: 40), // Space for the FAB
+            // 3. Profile Icon
             IconButton(
               icon: Icon(Icons.person_outline, color: iconColor),
               onPressed: () {
@@ -266,6 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
+            // 4. Notifications Icon
             IconButton(
               icon: Icon(Icons.notifications_none, color: iconColor),
               onPressed: () {},
