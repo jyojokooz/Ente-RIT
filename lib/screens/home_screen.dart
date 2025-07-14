@@ -2,10 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'classify_screen.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
+import 'search_screen.dart'; // <-- Import for search
+import 'classify_screen.dart'; // <-- Import for classify
 import 'post_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -115,8 +116,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
-    const Color secondaryTextColor =
-        Colors.white70; // <-- Define secondary color
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
@@ -137,10 +136,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      // --- FIX: PASS THE CORRECT COLORS ---
       bottomNavigationBar: _buildBottomAppBar(
         cardBackgroundColor,
-        secondaryTextColor,
+        Colors.white70,
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -166,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Center(
                       child: Text(
                         'No posts yet. Be the first!',
-                        style: GoogleFonts.poppins(color: secondaryTextColor),
+                        style: GoogleFonts.poppins(color: Colors.white70),
                       ),
                     ),
                   )
@@ -188,19 +186,29 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- TOP BAR UPDATED ---
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: iconBgColor,
+          // --- Search Icon instead of Camera ---
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SearchScreen()),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: iconBgColor,
+              ),
+              child: Icon(Icons.search, color: textColor, size: 28),
             ),
-            child: Icon(Icons.camera_alt_outlined, color: textColor, size: 28),
           ),
           Text(
             'Explore',
@@ -223,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- THIS METHOD IS NOW CORRECTED ---
+  // --- BOTTOM APP BAR UPDATED ---
   BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
@@ -234,15 +242,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
-            // 1. Home Icon is back
             IconButton(
               icon: Icon(Icons.home, color: iconColor),
-              onPressed: () {
-                // Since this IS the home screen, pressing it does nothing.
-                // In a real app, you might scroll to the top.
-              },
+              onPressed: () {},
             ),
-            // 2. New Classify Icon
+            // --- Classify Icon is back ---
             IconButton(
               icon: Icon(Icons.category_outlined, color: iconColor),
               onPressed: () {
@@ -254,8 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-            const SizedBox(width: 40), // Space for the FAB
-            // 3. Profile Icon
+            const SizedBox(width: 40),
             IconButton(
               icon: Icon(Icons.person_outline, color: iconColor),
               onPressed: () {
@@ -267,7 +270,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-            // 4. Notifications Icon
             IconButton(
               icon: Icon(Icons.notifications_none, color: iconColor),
               onPressed: () {},

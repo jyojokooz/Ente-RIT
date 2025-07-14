@@ -5,14 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-import 'admin_panel_screen.dart'; // <-- ADD THIS IMPORT
+import 'admin_panel_screen.dart';
 import 'edit_profile_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  // --- ADD THIS ---
+  // This will allow us to pass a specific user ID to view their profile.
+  final String? userId;
+
+  const ProfileScreen({super.key, this.userId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -23,14 +27,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _profileImageFile;
   File? _coverImageFile;
 
-  String _displayName = 'Your Name';
+  // --- STATE VARIABLES ---
+  late final String targetUserId; // The ID of the profile we are viewing
+  late final bool isCurrentUser; // Is this the logged-in user's own profile?
+
+  String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
   String? _profilePhotoUrl;
   String? _coverPhotoUrl;
   bool _isLoading = true;
   List<DocumentSnapshot> _userPosts = [];
-  bool _isAdmin = false; // <-- ADD STATE FOR ADMIN STATUS
+  bool _isAdmin = false;
 
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
@@ -41,62 +49,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    // --- UPDATED LOGIC ---
+    // If a userId is passed, we view that user. Otherwise, we view the logged-in user.
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+    targetUserId = widget.userId ?? currentUserId;
+    isCurrentUser = targetUserId == currentUserId;
+
     _loadUserDataAndPosts();
   }
 
   Future<void> _loadUserDataAndPosts() async {
-    // ...
     if (!mounted) return;
     setState(() => _isLoading = true);
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
 
     try {
+      // Use targetUserId to fetch data for the correct profile
       final userDocFuture =
-          FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(targetUserId)
+              .get();
       final postsQueryFuture =
           FirebaseFirestore.instance
               .collection('posts')
-              .where('userId', isEqualTo: user.uid)
+              .where('userId', isEqualTo: targetUserId)
               .orderBy('timestamp', descending: true)
               .get();
 
       final results = await Future.wait([userDocFuture, postsQueryFuture]);
-
       final docSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
 
       if (mounted) {
         if (docSnapshot.exists) {
           final data = docSnapshot.data()!;
-          _displayName = data['displayName'] ?? user.displayName ?? 'Your Name';
-          _username =
-              data['username'] ?? user.email?.split('@').first ?? 'username';
+          _displayName = data['displayName'] ?? 'User';
+          _username = data['username'] ?? 'username';
           _bio = data['bio'] ?? '';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
-          _isAdmin = data['isAdmin'] ?? false; // <-- FETCH ADMIN STATUS
+          _isAdmin = data['isAdmin'] ?? false;
         } else {
-          _displayName = user.displayName ?? 'Your Name';
-          _username = user.email?.split('@').first ?? 'username';
-          _isAdmin = false;
+          // Handle case where profile doesn't exist
+          _displayName = 'User Not Found';
         }
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      //...
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ... All other helper methods (_uploadImage, _pickImage, _logout, etc.) remain exactly the same ...
+  // All other helper methods (_uploadImage, _pickImage, _logout, etc.) remain the same
+  // ...
   Future<void> _uploadImage(File imageFile, String imageType) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null || !isCurrentUser) return; // Can only upload for self
+    // ... rest of upload logic ...
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
@@ -144,6 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickProfileImage() async {
+    if (!isCurrentUser) return; // Can only edit own profile
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       final imageFile = File(pickedFile.path);
@@ -153,6 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickCoverImage() async {
+    if (!isCurrentUser) return; // Can only edit own profile
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       final imageFile = File(pickedFile.path);
@@ -176,11 +192,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... build method is the same ...
+    // ... build method is the same
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
-
     return Scaffold(
       backgroundColor: screenBackgroundColor,
       body:
@@ -206,6 +221,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildTopActionButtons(Colors.black, Colors.white),
                 ],
               ),
+    );
+  }
+
+  Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            CircleAvatar(
+              backgroundColor: bgColor.withAlpha(128),
+              child: IconButton(
+                icon: Icon(Icons.arrow_back, color: iconColor),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            // Only show logout and mail if it's the current user's profile
+            if (isCurrentUser)
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: bgColor.withAlpha(128),
+                    child: IconButton(
+                      icon: Icon(Icons.mail_outline, color: iconColor),
+                      onPressed: () {},
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: bgColor.withAlpha(128),
+                    child: IconButton(
+                      icon: Icon(Icons.logout, color: iconColor),
+                      onPressed: _logout,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ... Other _build methods
+  Widget _buildHeaderAndProfile(Color cardColor) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        GestureDetector(onTap: _pickCoverImage, child: _buildHeaderImage()),
+        Container(
+          margin: const EdgeInsets.only(top: 150),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: _buildProfileInfo(),
+          ),
+        ),
+        Positioned(
+          top: 100,
+          child: GestureDetector(
+            onTap: _pickProfileImage,
+            child: _buildProfilePicture(cardColor),
+          ),
+        ),
+      ],
     );
   }
 
@@ -255,7 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          _bio.isEmpty ? 'No bio yet. Tap "Edit Profile" to add one.' : _bio,
+          _bio.isEmpty ? 'This user has no bio yet.' : _bio,
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
             color: _bio.isEmpty ? Colors.grey : secondaryTextColor,
@@ -264,149 +350,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 20),
 
-        // --- ADDED ADMIN BUTTON LOGIC ---
-        if (_isAdmin) ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.admin_panel_settings_outlined),
-              label: Text(
-                'Admin Panel',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AdminPanelScreen(),
+        // --- SHOW BUTTONS ONLY IF IT'S THE CURRENT USER'S PROFILE ---
+        if (isCurrentUser)
+          Column(
+            children: [
+              if (_isAdmin) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    label: Text(
+                      'Admin Panel',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminPanelScreen(),
+                          ),
+                        ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EditProfileScreen(),
+                      ),
+                    );
+                    if (result == true) {
+                      _loadUserDataAndPosts();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryAccentColor,
+                    foregroundColor: buttonTextColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    'Edit Profile',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 8),
-        ],
 
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const EditProfileScreen(),
-                ),
-              );
-              if (result == true) {
-                _loadUserDataAndPosts();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryAccentColor,
-              foregroundColor: buttonTextColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: Text(
-              'Edit Profile',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
         const SizedBox(height: 24),
         _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
       ],
     );
   }
 
-  // ... All other _build methods (_buildTopActionButtons, _buildHeaderAndProfile, etc.) are unchanged ...
-  Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            CircleAvatar(
-              backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
-              child: IconButton(
-                icon: Icon(Icons.arrow_back, color: iconColor),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
-                  child: IconButton(
-                    icon: Icon(Icons.mail_outline, color: iconColor),
-                    onPressed: () {},
-                  ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
-                  child: IconButton(
-                    icon: Icon(Icons.logout, color: iconColor),
-                    onPressed: _logout,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderAndProfile(Color cardColor) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: [
-        GestureDetector(onTap: _pickCoverImage, child: _buildHeaderImage()),
-        Container(
-          margin: const EdgeInsets.only(top: 150),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: _buildProfileInfo(),
-          ),
-        ),
-        Positioned(
-          top: 100,
-          child: GestureDetector(
-            onTap: _pickProfileImage,
-            child: _buildProfilePicture(cardColor),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // ... rest of the build methods are the same ...
   Widget _buildHeaderImage() {
     ImageProvider imageProvider;
-    if (_coverImageFile != null) {
+    if (isCurrentUser && _coverImageFile != null) {
       imageProvider = FileImage(_coverImageFile!);
     } else if (_coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty) {
       imageProvider = NetworkImage(_coverPhotoUrl!);
@@ -425,7 +447,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfilePicture(Color borderColor) {
     ImageProvider imageProvider;
-    if (_profileImageFile != null) {
+    if (isCurrentUser && _profileImageFile != null) {
       imageProvider = FileImage(_profileImageFile!);
     } else if (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty) {
       imageProvider = NetworkImage(_profilePhotoUrl!);
@@ -507,7 +529,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.all(50.0),
           child: Center(
             child: Text(
-              'No posts yet.\nYour posts will appear here.',
+              'This user has no posts yet.',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
             ),
@@ -515,7 +537,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
-
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       sliver: SliverGrid(
