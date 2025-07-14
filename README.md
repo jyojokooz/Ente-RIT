@@ -1,4 +1,5 @@
-# KAMPUS CONNECT — Campus Community App
+<h1 style="color: #0077cc;">KAMPUS CONNECT — Campus Community App</h1>
+
 
 © 2025 Joel S Raphael. All rights reserved.  
 This code is proprietary and may not be used, copied, modified, or distributed without explicit permission.
