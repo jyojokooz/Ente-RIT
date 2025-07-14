@@ -1,5 +1,3 @@
-// lib/profile_screen.dart
-
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'edit_profile_screen.dart';
 
-// --- CONSTANTS RENAMED TO lowerCamelCase TO SATISFY LINTER ---
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
@@ -25,12 +22,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _profileImageFile;
   File? _coverImageFile;
 
+  // --- STATE VARIABLES ---
   String _displayName = 'Your Name';
   String _username = 'username';
   String _bio = '';
   String? _profilePhotoUrl;
   String? _coverPhotoUrl;
   bool _isLoading = true;
+  List<DocumentSnapshot> _userPosts = []; // To store the user's posts
 
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
@@ -41,11 +40,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadUserDataAndPosts();
   }
 
-  Future<void> _loadUserData() async {
-    // This method has no changes
+  // Fetches both user data and their posts in parallel
+  Future<void> _loadUserDataAndPosts() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     final user = FirebaseAuth.instance.currentUser;
@@ -53,30 +52,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
+
     try {
-      final docSnapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
+      // 1. Future for user profile data
+      final userDocFuture =
+          FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+
+      // 2. Future for user posts data (this is the query that needed the index)
+      final postsQueryFuture =
+          FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: user.uid)
+              .orderBy('timestamp', descending: true)
               .get();
+
+      // Await both futures at the same time for better performance
+      final results = await Future.wait([userDocFuture, postsQueryFuture]);
+
+      final docSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
+
       if (mounted) {
+        // Update user profile state
         if (docSnapshot.exists) {
-          final data = docSnapshot.data() as Map<String, dynamic>;
-          setState(() {
-            _displayName =
-                data['displayName'] ?? user.displayName ?? 'Your Name';
-            _username =
-                data['username'] ?? user.email?.split('@').first ?? 'username';
-            _bio = data['bio'] ?? '';
-            _profilePhotoUrl = data['profilePhotoUrl'];
-            _coverPhotoUrl = data['coverPhotoUrl'];
-          });
+          final data = docSnapshot.data()!;
+          _displayName = data['displayName'] ?? user.displayName ?? 'Your Name';
+          _username =
+              data['username'] ?? user.email?.split('@').first ?? 'username';
+          _bio = data['bio'] ?? '';
+          _profilePhotoUrl = data['profilePhotoUrl'];
+          _coverPhotoUrl = data['coverPhotoUrl'];
         } else {
-          setState(() {
-            _displayName = user.displayName ?? 'Your Name';
-            _username = user.email?.split('@').first ?? 'username';
-          });
+          // Fallback if no user document exists
+          _displayName = user.displayName ?? 'Your Name';
+          _username = user.email?.split('@').first ?? 'username';
         }
+
+        // Update user posts state
+        _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
       if (mounted) {
@@ -89,17 +102,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// --- THIS IS THE FINAL, CORRECTED UPLOAD FUNCTION ---
+  // --- The rest of the methods are for functionality and remain the same ---
+
   Future<void> _uploadImage(File imageFile, String imageType) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
-
     try {
-      // The `await` will complete successfully if the upload works.
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
           imageFile.path,
@@ -107,16 +118,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           resourceType: CloudinaryResourceType.Image,
         ),
       );
-
-      // If we reach here, the upload was successful.
       final downloadUrl = response.secureUrl;
-
       final fieldToUpdate =
           imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         fieldToUpdate: downloadUrl,
       }, SetOptions(merge: true));
-
       setState(() {
         if (imageType == 'profile') {
           _profilePhotoUrl = downloadUrl;
@@ -126,21 +133,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _coverImageFile = null;
         }
       });
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Image uploaded successfully!')),
       );
     } on CloudinaryException catch (e) {
-      // This block will be executed if the upload fails.
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Upload failed: ${e.message}')));
     } catch (e) {
-      // Catch any other unexpected errors.
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,8 +152,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
   }
-
-  // --- No other functions below this point need changes ---
 
   Future<void> _pickProfileImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
@@ -186,10 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
-    const Color primaryTextColor = Colors.white;
-    const Color secondaryTextColor = Colors.white70;
     final Color cardBackgroundColor = Colors.grey.shade900;
-    const Color buttonTextColor = Colors.black;
 
     return Scaffold(
       backgroundColor: screenBackgroundColor,
@@ -200,22 +199,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               )
               : Stack(
                 children: [
-                  ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      _buildHeaderAndProfile(
-                        _displayName,
-                        _username,
-                        cardBackgroundColor,
-                        primaryTextColor,
-                        secondaryTextColor,
-                        primaryAccentColor,
-                        buttonTextColor,
-                      ),
-                      _buildPhotoGallery(cardBackgroundColor),
-                    ],
+                  RefreshIndicator(
+                    onRefresh: _loadUserDataAndPosts,
+                    color: primaryAccentColor,
+                    backgroundColor: cardBackgroundColor,
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _buildHeaderAndProfile(cardBackgroundColor),
+                        ),
+                        _buildPhotoGallery(cardBackgroundColor),
+                      ],
+                    ),
                   ),
-                  _buildTopActionButtons(cardBackgroundColor, primaryTextColor),
+                  _buildTopActionButtons(Colors.black, Colors.white),
                 ],
               ),
     );
@@ -224,12 +221,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             CircleAvatar(
-              backgroundColor: bgColor,
+              backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
               child: IconButton(
                 icon: Icon(Icons.arrow_back, color: iconColor),
                 onPressed: () => Navigator.of(context).pop(),
@@ -238,7 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: bgColor,
+                  backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
                   child: IconButton(
                     icon: Icon(Icons.mail_outline, color: iconColor),
                     onPressed: () {},
@@ -246,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
-                  backgroundColor: bgColor,
+                  backgroundColor: bgColor.withAlpha((255 * 0.5).toInt()),
                   child: IconButton(
                     icon: Icon(Icons.logout, color: iconColor),
                     onPressed: _logout,
@@ -260,50 +257,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeaderAndProfile(
-    String displayName,
-    String username,
-    Color cardColor,
-    Color textColor,
-    Color secondaryColor,
-    Color accentColor,
-    Color btnTextColor,
-  ) {
+  Widget _buildHeaderAndProfile(Color cardColor) {
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
+        GestureDetector(onTap: _pickCoverImage, child: _buildHeaderImage()),
         Container(
           margin: const EdgeInsets.only(top: 150),
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            padding: const EdgeInsets.only(
-              top: 70,
-              left: 20,
-              right: 20,
-              bottom: 20,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
             decoration: BoxDecoration(
               color: cardColor,
               borderRadius: BorderRadius.circular(30),
             ),
-            child: _buildProfileInfo(
-              displayName,
-              username,
-              textColor,
-              secondaryColor,
-              accentColor,
-              btnTextColor,
-            ),
-          ),
-        ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: GestureDetector(
-            onTap: _pickCoverImage,
-            child: _buildHeaderImage(),
+            child: _buildProfileInfo(),
           ),
         ),
         Positioned(
@@ -317,43 +286,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileInfo(
-    String displayName,
-    String username,
-    Color textColor,
-    Color secondaryColor,
-    Color accentColor,
-    Color btnTextColor,
-  ) {
+  Widget _buildProfileInfo() {
+    const Color primaryAccentColor = Colors.yellow;
+    const Color primaryTextColor = Colors.white;
+    const Color secondaryTextColor = Colors.white70;
+    const Color buttonTextColor = Colors.black;
+
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildStatsColumn("0", "Followers", textColor, secondaryColor),
-            const SizedBox(width: 80),
-            _buildStatsColumn("0", "Following", textColor, secondaryColor),
+            _buildStatsColumn(
+              "0",
+              "Followers",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
+            _buildStatsColumn(
+              _userPosts.length.toString(),
+              "Posts",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
+            _buildStatsColumn(
+              "0",
+              "Following",
+              primaryTextColor,
+              secondaryTextColor,
+            ),
           ],
         ),
         const SizedBox(height: 10),
         Text(
-          displayName,
+          _displayName,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             fontSize: 22,
-            color: textColor,
+            color: primaryTextColor,
           ),
         ),
         Text(
-          '@$username',
-          style: GoogleFonts.poppins(color: secondaryColor, fontSize: 16),
+          '@$_username',
+          style: GoogleFonts.poppins(color: secondaryTextColor, fontSize: 16),
         ),
         const SizedBox(height: 12),
         Text(
           _bio.isEmpty ? 'No bio yet. Tap "Edit Profile" to add one.' : _bio,
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
-            color: _bio.isEmpty ? Colors.grey : secondaryColor,
+            color: _bio.isEmpty ? Colors.grey : secondaryTextColor,
             fontSize: 14,
           ),
         ),
@@ -369,12 +351,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               );
               if (result == true) {
-                _loadUserData();
+                _loadUserDataAndPosts();
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: accentColor,
-              foregroundColor: btnTextColor,
+              backgroundColor: primaryAccentColor,
+              foregroundColor: buttonTextColor,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -390,7 +372,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        _buildTabs(accentColor, textColor, secondaryColor),
+        _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
       ],
     );
   }
@@ -492,88 +474,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildPhotoGallery(Color cardColor) {
-    final List<String> imageUrls = [
-      'https://images.unsplash.com/photo-1573443742690-35347e30559a?auto=format&fit=crop&w=400',
-      'https://images.unsplash.com/photo-1562932832-9b2f67274488?auto=format&fit=crop&w=400',
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400',
-      'https://images.unsplash.com/photo-1534484094124-736318553da7?auto=format&fit=crop&w=400',
-      'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&w=400',
-      'https://images.unsplash.com/photo-1508189860359-777d94268b37?auto=format&fit=crop&w=400',
-    ];
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Container(
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(25.0),
-        ),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: AspectRatio(
-                    aspectRatio: 2 / 3,
-                    child: _buildGalleryImage(imageUrls[0]),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    children: [
-                      AspectRatio(
-                        aspectRatio: 3 / 2,
-                        child: _buildGalleryImage(imageUrls[1]),
-                      ),
-                      const SizedBox(height: 8),
-                      AspectRatio(
-                        aspectRatio: 3 / 2,
-                        child: _buildGalleryImage(imageUrls[2]),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    if (_userPosts.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(50.0),
+          child: Center(
+            child: Text(
+              'No posts yet.\nYour posts will appear here.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: _buildGalleryImage(imageUrls[3]),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: _buildGalleryImage(imageUrls[4]),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: _buildGalleryImage(imageUrls[5]),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildGalleryImage(String url) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15.0),
-      child: Image.network(url, fit: BoxFit.cover),
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 8.0,
+          mainAxisSpacing: 8.0,
+          childAspectRatio: 1.0,
+        ),
+        delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
+          final postData = _userPosts[index].data() as Map<String, dynamic>;
+          final imageUrl = postData['postImageUrl'] as String?;
+
+          if (imageUrl == null || imageUrl.isEmpty) {
+            return Container(
+              color: cardColor,
+              child: const Icon(
+                Icons.no_photography_outlined,
+                color: Colors.white30,
+              ),
+            );
+          }
+
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(15.0),
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  color: Colors.grey.shade800,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.yellow,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade800,
+                  child: const Icon(Icons.broken_image, color: Colors.white54),
+                );
+              },
+            ),
+          );
+        }, childCount: _userPosts.length),
+      ),
     );
   }
 }
