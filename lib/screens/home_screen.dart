@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-// We don't need the cloudinary_public import here anymore for deletion
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,14 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DocumentSnapshot> _posts = [];
   bool _isLoading = true;
 
-  final List<Map<String, dynamic>> stories = [
-    {'name': 'You', 'image': 'https://i.pravatar.cc/150?img=11', 'isYou': true},
-    {'name': 'Benjamin', 'image': 'https://i.pravatar.cc/150?img=32'},
-    {'name': 'Farita', 'image': 'https://i.pravatar.cc/150?img=49'},
-    {'name': 'Marie', 'image': 'https://i.pravatar.cc/150?img=31'},
-    {'name': 'Jason', 'image': 'https://i.pravatar.cc/150?img=60'},
-    {'name': 'Clara', 'image': 'https://i.pravatar.cc/150?img=21'},
-  ];
+  // --- REMOVED: The static stories list is no longer needed ---
+  // final List<Map<String, dynamic>> stories = [ ... ];
 
   @override
   void initState() {
@@ -69,9 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // --- THIS IS THE CORRECTED DELETE FUNCTION ---
   Future<void> _deletePost(String postId) async {
-    // We no longer need the postImageUrl
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -100,15 +91,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (didRequestDelete == true) {
       try {
-        // --- FIX APPLIED HERE ---
-        // We ONLY delete the post from Firestore. We no longer attempt
-        // to delete the image from Cloudinary from the client-side.
         await FirebaseFirestore.instance
             .collection('posts')
             .doc(postId)
             .delete();
-
-        // Refresh the UI by fetching the posts again
         _fetchPosts();
 
         if (!mounted) return;
@@ -165,14 +151,11 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(
                 child: _buildTopBar(Colors.white, cardBackgroundColor),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              SliverToBoxAdapter(
-                child: _buildStoriesSection(
-                  Colors.white70,
-                  cardBackgroundColor,
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+              // --- REMOVED: Stories section and SizedBox are gone from here ---
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 8),
+              ), // Reduced spacing a bit
               _isLoading
                   ? const SliverFillRemaining(
                     child: Center(
@@ -214,6 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Keeping these icons as placeholders for future features
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -236,62 +220,18 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: BoxShape.circle,
               color: iconBgColor,
             ),
-            child: Icon(Icons.notifications_none, color: textColor, size: 28),
+            child: Icon(
+              Icons.message_outlined,
+              color: textColor,
+              size: 28,
+            ), // Changed to a message icon
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStoriesSection(Color textColor, Color avatarBgColor) {
-    return SizedBox(
-      height: 100,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: stories.length,
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        itemBuilder: (context, index) {
-          final story = stories[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Column(
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 35,
-                      backgroundColor: avatarBgColor,
-                      backgroundImage: NetworkImage(story['image']),
-                    ),
-                    if (story['isYou'] == true)
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black.withAlpha(128),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  story['name'],
-                  style: GoogleFonts.poppins(color: textColor, fontSize: 12),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
+  // --- REMOVED: The entire _buildStoriesSection widget is no longer needed ---
 
   BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
     return BottomAppBar(
@@ -308,7 +248,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {},
             ),
             IconButton(
-              icon: Icon(Icons.chat_bubble_outline, color: iconColor),
+              icon: Icon(
+                Icons.search,
+                color: iconColor,
+              ), // Changed to a search icon
               onPressed: () {},
             ),
             const SizedBox(width: 40),
