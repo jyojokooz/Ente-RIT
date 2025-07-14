@@ -1,4 +1,7 @@
-<h1 style="color: #0077cc;">KAMPUS CONNECT — Campus Community App</h1>
+<h1 style="background: linear-gradient(to right, #ff416c, #0077ff); -webkit-background-clip: text; color: transparent;">
+  KAMPUS CONNECT — Campus Community App
+</h1>
+
 
 
 © 2025 Joel S Raphael. All rights reserved.  
