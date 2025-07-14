@@ -15,3 +15,7 @@ For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
 "# Sign_up_login-flutter2" 
+
+© 2025 Joel S Raphael. All rights reserved.
+This code is proprietary and may not be used, copied, modified, or distributed without explicit permission.
+
