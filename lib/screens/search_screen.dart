@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'profile_screen.dart'; // Import the newly refactored profile screen
+import 'profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -12,6 +12,9 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
+
+  // --- FIX APPLIED HERE ---
+  // We only need one list to hold all the combined search results.
   List<DocumentSnapshot> _searchResults = [];
   bool _isLoading = false;
 
@@ -22,23 +25,57 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _performSearch(String query) async {
-    if (query.isEmpty) {
+    final formattedQuery = query.toLowerCase().trim();
+    if (formattedQuery.isEmpty) {
       setState(() => _searchResults = []);
       return;
     }
     setState(() => _isLoading = true);
 
-    // This is the "starts with" query for Firestore
-    final querySnapshot =
-        await FirebaseFirestore.instance
+    // Perform two separate queries
+    final nameQuery =
+        FirebaseFirestore.instance
             .collection('users')
-            .where('displayName', isGreaterThanOrEqualTo: query)
-            .where('displayName', isLessThanOrEqualTo: '$query\uf8ff')
+            .where(
+              'searchableDisplayName',
+              isGreaterThanOrEqualTo: formattedQuery,
+            )
+            .where(
+              'searchableDisplayName',
+              isLessThanOrEqualTo: '$formattedQuery\uf8ff',
+            )
             .get();
+
+    final usernameQuery =
+        FirebaseFirestore.instance
+            .collection('users')
+            .where('searchableUsername', isGreaterThanOrEqualTo: formattedQuery)
+            .where(
+              'searchableUsername',
+              isLessThanOrEqualTo: '$formattedQuery\uf8ff',
+            )
+            .get();
+
+    // Await both queries to run in parallel
+    final results = await Future.wait([nameQuery, usernameQuery]);
+
+    final nameDocs = results[0].docs;
+    final usernameDocs = results[1].docs;
+
+    // Use a Map to combine results and automatically handle duplicates
+    final combinedResults = <String, DocumentSnapshot>{};
+    for (var doc in nameDocs) {
+      combinedResults[doc.id] = doc;
+    }
+    for (var doc in usernameDocs) {
+      combinedResults[doc.id] = doc;
+    }
 
     if (mounted) {
       setState(() {
-        _searchResults = querySnapshot.docs;
+        // --- FIX APPLIED HERE ---
+        // Update the single search results list
+        _searchResults = combinedResults.values.toList();
         _isLoading = false;
       });
     }
@@ -55,7 +92,7 @@ class _SearchScreenState extends State<SearchScreen> {
           autofocus: true,
           style: const TextStyle(color: Colors.white),
           decoration: const InputDecoration(
-            hintText: 'Search for users...',
+            hintText: 'Search by name or username...',
             hintStyle: TextStyle(color: Colors.white70),
             border: InputBorder.none,
           ),
@@ -67,16 +104,20 @@ class _SearchScreenState extends State<SearchScreen> {
               ? const Center(
                 child: CircularProgressIndicator(color: Colors.yellow),
               )
+              // --- FIX APPLIED HERE ---
+              // Check the single search results list
               : _searchResults.isEmpty
               ? Center(
                 child: Text(
                   _searchController.text.isEmpty
-                      ? 'Search for users by their display name.'
+                      ? 'Search for other users.'
                       : 'No users found.',
                   style: GoogleFonts.poppins(color: Colors.white70),
                 ),
               )
               : ListView.builder(
+                // --- FIX APPLIED HERE ---
+                // Build the list from the single search results list
                 itemCount: _searchResults.length,
                 itemBuilder: (context, index) {
                   final userDoc = _searchResults[index];
@@ -91,9 +132,10 @@ class _SearchScreenState extends State<SearchScreen> {
                           userImage.isEmpty ? const Icon(Icons.person) : null,
                     ),
                     title: Text(userData['displayName'] ?? 'No Name'),
-                    subtitle: Text(userData['username'] ?? 'No Username'),
+                    subtitle: Text('@${userData['username'] ?? 'No Username'}'),
                     onTap: () {
-                      // Navigate to the ProfileScreen, passing the user's ID
+                      // Unfocus the keyboard when a user is tapped
+                      FocusScope.of(context).unfocus();
                       Navigator.push(
                         context,
                         MaterialPageRoute(

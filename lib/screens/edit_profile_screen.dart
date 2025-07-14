@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart'; // It's good practice to import what you use
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -16,8 +17,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _bioController = TextEditingController();
   final _linksController = TextEditingController();
 
-  final user = FirebaseAuth.instance.currentUser;
+  final user = FirebaseAuth.instance.currentUser!;
   bool _isLoading = true;
+  String _initialUsername = '';
 
   @override
   void initState() {
@@ -25,37 +27,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _loadProfileForEditing();
   }
 
-  /// Fetches the user's current profile from Firestore to populate the form.
   Future<void> _loadProfileForEditing() async {
-    if (user == null) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
+    setState(() => _isLoading = true);
     try {
       final docSnapshot =
           await FirebaseFirestore.instance
               .collection('users')
-              .doc(user!.uid)
+              .doc(user.uid)
               .get();
       if (mounted) {
         if (docSnapshot.exists) {
           final data = docSnapshot.data()!;
-          _nameController.text = data['displayName'] ?? user?.displayName ?? '';
-          _usernameController.text =
-              data['username'] ?? user?.email?.split('@').first ?? '';
+          _nameController.text = data['displayName'] ?? user.displayName ?? '';
+          _usernameController.text = data['username'] ?? '';
+          _initialUsername = data['username'] ?? '';
           _bioController.text = data['bio'] ?? '';
           _linksController.text = data['links'] ?? '';
         } else {
-          // If no profile exists yet (first time editing), use defaults from Auth.
-          _nameController.text = user?.displayName ?? '';
-          _usernameController.text = user?.email?.split('@').first ?? '';
+          _nameController.text = user.displayName ?? '';
+          _usernameController.text = user.email?.split('@').first ?? '';
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load profile for editing: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -71,46 +68,80 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  /// Saves the form data to Firestore and updates Firebase Auth.
+  // --- THIS IS THE CORRECTED SAVE FUNCTION ---
   Future<void> _saveProfile() async {
-    if (_formKey.currentState!.validate() && user != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Saving profile...')));
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-      try {
-        final userDocRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid);
+    // --- FIX APPLIED HERE ---
+    // Capture context-dependent objects BEFORE the first await.
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
-        // Also update the display name in Firebase Auth for consistency
-        await user!.updateDisplayName(_nameController.text);
+    final newUsername = _usernameController.text.trim();
+    final newDisplayName = _nameController.text.trim();
 
-        final userData = {
-          'displayName': _nameController.text,
-          'username': _usernameController.text,
-          'bio': _bioController.text,
-          'links': _linksController.text,
-          'email': user!.email,
-        };
-        // Use `set` with `merge: true` to create or update the document
-        await userDocRef.set(userData, SetOptions(merge: true));
+    // Check if the username has been changed
+    if (newUsername.toLowerCase() != _initialUsername.toLowerCase()) {
+      final usersRef = FirebaseFirestore.instance.collection('users');
+      final querySnapshot =
+          await usersRef
+              .where('searchableUsername', isEqualTo: newUsername.toLowerCase())
+              .get();
 
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
+      if (querySnapshot.docs.isNotEmpty) {
+        // Username is taken. Use the captured scaffoldMessenger.
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This username is already taken. Please choose another.',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
-        // Pop screen and return `true` to signal a successful update
-        Navigator.of(context).pop(true);
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save profile: ${e.toString()}')),
-        );
+        return;
       }
+    }
+
+    // Show saving message
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(content: Text('Saving profile...')),
+    );
+
+    try {
+      final userDocRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      await user.updateDisplayName(newDisplayName);
+
+      final userData = {
+        'displayName': newDisplayName,
+        'username': newUsername,
+        'searchableDisplayName': newDisplayName.toLowerCase(),
+        'searchableUsername': newUsername.toLowerCase(),
+        'bio': _bioController.text.trim(),
+        'links': _linksController.text.trim(),
+        'email': user.email,
+      };
+      await userDocRef.set(userData, SetOptions(merge: true));
+
+      if (!mounted) return;
+
+      // Use captured objects. This is now safe.
+      scaffoldMessenger.hideCurrentSnackBar();
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      navigator.pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Failed to save profile: ${e.toString()}')),
+      );
     }
   }
 
@@ -118,17 +149,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: Text('Edit Profile', style: GoogleFonts.poppins()),
+        backgroundColor: Colors.grey.shade900,
         actions: [
-          // Disable save button while loading
           if (!_isLoading)
             IconButton(icon: const Icon(Icons.check), onPressed: _saveProfile),
         ],
       ),
-      // Show a loading indicator while fetching data
+      backgroundColor: Colors.black,
       body:
           _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(
+                child: CircularProgressIndicator(color: Colors.yellow),
+              )
               : Form(
                 key: _formKey,
                 child: ListView(
@@ -137,12 +170,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     TextFormField(
                       controller: _nameController,
                       decoration: const InputDecoration(labelText: 'Name'),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your name';
-                        }
-                        return null;
-                      },
+                      validator:
+                          (v) => v!.isEmpty ? 'Please enter a name' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -151,6 +180,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a username';
+                        }
+                        if (value.contains(' ') || value.contains('@')) {
+                          return 'Username cannot contain spaces or @';
                         }
                         return null;
                       },
@@ -168,12 +200,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 24),
                     TextFormField(
-                      initialValue: user?.email ?? 'No email found',
+                      initialValue: user.email ?? 'No email found',
                       readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Email',
                         suffixIcon: Icon(Icons.lock),
-                        helperText: 'Email cannot be changed from this screen.',
+                        helperText: 'Email cannot be changed.',
                       ),
                     ),
                   ],

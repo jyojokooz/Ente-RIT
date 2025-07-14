@@ -6,13 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
-  final Function() onDeletePressed; // <-- Add this
+  final Function() onDeletePressed;
 
   const PostCard({
     super.key,
     required this.postSnapshot,
     required this.onCommentPressed,
-    required this.onDeletePressed, // <-- Add this
+    required this.onDeletePressed,
   });
 
   @override
@@ -25,7 +25,7 @@ class _PostCardState extends State<PostCard> {
   late bool isLiked;
   late int likeCount;
   late int commentCount;
-  late bool isAuthor; // <-- Add this state variable
+  late bool isAuthor;
 
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
@@ -45,7 +45,6 @@ class _PostCardState extends State<PostCard> {
     setState(() {
       postData = widget.postSnapshot.data() as Map<String, dynamic>;
 
-      // Check if current user is the author of the post
       final postAuthorId = postData['userId'];
       isAuthor = currentUserId == postAuthorId;
 
@@ -62,7 +61,6 @@ class _PostCardState extends State<PostCard> {
   }
 
   Future<void> _toggleLike() async {
-    // ... this function remains unchanged
     setState(() {
       isLiked = !isLiked;
       if (isLiked) {
@@ -96,6 +94,7 @@ class _PostCardState extends State<PostCard> {
     final Color cardBackgroundColor = Colors.grey.shade900;
 
     final String name = postData['userName'] ?? 'Unknown User';
+    final String username = postData['username'] ?? ''; // Get username
     final String userImage = postData['userImageUrl'] ?? '';
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
@@ -121,16 +120,28 @@ class _PostCardState extends State<PostCard> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  // Use Expanded to push the icon to the end
-                  child: Text(
-                    name,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextColor,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                      // --- ADDED THIS WIDGET ---
+                      if (username.isNotEmpty)
+                        Text(
+                          '@$username',
+                          style: GoogleFonts.poppins(
+                            color: secondaryTextColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                // --- SHOW DELETE/MORE ICON ONLY IF USER IS THE AUTHOR ---
                 if (isAuthor)
                   IconButton(
                     icon: const Icon(

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+// You can keep these constants here or move them to a central config file
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
@@ -40,7 +41,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
     if (_isUploading) return;
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isUploading = true;
+    });
 
     try {
       final user = FirebaseAuth.instance.currentUser!;
@@ -49,6 +52,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         cloudinaryUploadPreset,
       );
 
+      // 1. Upload image to Cloudinary
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
           _imageFile!.path,
@@ -58,6 +62,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       );
 
       final imageUrl = response.secureUrl;
+
+      // 2. Fetch user's profile data to include in the post
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
@@ -65,18 +71,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               .get();
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // --- FIX APPLIED HERE ---
+      // 3. Create post data map
       final postData = {
         'postImageUrl': imageUrl,
         'caption': _captionController.text,
         'userId': user.uid,
         'userName': userData['displayName'] ?? 'A User',
+        'username': userData['username'] ?? '', // <-- ADDED THIS LINE
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
         'timestamp': FieldValue.serverTimestamp(),
-        'likes': [], // Correctly initialize as an empty list
+        'likes': [],
         'comments': 0,
       };
 
+      // 4. Save to Firestore
       await FirebaseFirestore.instance.collection('posts').add(postData);
 
       if (!mounted) return;
@@ -88,12 +96,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isUploading = false);
+        setState(() {
+          _isUploading = false;
+        });
       }
     }
   }
 
-  // ... rest of the CreatePostScreen file is unchanged ...
   @override
   void dispose() {
     _captionController.dispose();
