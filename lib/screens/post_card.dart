@@ -3,19 +3,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'full_screen_image_viewer.dart'; // <-- 1. ADD THIS IMPORT
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
-  final Function() onProfileTapped; // <-- 1. ADD THE NEW CALLBACK
+  final Function() onProfileTapped;
 
   const PostCard({
     super.key,
     required this.postSnapshot,
     required this.onCommentPressed,
     required this.onDeletePressed,
-    required this.onProfileTapped, // <-- 2. ADD TO CONSTRUCTOR
+    required this.onProfileTapped,
   });
 
   @override
@@ -104,6 +105,9 @@ class _PostCardState extends State<PostCard> {
             ? DateFormat('MMM d, h:mm a').format(timestamp)
             : '...';
 
+    // --- 2. CREATE A UNIQUE HERO TAG FOR EACH POST IMAGE ---
+    final String heroTag = 'postImage-${widget.postSnapshot.id}';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: Container(
@@ -115,12 +119,10 @@ class _PostCardState extends State<PostCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- 3. WRAP THE HEADER ROW IN A GESTUREDETECTOR ---
             GestureDetector(
               onTap: widget.onProfileTapped,
               child: Container(
-                // Use a container to make the whole area tappable
-                color: Colors.transparent, // Important for hit testing
+                color: Colors.transparent,
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -187,24 +189,45 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
               ),
+
+            // --- 3. WRAP THE IMAGE IN A GESTUREDETECTOR AND HERO WIDGET ---
             if (postImage.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(15.0),
-                child: Image.network(
-                  postImage,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: 300,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => FullScreenImageViewer(
+                            imageUrl: postImage,
+                            heroTag: heroTag, // Pass the unique tag
+                          ),
+                    ),
+                  );
+                },
+                child: Hero(
+                  tag: heroTag, // Assign the unique tag
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15.0),
+                    child: Image.network(
+                      postImage,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
                       height: 300,
-                      color: Colors.grey.shade800,
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.yellow),
-                      ),
-                    );
-                  },
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          height: 300,
+                          color: Colors.grey.shade800,
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.yellow,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
