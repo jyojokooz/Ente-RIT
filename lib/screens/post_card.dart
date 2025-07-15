@@ -2,21 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart'; // <-- 1. IMPORT THE NEW PACKAGE
-
-// You can now remove the timeago import if it's not used elsewhere
-// import 'package:timeago/timeago.dart' as timeago;
+import 'package:intl/intl.dart';
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
+  final Function() onProfileTapped; // <-- 1. ADD THE NEW CALLBACK
 
   const PostCard({
     super.key,
     required this.postSnapshot,
     required this.onCommentPressed,
     required this.onDeletePressed,
+    required this.onProfileTapped, // <-- 2. ADD TO CONSTRUCTOR
   });
 
   @override
@@ -99,9 +98,7 @@ class _PostCardState extends State<PostCard> {
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
 
-    // --- 2. GET AND FORMAT THE TIMESTAMP WITH intl ---
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    // Format: "Month day, h:mm AM/PM" (e.g., "Sep 23, 10:45 AM")
     final String formattedDate =
         timestamp != null
             ? DateFormat('MMM d, h:mm a').format(timestamp)
@@ -118,59 +115,67 @@ class _PostCardState extends State<PostCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage:
-                      userImage.isNotEmpty ? NetworkImage(userImage) : null,
-                  child: userImage.isEmpty ? const Icon(Icons.person) : null,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: primaryTextColor,
-                        ),
-                      ),
-                      if (username.isNotEmpty)
-                        Text(
-                          '@$username',
-                          style: GoogleFonts.poppins(
-                            color: secondaryTextColor,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // --- 3. DISPLAY THE NEW FORMATTED DATE STRING ---
-                Text(
-                  formattedDate,
-                  style: GoogleFonts.poppins(
-                    color: secondaryTextColor,
-                    fontSize: 12,
-                  ),
-                ),
-                if (isAuthor) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    icon: const Icon(
-                      Icons.more_horiz,
-                      color: secondaryTextColor,
+            // --- 3. WRAP THE HEADER ROW IN A GESTUREDETECTOR ---
+            GestureDetector(
+              onTap: widget.onProfileTapped,
+              child: Container(
+                // Use a container to make the whole area tappable
+                color: Colors.transparent, // Important for hit testing
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage:
+                          userImage.isNotEmpty ? NetworkImage(userImage) : null,
+                      child:
+                          userImage.isEmpty ? const Icon(Icons.person) : null,
                     ),
-                    onPressed: widget.onDeletePressed,
-                  ),
-                ],
-              ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                          if (username.isNotEmpty)
+                            Text(
+                              '@$username',
+                              style: GoogleFonts.poppins(
+                                color: secondaryTextColor,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      formattedDate,
+                      style: GoogleFonts.poppins(
+                        color: secondaryTextColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (isAuthor) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(
+                          Icons.more_horiz,
+                          color: secondaryTextColor,
+                        ),
+                        onPressed: widget.onDeletePressed,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
             if (caption.isNotEmpty)
               Padding(

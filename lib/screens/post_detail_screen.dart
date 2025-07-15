@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'post_card.dart';
-// import 'home_screen.dart'; // <-- FIX #1: REMOVED UNUSED IMPORT
+import 'profile_screen.dart'; // Import for profile navigation
 
 class PostDetailScreen extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
@@ -14,16 +14,11 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  // --- FIX #2: THE CORRECTED DELETE FUNCTION ---
   Future<void> _deletePost(String postId) async {
-    // We capture the BuildContext dependent objects BEFORE the first await.
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    // Show a confirmation dialog
     final bool? didRequestDelete = await showDialog<bool>(
-      context:
-          context, // It's safe to use context here because it's synchronous
+      context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Colors.grey.shade900,
@@ -48,16 +43,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       },
     );
 
-    // If the user confirmed, proceed with deletion
     if (didRequestDelete == true) {
       try {
-        // Delete the post from Firestore
         await FirebaseFirestore.instance
             .collection('posts')
             .doc(postId)
             .delete();
-
-        // Use the captured variables. This is now safe.
         navigator.pop();
         scaffoldMessenger.showSnackBar(
           const SnackBar(
@@ -66,7 +57,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           ),
         );
       } catch (e) {
-        // Use the captured scaffoldMessenger here too.
         if (scaffoldMessenger.mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Failed to delete post: ${e.toString()}')),
@@ -83,8 +73,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  // --- NEW: Function to handle tapping the profile from the detail screen ---
+  void _onProfileTapped(String userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // --- FIX APPLIED HERE ---
+    // We get the post data once to pass to the PostCard
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
+    final postAuthorId = postData['userId'] ?? '';
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -98,6 +101,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             postSnapshot: widget.postSnapshot,
             onCommentPressed: () => _onCommentTapped(widget.postSnapshot.id),
             onDeletePressed: () => _deletePost(widget.postSnapshot.id),
+            // Provide the required onProfileTapped function
+            onProfileTapped: () => _onProfileTapped(postAuthorId),
           ),
         ),
       ),

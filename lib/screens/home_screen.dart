@@ -5,8 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
-import 'search_screen.dart'; // <-- Import for search
-import 'classify_screen.dart'; // <-- Import for classify
+import 'search_screen.dart';
+import 'classify_screen.dart';
 import 'post_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchPosts() async {
+    // ... this method is unchanged
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
@@ -53,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onCommentTapped(String postId) {
+    // ... this method is unchanged
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
@@ -61,7 +63,16 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // --- NEW METHOD TO HANDLE PROFILE NAVIGATION ---
+  void _onProfileTapped(String userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)),
+    );
+  }
+
   Future<void> _deletePost(String postId) async {
+    // ... this method is unchanged
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -87,7 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-
     if (didRequestDelete == true) {
       try {
         await FirebaseFirestore.instance
@@ -95,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .doc(postId)
             .delete();
         _fetchPosts();
-
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -114,6 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... build method is unchanged until the SliverList
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
@@ -171,11 +181,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   : SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final postSnapshot = _posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
+
                       return PostCard(
                         postSnapshot: postSnapshot,
                         onCommentPressed:
                             () => _onCommentTapped(postSnapshot.id),
                         onDeletePressed: () => _deletePost(postSnapshot.id),
+                        // --- PASS THE NAVIGATION FUNCTION ---
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
                       );
                     }, childCount: _posts.length),
                   ),
@@ -186,21 +202,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- TOP BAR UPDATED ---
+  // --- The rest of the _build methods are unchanged ---
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // --- Search Icon instead of Camera ---
           GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SearchScreen()),
-              );
-            },
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchScreen()),
+                ),
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -231,7 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- BOTTOM APP BAR UPDATED ---
   BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
@@ -246,29 +259,26 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.home, color: iconColor),
               onPressed: () {},
             ),
-            // --- Classify Icon is back ---
             IconButton(
               icon: Icon(Icons.category_outlined, color: iconColor),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ClassifyScreen(),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ClassifyScreen(),
+                    ),
                   ),
-                );
-              },
             ),
             const SizedBox(width: 40),
             IconButton(
               icon: Icon(Icons.person_outline, color: iconColor),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfileScreen(),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileScreen(),
+                    ),
                   ),
-                );
-              },
             ),
             IconButton(
               icon: Icon(Icons.notifications_none, color: iconColor),
