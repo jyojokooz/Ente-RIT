@@ -7,15 +7,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'admin_panel_screen.dart';
 import 'edit_profile_screen.dart';
+import 'post_detail_screen.dart'; // <-- ADD THIS IMPORT
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class ProfileScreen extends StatefulWidget {
-  // --- ADD THIS ---
-  // This will allow us to pass a specific user ID to view their profile.
   final String? userId;
-
   const ProfileScreen({super.key, this.userId});
 
   @override
@@ -23,14 +21,12 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // --- All state variables and helper methods remain the same ---
   final ImagePicker _picker = ImagePicker();
   File? _profileImageFile;
   File? _coverImageFile;
-
-  // --- STATE VARIABLES ---
-  late final String targetUserId; // The ID of the profile we are viewing
-  late final bool isCurrentUser; // Is this the logged-in user's own profile?
-
+  late final String targetUserId;
+  late final bool isCurrentUser;
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
@@ -39,7 +35,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
-
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
     cloudinaryUploadPreset,
@@ -49,21 +44,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // --- UPDATED LOGIC ---
-    // If a userId is passed, we view that user. Otherwise, we view the logged-in user.
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
     targetUserId = widget.userId ?? currentUserId;
     isCurrentUser = targetUserId == currentUserId;
-
     _loadUserDataAndPosts();
   }
 
   Future<void> _loadUserDataAndPosts() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-
     try {
-      // Use targetUserId to fetch data for the correct profile
       final userDocFuture =
           FirebaseFirestore.instance
               .collection('users')
@@ -75,11 +65,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .where('userId', isEqualTo: targetUserId)
               .orderBy('timestamp', descending: true)
               .get();
-
       final results = await Future.wait([userDocFuture, postsQueryFuture]);
       final docSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
-
       if (mounted) {
         if (docSnapshot.exists) {
           final data = docSnapshot.data()!;
@@ -90,27 +78,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
         } else {
-          // Handle case where profile doesn't exist
           _displayName = 'User Not Found';
         }
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading profile: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // All other helper methods (_uploadImage, _pickImage, _logout, etc.) remain the same
-  // ...
+  // --- Other helper methods like _uploadImage, _pickImage, _logout are unchanged ---
   Future<void> _uploadImage(File imageFile, String imageType) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || !isCurrentUser) return; // Can only upload for self
-    // ... rest of upload logic ...
+    if (user == null || !isCurrentUser) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
@@ -158,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickProfileImage() async {
-    if (!isCurrentUser) return; // Can only edit own profile
+    if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       final imageFile = File(pickedFile.path);
@@ -168,7 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickCoverImage() async {
-    if (!isCurrentUser) return; // Can only edit own profile
+    if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       final imageFile = File(pickedFile.path);
@@ -190,9 +176,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- The `build` method and most `_build...` methods are unchanged ---
   @override
   Widget build(BuildContext context) {
-    // ... build method is the same
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
@@ -238,7 +224,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
-            // Only show logout and mail if it's the current user's profile
             if (isCurrentUser)
               Row(
                 children: [
@@ -265,7 +250,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ... Other _build methods
   Widget _buildHeaderAndProfile(Color cardColor) {
     return Stack(
       clipBehavior: Clip.none,
@@ -300,7 +284,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
     const Color buttonTextColor = Colors.black;
-
     return Column(
       children: [
         Row(
@@ -349,8 +332,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 20),
-
-        // --- SHOW BUTTONS ONLY IF IT'S THE CURRENT USER'S PROFILE ---
         if (isCurrentUser)
           Column(
             children: [
@@ -418,14 +399,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-
         const SizedBox(height: 24),
         _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
       ],
     );
   }
 
-  // ... rest of the build methods are the same ...
   Widget _buildHeaderImage() {
     ImageProvider imageProvider;
     if (isCurrentUser && _coverImageFile != null) {
@@ -522,6 +501,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // --- THIS WIDGET IS NOW UPDATED ---
   Widget _buildPhotoGallery(Color cardColor) {
     if (_userPosts.isEmpty) {
       return SliverToBoxAdapter(
@@ -537,6 +517,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       sliver: SliverGrid(
@@ -547,8 +528,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           childAspectRatio: 1.0,
         ),
         delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
-          final postData = _userPosts[index].data() as Map<String, dynamic>;
+          final postSnapshot = _userPosts[index];
+          final postData = postSnapshot.data() as Map<String, dynamic>;
           final imageUrl = postData['postImageUrl'] as String?;
+
           if (imageUrl == null || imageUrl.isEmpty) {
             return Container(
               color: cardColor,
@@ -558,29 +541,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
           }
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(15.0),
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  color: Colors.grey.shade800,
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.yellow,
+
+          // --- WRAP THE IMAGE WITH GESTUREDETECTOR ---
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => PostDetailScreen(postSnapshot: postSnapshot),
+                ),
+              );
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15.0),
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: Colors.grey.shade800,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.yellow,
+                      ),
                     ),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey.shade800,
-                  child: const Icon(Icons.broken_image, color: Colors.white54),
-                );
-              },
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey.shade800,
+                    child: const Icon(
+                      Icons.broken_image,
+                      color: Colors.white54,
+                    ),
+                  );
+                },
+              ),
             ),
           );
         }, childCount: _userPosts.length),
