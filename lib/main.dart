@@ -11,6 +11,7 @@ import 'package:my_project/screens/home_screen.dart';
 import 'package:my_project/screens/profile_screen.dart';
 import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/screens/classify_screen.dart';
+import 'package:my_project/screens/search_screen.dart';
 
 import 'firebase_options.dart';
 
@@ -27,19 +28,19 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Flutter Social App',
+      title: 'Kampus Konnect',
 
       theme: ThemeData(
         brightness: Brightness.dark,
 
         // --- FIX APPLIED HERE ---
-        // The `background` property has been removed from the ColorScheme.
+        // This is the modern way to define colors for a theme.
         colorScheme: ColorScheme.dark(
-          primary: Colors.yellow,
-          secondary: Colors.yellow,
+          primary: Colors.yellow, // Main interactive color (buttons, accents)
+          secondary: Colors.yellow, // Secondary accent
           surface: Colors.grey.shade900, // Color for Cards, BottomNavBars, etc.
-          onPrimary: Colors.black,
-          onSurface: Colors.white,
+          onPrimary: Colors.black, // Text color on top of primary color
+          onSurface: Colors.white, // Main text color
         ),
 
         // This is the correct way to set the main background color.
@@ -54,8 +55,10 @@ class MyApp extends StatelessWidget {
         bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey.shade900),
       ),
 
+      // The AuthGate is now the entry point of the app.
       home: const AuthGate(),
 
+      // These routes are still useful for named navigation from within the app.
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/signup': (context) => const SignupScreen(),
@@ -65,6 +68,7 @@ class MyApp extends StatelessWidget {
         '/profile': (context) => const ProfileScreen(),
         '/create-post': (context) => const CreatePostScreen(),
         '/classify': (context) => const ClassifyScreen(),
+        '/search': (context) => const SearchScreen(),
       },
     );
   }

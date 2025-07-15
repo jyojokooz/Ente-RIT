@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:my_project/screens/home_screen.dart';
-import 'package:my_project/screens/welcome_screen.dart';
+import 'package:my_project/screens/splash_screen.dart'; // <-- Import SplashScreen
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -13,22 +13,24 @@ class AuthGate extends StatelessWidget {
         // Listen to Firebase's real-time authentication state
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // If the connection is still loading data, show a spinner
+          // --- While waiting for the auth state, show a simple loading indicator ---
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.yellow),
             );
           }
 
-          // If the snapshot has data, it means the user IS logged in
+          // --- If the snapshot has data, the user IS logged in ---
           if (snapshot.hasData) {
-            // So, show the main app (HomeScreen)
+            // Go directly to the HomeScreen, completely skipping the splash animation.
             return const HomeScreen();
           }
-          // Otherwise, the user is NOT logged in
+          // --- Otherwise, the user is NOT logged in ---
           else {
-            // So, show the entry point for logged-out users
-            return const WelcomeScreen();
+            // Show the SplashScreen, which will run its animation
+            // and then navigate to the WelcomeScreen on completion.
+            // This perfectly matches your requirement.
+            return const SplashScreen();
           }
         },
       ),
