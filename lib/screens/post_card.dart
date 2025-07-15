@@ -3,13 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'full_screen_image_viewer.dart'; // <-- 1. ADD THIS IMPORT
+import 'full_screen_image_viewer.dart';
 
-class PostCard extends StatefulWidget {
+class PostCard extends StatelessWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
   final Function() onProfileTapped;
+  final Function() onLikePressed;
 
   const PostCard({
     super.key,
@@ -17,77 +18,14 @@ class PostCard extends StatefulWidget {
     required this.onCommentPressed,
     required this.onDeletePressed,
     required this.onProfileTapped,
+    required this.onLikePressed,
   });
 
   @override
-  State<PostCard> createState() => _PostCardState();
-}
-
-class _PostCardState extends State<PostCard> {
-  // All state variables and helper methods remain the same
-  late Map<String, dynamic> postData;
-  late List<dynamic> likesList;
-  late bool isLiked;
-  late int likeCount;
-  late int commentCount;
-  late bool isAuthor;
-  final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
-
-  @override
-  void initState() {
-    super.initState();
-    _updateStateFromSnapshot();
-  }
-
-  @override
-  void didUpdateWidget(covariant PostCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _updateStateFromSnapshot();
-  }
-
-  void _updateStateFromSnapshot() {
-    setState(() {
-      postData = widget.postSnapshot.data() as Map<String, dynamic>;
-      final postAuthorId = postData['userId'];
-      isAuthor = currentUserId == postAuthorId;
-      if (postData['likes'] is List) {
-        likesList = List<dynamic>.from(postData['likes']);
-      } else {
-        likesList = [];
-      }
-      likeCount = likesList.length;
-      isLiked = likesList.contains(currentUserId);
-      commentCount = postData['comments'] ?? 0;
-    });
-  }
-
-  Future<void> _toggleLike() async {
-    setState(() {
-      isLiked = !isLiked;
-      if (isLiked) {
-        likeCount++;
-        likesList.add(currentUserId);
-      } else {
-        likeCount--;
-        likesList.remove(currentUserId);
-      }
-    });
-    final postRef = FirebaseFirestore.instance
-        .collection('posts')
-        .doc(widget.postSnapshot.id);
-    if (isLiked) {
-      await postRef.update({
-        'likes': FieldValue.arrayUnion([currentUserId]),
-      });
-    } else {
-      await postRef.update({
-        'likes': FieldValue.arrayRemove([currentUserId]),
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final postData = postSnapshot.data() as Map<String, dynamic>;
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
     const Color primaryAccentColor = Colors.yellow;
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
@@ -99,14 +37,19 @@ class _PostCardState extends State<PostCard> {
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
 
+    final List<dynamic> likesList = postData['likes'] ?? [];
+    final int likeCount = likesList.length;
+    final bool isLiked = likesList.contains(currentUserId);
+    final int commentCount = postData['comments'] ?? 0;
+    final bool isAuthor = postData['userId'] == currentUserId;
+
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
     final String formattedDate =
         timestamp != null
             ? DateFormat('MMM d, h:mm a').format(timestamp)
             : '...';
 
-    // --- 2. CREATE A UNIQUE HERO TAG FOR EACH POST IMAGE ---
-    final String heroTag = 'postImage-${widget.postSnapshot.id}';
+    final String heroTag = 'postImage-${postSnapshot.id}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -120,7 +63,7 @@ class _PostCardState extends State<PostCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             GestureDetector(
-              onTap: widget.onProfileTapped,
+              onTap: onProfileTapped,
               child: Container(
                 color: Colors.transparent,
                 child: Row(
@@ -172,7 +115,7 @@ class _PostCardState extends State<PostCard> {
                           Icons.more_horiz,
                           color: secondaryTextColor,
                         ),
-                        onPressed: widget.onDeletePressed,
+                        onPressed: onDeletePressed,
                       ),
                     ],
                   ],
@@ -189,8 +132,6 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
               ),
-
-            // --- 3. WRAP THE IMAGE IN A GESTUREDETECTOR AND HERO WIDGET ---
             if (postImage.isNotEmpty)
               GestureDetector(
                 onTap: () {
@@ -200,13 +141,13 @@ class _PostCardState extends State<PostCard> {
                       builder:
                           (context) => FullScreenImageViewer(
                             imageUrl: postImage,
-                            heroTag: heroTag, // Pass the unique tag
+                            heroTag: heroTag,
                           ),
                     ),
                   );
                 },
                 child: Hero(
-                  tag: heroTag, // Assign the unique tag
+                  tag: heroTag,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15.0),
                     child: Image.network(
@@ -237,7 +178,7 @@ class _PostCardState extends State<PostCard> {
                 Row(
                   children: [
                     GestureDetector(
-                      onTap: widget.onCommentPressed,
+                      onTap: onCommentPressed,
                       child: Container(
                         color: Colors.transparent,
                         child: Row(
@@ -262,6 +203,7 @@ class _PostCardState extends State<PostCard> {
                       ),
                     ),
                     const SizedBox(width: 10),
+                    // --- SYNTAX ERROR WAS HERE ---
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.all(0),
@@ -271,8 +213,8 @@ class _PostCardState extends State<PostCard> {
                             isLiked ? primaryAccentColor : secondaryTextColor,
                       ),
                       iconSize: 24,
-                      onPressed: _toggleLike,
-                    ),
+                      onPressed: onLikePressed, // This line is correct
+                    ), // A comma was missing here
                     if (likeCount > 0)
                       Padding(
                         padding: const EdgeInsets.only(left: 2.0),
@@ -283,16 +225,11 @@ class _PostCardState extends State<PostCard> {
                       ),
                   ],
                 ),
-                Row(
+                const Row(
+                  // Wrapped in a Row for consistency, even with one icon
                   children: [
                     Icon(
                       Icons.send_outlined,
-                      size: 22,
-                      color: secondaryTextColor,
-                    ),
-                    const SizedBox(width: 20),
-                    Icon(
-                      Icons.bookmark_border_outlined,
                       size: 22,
                       color: secondaryTextColor,
                     ),

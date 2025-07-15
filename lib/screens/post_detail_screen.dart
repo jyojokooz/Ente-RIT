@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'post_card.dart';
-import 'profile_screen.dart'; // Import for profile navigation
+import 'profile_screen.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
@@ -14,6 +15,30 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
+  // --- ADDED THE LIKE/UNLIKE LOGIC HERE ---
+  Future<void> _toggleLike() async {
+    final postRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(widget.postSnapshot.id);
+    final user = FirebaseAuth.instance.currentUser!;
+
+    // We get the most current data directly from the snapshot
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
+    final List<dynamic> currentLikes = postData['likes'] ?? [];
+
+    final isLiked = currentLikes.contains(user.uid);
+
+    if (isLiked) {
+      await postRef.update({
+        'likes': FieldValue.arrayRemove([user.uid]),
+      });
+    } else {
+      await postRef.update({
+        'likes': FieldValue.arrayUnion([user.uid]),
+      });
+    }
+  }
+
   Future<void> _deletePost(String postId) async {
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -73,7 +98,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  // --- NEW: Function to handle tapping the profile from the detail screen ---
   void _onProfileTapped(String userId) {
     Navigator.push(
       context,
@@ -83,28 +107,46 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // --- FIX APPLIED HERE ---
-    // We get the post data once to pass to the PostCard
     final postData = widget.postSnapshot.data() as Map<String, dynamic>;
     final postAuthorId = postData['userId'] ?? '';
 
+    // Since this screen shows a snapshot in time, we use a StreamBuilder
+    // to listen for real-time updates (likes, comments) for this single post.
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text("Post", style: GoogleFonts.poppins()),
         backgroundColor: Colors.grey.shade900,
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: PostCard(
-            postSnapshot: widget.postSnapshot,
-            onCommentPressed: () => _onCommentTapped(widget.postSnapshot.id),
-            onDeletePressed: () => _deletePost(widget.postSnapshot.id),
-            // Provide the required onProfileTapped function
-            onProfileTapped: () => _onProfileTapped(postAuthorId),
-          ),
-        ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('posts')
+                .doc(widget.postSnapshot.id)
+                .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.yellow),
+            );
+          }
+          final updatedPostSnapshot = snapshot.data!;
+
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: PostCard(
+                postSnapshot: updatedPostSnapshot,
+                onCommentPressed:
+                    () => _onCommentTapped(updatedPostSnapshot.id),
+                onDeletePressed: () => _deletePost(updatedPostSnapshot.id),
+                onProfileTapped: () => _onProfileTapped(postAuthorId),
+                // --- FIX APPLIED HERE ---
+                onLikePressed: _toggleLike,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

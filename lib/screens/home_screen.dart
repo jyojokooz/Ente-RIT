@@ -18,52 +18,28 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
-  List<DocumentSnapshot> _posts = [];
-  bool _isLoading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchPosts();
-  }
-
-  Future<void> _fetchPosts() async {
-    // ... this method is unchanged
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    try {
-      final querySnapshot =
-          await FirebaseFirestore.instance
-              .collection('posts')
-              .orderBy('timestamp', descending: true)
-              .get();
-      if (mounted) {
-        setState(() {
-          _posts = querySnapshot.docs;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load posts: ${e.toString()}')),
-        );
-      }
+  Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+    final isLiked = currentLikes.contains(user.uid);
+    if (isLiked) {
+      await postRef.update({
+        'likes': FieldValue.arrayRemove([user.uid]),
+      });
+    } else {
+      await postRef.update({
+        'likes': FieldValue.arrayUnion([user.uid]),
+      });
     }
   }
 
   void _onCommentTapped(String postId) {
-    // ... this method is unchanged
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
-    ).then((_) {
-      _fetchPosts();
-    });
+    );
   }
 
-  // --- NEW METHOD TO HANDLE PROFILE NAVIGATION ---
   void _onProfileTapped(String userId) {
     Navigator.push(
       context,
@@ -71,8 +47,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- THIS IS THE CORRECTED DELETE FUNCTION ---
   Future<void> _deletePost(String postId) async {
-    // ... this method is unchanged
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -98,32 +75,35 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+
     if (didRequestDelete == true) {
       try {
         await FirebaseFirestore.instance
             .collection('posts')
             .doc(postId)
             .delete();
-        _fetchPosts();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        // The StreamBuilder will handle the UI update automatically, so _fetchPosts() is not needed.
+
+        // Use the captured scaffoldMessenger
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Post deleted successfully.'),
             backgroundColor: Colors.green,
           ),
         );
       } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete post: ${e.toString()}')),
-        );
+        // Use the captured scaffoldMessenger
+        if (scaffoldMessenger.mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(content: Text('Failed to delete post: ${e.toString()}')),
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... build method is unchanged until the SliverList
     const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
@@ -132,15 +112,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: screenBackgroundColor,
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-          );
-          if (result == true) {
-            _fetchPosts();
-          }
-        },
+        onPressed:
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+            ),
         backgroundColor: primaryAccentColor,
         elevation: 4.0,
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
@@ -151,58 +127,67 @@ class _HomeScreenState extends State<HomeScreen> {
         Colors.white70,
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _fetchPosts,
-          backgroundColor: cardBackgroundColor,
-          color: primaryAccentColor,
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _buildTopBar(Colors.white, cardBackgroundColor),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              _isLoading
-                  ? const SliverFillRemaining(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: _buildTopBar(Colors.white, cardBackgroundColor),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('posts')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SliverFillRemaining(
                     child: Center(
                       child: CircularProgressIndicator(
                         color: primaryAccentColor,
                       ),
                     ),
-                  )
-                  : _posts.isEmpty
-                  ? SliverFillRemaining(
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return SliverFillRemaining(
                     child: Center(
                       child: Text(
                         'No posts yet. Be the first!',
                         style: GoogleFonts.poppins(color: Colors.white70),
                       ),
                     ),
-                  )
-                  : SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final postSnapshot = _posts[index];
-                      final postData =
-                          postSnapshot.data() as Map<String, dynamic>;
-                      final postAuthorId = postData['userId'] ?? '';
+                  );
+                }
 
-                      return PostCard(
-                        postSnapshot: postSnapshot,
-                        onCommentPressed:
-                            () => _onCommentTapped(postSnapshot.id),
-                        onDeletePressed: () => _deletePost(postSnapshot.id),
-                        // --- PASS THE NAVIGATION FUNCTION ---
-                        onProfileTapped: () => _onProfileTapped(postAuthorId),
-                      );
-                    }, childCount: _posts.length),
-                  ),
-            ],
-          ),
+                final posts = snapshot.data!.docs;
+
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final postSnapshot = posts[index];
+                    final postData =
+                        postSnapshot.data() as Map<String, dynamic>;
+                    final postAuthorId = postData['userId'] ?? '';
+                    final currentLikes = postData['likes'] ?? [];
+
+                    return PostCard(
+                      postSnapshot: postSnapshot,
+                      onCommentPressed: () => _onCommentTapped(postSnapshot.id),
+                      onDeletePressed: () => _deletePost(postSnapshot.id),
+                      onProfileTapped: () => _onProfileTapped(postAuthorId),
+                      onLikePressed:
+                          () => _toggleLike(postSnapshot.id, currentLikes),
+                    );
+                  }, childCount: posts.length),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // --- The rest of the _build methods are unchanged ---
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
