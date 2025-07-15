@@ -2,6 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart'; // <-- 1. IMPORT THE NEW PACKAGE
+
+// You can now remove the timeago import if it's not used elsewhere
+// import 'package:timeago/timeago.dart' as timeago;
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
@@ -20,13 +24,13 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
+  // All state variables and helper methods remain the same
   late Map<String, dynamic> postData;
   late List<dynamic> likesList;
   late bool isLiked;
   late int likeCount;
   late int commentCount;
   late bool isAuthor;
-
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
   @override
@@ -44,16 +48,13 @@ class _PostCardState extends State<PostCard> {
   void _updateStateFromSnapshot() {
     setState(() {
       postData = widget.postSnapshot.data() as Map<String, dynamic>;
-
       final postAuthorId = postData['userId'];
       isAuthor = currentUserId == postAuthorId;
-
       if (postData['likes'] is List) {
         likesList = List<dynamic>.from(postData['likes']);
       } else {
         likesList = [];
       }
-
       likeCount = likesList.length;
       isLiked = likesList.contains(currentUserId);
       commentCount = postData['comments'] ?? 0;
@@ -71,7 +72,6 @@ class _PostCardState extends State<PostCard> {
         likesList.remove(currentUserId);
       }
     });
-
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postSnapshot.id);
@@ -94,10 +94,18 @@ class _PostCardState extends State<PostCard> {
     final Color cardBackgroundColor = Colors.grey.shade900;
 
     final String name = postData['userName'] ?? 'Unknown User';
-    final String username = postData['username'] ?? ''; // Get username
+    final String username = postData['username'] ?? '';
     final String userImage = postData['userImageUrl'] ?? '';
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
+
+    // --- 2. GET AND FORMAT THE TIMESTAMP WITH intl ---
+    final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
+    // Format: "Month day, h:mm AM/PM" (e.g., "Sep 23, 10:45 AM")
+    final String formattedDate =
+        timestamp != null
+            ? DateFormat('MMM d, h:mm a').format(timestamp)
+            : '...';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -130,7 +138,6 @@ class _PostCardState extends State<PostCard> {
                           color: primaryTextColor,
                         ),
                       ),
-                      // --- ADDED THIS WIDGET ---
                       if (username.isNotEmpty)
                         Text(
                           '@$username',
@@ -142,14 +149,27 @@ class _PostCardState extends State<PostCard> {
                     ],
                   ),
                 ),
-                if (isAuthor)
+                // --- 3. DISPLAY THE NEW FORMATTED DATE STRING ---
+                Text(
+                  formattedDate,
+                  style: GoogleFonts.poppins(
+                    color: secondaryTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+                if (isAuthor) ...[
+                  const SizedBox(width: 8),
                   IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     icon: const Icon(
                       Icons.more_horiz,
                       color: secondaryTextColor,
                     ),
                     onPressed: widget.onDeletePressed,
                   ),
+                ],
               ],
             ),
             if (caption.isNotEmpty)

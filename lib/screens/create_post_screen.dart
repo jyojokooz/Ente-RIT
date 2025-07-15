@@ -71,15 +71,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               .get();
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // 3. Create post data map
+      // 3. Create post data map (this includes the timestamp)
       final postData = {
         'postImageUrl': imageUrl,
         'caption': _captionController.text,
         'userId': user.uid,
         'userName': userData['displayName'] ?? 'A User',
-        'username': userData['username'] ?? '', // <-- ADDED THIS LINE
+        'username': userData['username'] ?? '',
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
-        'timestamp': FieldValue.serverTimestamp(),
+        'timestamp':
+            FieldValue.serverTimestamp(), // This provides the data for the timeago feature
         'likes': [],
         'comments': 0,
       };
