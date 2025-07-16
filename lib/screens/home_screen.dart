@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import for SystemNavigator
 import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
@@ -20,6 +21,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   List<DocumentSnapshot> _posts = [];
   bool _isLoading = true;
+
+  DateTime? _lastPressedAt;
 
   @override
   void initState() {
@@ -73,7 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
         'likes': FieldValue.arrayUnion([user.uid]),
       });
     }
-    // Refresh the posts to show the new like count instantly
     _fetchPosts();
   }
 
@@ -84,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- THIS IS THE CORRECTED DELETE FUNCTION ---
   Future<void> _deletePost(String postId) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
@@ -119,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
             .collection('posts')
             .doc(postId)
             .delete();
-        _fetchPosts(); // Re-fetch the posts to update the UI
+        _fetchPosts();
 
         scaffoldMessenger.showSnackBar(
           const SnackBar(
@@ -144,77 +145,102 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
-    return Scaffold(
-      backgroundColor: screenBackgroundColor,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-          );
-          if (result == true) {
-            _fetchPosts();
-          }
-        },
-        backgroundColor: primaryAccentColor,
-        elevation: 4.0,
-        child: const Icon(Icons.add, color: buttonTextColor, size: 30),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _buildBottomAppBar(
-        cardBackgroundColor,
-        Colors.white70,
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _fetchPosts,
-          backgroundColor: cardBackgroundColor,
-          color: primaryAccentColor,
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _buildTopBar(Colors.white, cardBackgroundColor),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              _isLoading
-                  ? const SliverFillRemaining(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: primaryAccentColor,
-                      ),
-                    ),
-                  )
-                  : _posts.isEmpty
-                  ? SliverFillRemaining(
-                    child: Center(
-                      child: Text(
-                        'No posts yet. Be the first!',
-                        style: GoogleFonts.poppins(color: Colors.white70),
-                      ),
-                    ),
-                  )
-                  : SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final postSnapshot = _posts[index];
-                      final postData =
-                          postSnapshot.data() as Map<String, dynamic>;
-                      final postAuthorId = postData['userId'] ?? '';
+    // --- FIX APPLIED HERE: Using PopScope with the latest callback ---
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) {
+        // This is the new, correct callback. We ignore the 'result' parameter with an underscore.
+        if (didPop) return;
 
-                      return PostCard(
-                        postSnapshot: postSnapshot,
-                        onCommentPressed:
-                            () => _onCommentTapped(postSnapshot.id),
-                        onDeletePressed: () => _deletePost(postSnapshot.id),
-                        onProfileTapped: () => _onProfileTapped(postAuthorId),
-                        onLikePressed:
-                            () => _toggleLike(
-                              postSnapshot.id,
-                              postData['likes'] ?? [],
-                            ),
-                      );
-                    }, childCount: _posts.length),
-                  ),
-            ],
+        final now = DateTime.now();
+        final isFirstPress =
+            _lastPressedAt == null ||
+            now.difference(_lastPressedAt!) > const Duration(seconds: 2);
+
+        if (isFirstPress) {
+          _lastPressedAt = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: screenBackgroundColor,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+            );
+            if (result == true) {
+              _fetchPosts();
+            }
+          },
+          backgroundColor: primaryAccentColor,
+          elevation: 4.0,
+          child: const Icon(Icons.add, color: buttonTextColor, size: 30),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        bottomNavigationBar: _buildBottomAppBar(
+          cardBackgroundColor,
+          Colors.white70,
+        ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _fetchPosts,
+            backgroundColor: cardBackgroundColor,
+            color: primaryAccentColor,
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildTopBar(Colors.white, cardBackgroundColor),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                _isLoading
+                    ? const SliverFillRemaining(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: primaryAccentColor,
+                        ),
+                      ),
+                    )
+                    : _posts.isEmpty
+                    ? SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          'No posts yet. Be the first!',
+                          style: GoogleFonts.poppins(color: Colors.white70),
+                        ),
+                      ),
+                    )
+                    : SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final postSnapshot = _posts[index];
+                        final postData =
+                            postSnapshot.data() as Map<String, dynamic>;
+                        final postAuthorId = postData['userId'] ?? '';
+
+                        return PostCard(
+                          postSnapshot: postSnapshot,
+                          onCommentPressed:
+                              () => _onCommentTapped(postSnapshot.id),
+                          onDeletePressed: () => _deletePost(postSnapshot.id),
+                          onProfileTapped: () => _onProfileTapped(postAuthorId),
+                          onLikePressed:
+                              () => _toggleLike(
+                                postSnapshot.id,
+                                postData['likes'] ?? [],
+                              ),
+                        );
+                      }, childCount: _posts.length),
+                    ),
+              ],
+            ),
           ),
         ),
       ),
