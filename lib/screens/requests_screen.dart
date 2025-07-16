@@ -22,10 +22,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
         .collection('users')
         .doc(requestFromId);
 
-    // Use a batch write to perform all operations atomically
     final batch = FirebaseFirestore.instance.batch();
 
-    // 1. Add each other to the 'connections' list
     batch.update(currentUserRef, {
       'connections': FieldValue.arrayUnion([requestFromId]),
     });
@@ -33,7 +31,6 @@ class _RequestsScreenState extends State<RequestsScreen> {
       'connections': FieldValue.arrayUnion([_currentUser.uid]),
     });
 
-    // 2. Remove the request from both users' request lists
     batch.update(currentUserRef, {
       'receivedRequests': FieldValue.arrayRemove([requestFromId]),
     });
@@ -112,6 +109,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 builder: (context, userSnapshot) {
                   if (!userSnapshot.hasData) {
                     return const ListTile(title: Text("Loading..."));
+                  }
+                  if (!userSnapshot.data!.exists) {
+                    return const SizedBox.shrink(); // Don't show if user was deleted
                   }
                   final requestUserData =
                       userSnapshot.data!.data() as Map<String, dynamic>;

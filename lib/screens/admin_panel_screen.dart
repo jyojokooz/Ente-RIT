@@ -12,15 +12,14 @@ class AdminPanelScreen extends StatefulWidget {
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _deletePost(String postId) async {
-    // This is a simplified delete for admins, it doesn't delete the Cloudinary image
-    // to avoid client-side API key exposure. This is acceptable for many apps.
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder:
           (ctx) => AlertDialog(
+            backgroundColor: Colors.grey.shade800,
             title: const Text('Delete Post?'),
             content: const Text(
-              'Are you sure you want to delete this post and all its comments?',
+              'Are you sure you want to delete this post and all its comments? This action cannot be undone.',
             ),
             actions: [
               TextButton(
@@ -39,6 +38,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (didRequestDelete == true) {
+      // For admins, we won't delete from Cloudinary to keep it simple,
+      // but in a production app you'd use a Cloud Function for this.
       await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
     }
   }
@@ -93,7 +94,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
             return ListTile(
               leading:
-                  postData['postImageUrl'] != null
+                  postData['postImageUrl'] != null &&
+                          postData['postImageUrl'].isNotEmpty
                       ? Image.network(
                         postData['postImageUrl'],
                         width: 50,
@@ -155,7 +157,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       ? const Chip(
                         label: Text('Admin'),
                         backgroundColor: Colors.yellow,
-                        labelStyle: TextStyle(color: Colors.black),
+                        labelStyle: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )
                       : null,
             );

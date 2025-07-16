@@ -1,4 +1,4 @@
-import 'dart:io'; // <-- 1. THE CRITICAL FIX: IMPORT ADDED
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -183,6 +183,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
     batch.update(targetUserRef, {
       'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+    });
+    await batch.commit();
+    _loadAllData();
+  }
+
+  Future<void> _cancelConnectionRequest() async {
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final targetUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUserId);
+    final batch = FirebaseFirestore.instance.batch();
+    batch.update(currentUserRef, {
+      'sentRequests': FieldValue.arrayRemove([targetUserId]),
+    });
+    batch.update(targetUserRef, {
+      'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
     await batch.commit();
     _loadAllData();
@@ -431,9 +449,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
-                icon: const Icon(Icons.admin_panel_settings_outlined),
-                label: const Text('Admin Panel'),
                 onPressed:
                     () => Navigator.push(
                       context,
@@ -441,6 +456,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         builder: (context) => const AdminPanelScreen(),
                       ),
                     ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                label: const Text('Admin Panel'),
               ),
             ),
             const SizedBox(height: 8),
@@ -481,21 +499,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: null,
-            child: const Text('Request Sent'),
+            onPressed: _cancelConnectionRequest,
+            child: const Text('Cancel Request'),
           ),
         );
       case ConnectionStatus.received:
         return SizedBox(
           width: double.infinity,
+          // --- FIX APPLIED HERE ---
           child: ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             onPressed: _acceptConnectionRequest,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text('Accept Request'),
           ),
         );
       case ConnectionStatus.none:
-        // The default clause is no longer needed as all enum cases are handled.
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
