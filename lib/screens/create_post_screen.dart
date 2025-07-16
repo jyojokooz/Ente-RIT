@@ -3,10 +3,11 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // <-- 1. IMPORT
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart'; // <-- For creating a temp path
 
-// You can keep these constants here or move them to a central config file
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
@@ -23,6 +24,27 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   File? _imageFile;
   bool _isUploading = false;
 
+  // --- 2. ADD THE COMPRESSION HELPER FUNCTION ---
+  Future<File?> _compressImage(File file) async {
+    // Get a temporary directory to store the compressed file.
+    final tempDir = await getTemporaryDirectory();
+    final tempPath =
+        '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    // Compress the file
+    final XFile? compressedXFile =
+        await FlutterImageCompress.compressAndGetFile(
+          file.absolute.path, // The path of the original file
+          tempPath, // The path to save the compressed file
+          quality: 70, // Compression quality (0-100)
+          minWidth: 1080, // Resize the image if it's wider than this
+          minHeight: 1080, // Resize the image if it's taller than this
+        );
+
+    if (compressedXFile == null) return null;
+    return File(compressedXFile.path);
+  }
+
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
@@ -34,44 +56,44 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _createPost() async {
     if (_imageFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an image for your post.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select an image.')));
       return;
     }
     if (_isUploading) return;
 
-    setState(() {
-      _isUploading = true;
-    });
+    setState(() => _isUploading = true);
 
     try {
+      // --- 3. COMPRESS THE IMAGE BEFORE UPLOADING ---
+      final compressedFile = await _compressImage(_imageFile!);
+      if (compressedFile == null) {
+        throw Exception('Image compression failed.');
+      }
+
       final user = FirebaseAuth.instance.currentUser!;
       final cloudinary = CloudinaryPublic(
         cloudinaryCloudName,
         cloudinaryUploadPreset,
       );
 
-      // 1. Upload image to Cloudinary
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
-          _imageFile!.path,
+          compressedFile.path, // <-- Use the compressed file
           folder: 'posts/${user.uid}',
           resourceType: CloudinaryResourceType.Image,
         ),
       );
 
+      // ... rest of the function is the same ...
       final imageUrl = response.secureUrl;
-
-      // 2. Fetch user's profile data to include in the post
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
       final userData = userDoc.data() as Map<String, dynamic>;
-
-      // 3. Create post data map (this includes the timestamp)
       final postData = {
         'postImageUrl': imageUrl,
         'caption': _captionController.text,
@@ -79,13 +101,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'userName': userData['displayName'] ?? 'A User',
         'username': userData['username'] ?? '',
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
-        'timestamp':
-            FieldValue.serverTimestamp(), // This provides the data for the timeago feature
+        'timestamp': FieldValue.serverTimestamp(),
         'likes': [],
         'comments': 0,
       };
-
-      // 4. Save to Firestore
       await FirebaseFirestore.instance.collection('posts').add(postData);
 
       if (!mounted) return;
@@ -96,14 +115,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         SnackBar(content: Text('Failed to create post: ${e.toString()}')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
+  // ... rest of the file (dispose, build) is unchanged ...
   @override
   void dispose() {
     _captionController.dispose();

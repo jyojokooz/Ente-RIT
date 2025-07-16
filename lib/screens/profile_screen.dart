@@ -2,12 +2,14 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart'; // <-- IMPORT
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:path_provider/path_provider.dart'; // <-- IMPORT
 import 'admin_panel_screen.dart';
 import 'edit_profile_screen.dart';
-import 'post_detail_screen.dart'; // <-- ADD THIS IMPORT
+import 'post_detail_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -21,7 +23,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // --- All state variables and helper methods remain the same ---
+  // ... all state variables are the same ...
   final ImagePicker _picker = ImagePicker();
   File? _profileImageFile;
   File? _coverImageFile;
@@ -51,6 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserDataAndPosts() async {
+    // ... load logic is the same ...
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
@@ -93,27 +96,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Other helper methods like _uploadImage, _pickImage, _logout are unchanged ---
+  // --- ADD THE COMPRESSION HELPER FUNCTION ---
+  Future<File?> _compressImage(File file) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempPath =
+        '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final XFile? compressedXFile =
+        await FlutterImageCompress.compressAndGetFile(
+          file.absolute.path,
+          tempPath,
+          quality: 70,
+          minWidth: 1080,
+          minHeight: 1080,
+        );
+    if (compressedXFile == null) return null;
+    return File(compressedXFile.path);
+  }
+
   Future<void> _uploadImage(File imageFile, String imageType) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || !isCurrentUser) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
+
     try {
+      // --- COMPRESS THE IMAGE BEFORE UPLOADING ---
+      final compressedFile = await _compressImage(imageFile);
+      if (compressedFile == null) {
+        throw Exception('Image compression failed.');
+      }
+
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
-          imageFile.path,
+          compressedFile.path, // <-- Use compressed file
           folder: 'users/${user.uid}',
           resourceType: CloudinaryResourceType.Image,
         ),
       );
+
       final downloadUrl = response.secureUrl;
       final fieldToUpdate =
           imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         fieldToUpdate: downloadUrl,
       }, SetOptions(merge: true));
+
       setState(() {
         if (imageType == 'profile') {
           _profilePhotoUrl = downloadUrl;
@@ -123,6 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _coverImageFile = null;
         }
       });
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -163,6 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // ... rest of the file is unchanged (logout, build, etc.) ...
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -176,7 +206,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- The `build` method and most `_build...` methods are unchanged ---
   @override
   Widget build(BuildContext context) {
     const Color screenBackgroundColor = Colors.black;
@@ -501,7 +530,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- THIS WIDGET IS NOW UPDATED ---
   Widget _buildPhotoGallery(Color cardColor) {
     if (_userPosts.isEmpty) {
       return SliverToBoxAdapter(
@@ -517,7 +545,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
-
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       sliver: SliverGrid(
@@ -531,7 +558,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final postSnapshot = _userPosts[index];
           final postData = postSnapshot.data() as Map<String, dynamic>;
           final imageUrl = postData['postImageUrl'] as String?;
-
           if (imageUrl == null || imageUrl.isEmpty) {
             return Container(
               color: cardColor,
@@ -541,8 +567,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
           }
-
-          // --- WRAP THE IMAGE WITH GESTUREDETECTOR ---
           return GestureDetector(
             onTap: () {
               Navigator.push(

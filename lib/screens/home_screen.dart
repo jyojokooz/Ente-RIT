@@ -18,6 +18,48 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
+  List<DocumentSnapshot> _posts = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPosts();
+  }
+
+  Future<void> _fetchPosts() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final querySnapshot =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .orderBy('timestamp', descending: true)
+              .get();
+      if (mounted) {
+        setState(() {
+          _posts = querySnapshot.docs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load posts: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  void _onCommentTapped(String postId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
+    ).then((_) {
+      _fetchPosts();
+    });
+  }
 
   Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
@@ -31,13 +73,8 @@ class _HomeScreenState extends State<HomeScreen> {
         'likes': FieldValue.arrayUnion([user.uid]),
       });
     }
-  }
-
-  void _onCommentTapped(String postId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
-    );
+    // Refresh the posts to show the new like count instantly
+    _fetchPosts();
   }
 
   void _onProfileTapped(String userId) {
@@ -82,9 +119,8 @@ class _HomeScreenState extends State<HomeScreen> {
             .collection('posts')
             .doc(postId)
             .delete();
-        // The StreamBuilder will handle the UI update automatically, so _fetchPosts() is not needed.
+        _fetchPosts(); // Re-fetch the posts to update the UI
 
-        // Use the captured scaffoldMessenger
         scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Post deleted successfully.'),
@@ -92,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       } catch (e) {
-        // Use the captured scaffoldMessenger
         if (scaffoldMessenger.mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Failed to delete post: ${e.toString()}')),
@@ -112,11 +147,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: screenBackgroundColor,
       floatingActionButton: FloatingActionButton(
-        onPressed:
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-            ),
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+          );
+          if (result == true) {
+            _fetchPosts();
+          }
+        },
         backgroundColor: primaryAccentColor,
         elevation: 4.0,
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
@@ -127,62 +166,56 @@ class _HomeScreenState extends State<HomeScreen> {
         Colors.white70,
       ),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildTopBar(Colors.white, cardBackgroundColor),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
-            StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('posts')
-                      .orderBy('timestamp', descending: true)
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SliverFillRemaining(
+        child: RefreshIndicator(
+          onRefresh: _fetchPosts,
+          backgroundColor: cardBackgroundColor,
+          color: primaryAccentColor,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildTopBar(Colors.white, cardBackgroundColor),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              _isLoading
+                  ? const SliverFillRemaining(
                     child: Center(
                       child: CircularProgressIndicator(
                         color: primaryAccentColor,
                       ),
                     ),
-                  );
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return SliverFillRemaining(
+                  )
+                  : _posts.isEmpty
+                  ? SliverFillRemaining(
                     child: Center(
                       child: Text(
                         'No posts yet. Be the first!',
                         style: GoogleFonts.poppins(color: Colors.white70),
                       ),
                     ),
-                  );
-                }
+                  )
+                  : SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final postSnapshot = _posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
 
-                final posts = snapshot.data!.docs;
-
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final postSnapshot = posts[index];
-                    final postData =
-                        postSnapshot.data() as Map<String, dynamic>;
-                    final postAuthorId = postData['userId'] ?? '';
-                    final currentLikes = postData['likes'] ?? [];
-
-                    return PostCard(
-                      postSnapshot: postSnapshot,
-                      onCommentPressed: () => _onCommentTapped(postSnapshot.id),
-                      onDeletePressed: () => _deletePost(postSnapshot.id),
-                      onProfileTapped: () => _onProfileTapped(postAuthorId),
-                      onLikePressed:
-                          () => _toggleLike(postSnapshot.id, currentLikes),
-                    );
-                  }, childCount: posts.length),
-                );
-              },
-            ),
-          ],
+                      return PostCard(
+                        postSnapshot: postSnapshot,
+                        onCommentPressed:
+                            () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onLikePressed:
+                            () => _toggleLike(
+                              postSnapshot.id,
+                              postData['likes'] ?? [],
+                            ),
+                      );
+                    }, childCount: _posts.length),
+                  ),
+            ],
+          ),
         ),
       ),
     );
