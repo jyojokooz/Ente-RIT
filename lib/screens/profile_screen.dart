@@ -1,18 +1,19 @@
-import 'dart:io';
+import 'dart:io'; // <-- 1. THE CRITICAL FIX: IMPORT ADDED
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart'; // <-- IMPORT
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-import 'package:path_provider/path_provider.dart'; // <-- IMPORT
 import 'admin_panel_screen.dart';
 import 'edit_profile_screen.dart';
 import 'post_detail_screen.dart';
+import 'requests_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
+
+enum ConnectionStatus { none, sent, received, connected }
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -23,20 +24,25 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // ... all state variables are the same ...
+  final _currentUser = FirebaseAuth.instance.currentUser!;
+  late final String targetUserId;
+  late final bool isCurrentUser;
+
   final ImagePicker _picker = ImagePicker();
   File? _profileImageFile;
   File? _coverImageFile;
-  late final String targetUserId;
-  late final bool isCurrentUser;
+
+  bool _isLoading = true;
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
   String? _profilePhotoUrl;
   String? _coverPhotoUrl;
-  bool _isLoading = true;
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
+  int _connectionCount = 0;
+  ConnectionStatus _connectionStatus = ConnectionStatus.none;
+
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
     cloudinaryUploadPreset,
@@ -46,18 +52,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-    targetUserId = widget.userId ?? currentUserId;
-    isCurrentUser = targetUserId == currentUserId;
-    _loadUserDataAndPosts();
+    targetUserId = widget.userId ?? _currentUser.uid;
+    isCurrentUser = targetUserId == _currentUser.uid;
+    _loadAllData();
   }
 
-  Future<void> _loadUserDataAndPosts() async {
-    // ... load logic is the same ...
+  Future<void> _loadAllData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
-      final userDocFuture =
+      final targetUserDocFuture =
           FirebaseFirestore.instance
               .collection('users')
               .doc(targetUserId)
@@ -68,18 +73,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .where('userId', isEqualTo: targetUserId)
               .orderBy('timestamp', descending: true)
               .get();
-      final results = await Future.wait([userDocFuture, postsQueryFuture]);
-      final docSnapshot = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final currentUserDocFuture =
+          isCurrentUser
+              ? targetUserDocFuture
+              : FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(_currentUser.uid)
+                  .get();
+
+      final results = await Future.wait([
+        targetUserDocFuture,
+        postsQueryFuture,
+        currentUserDocFuture,
+      ]);
+
+      final targetUserSnapshot =
+          results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final currentUserSnapshot =
+          results[2] as DocumentSnapshot<Map<String, dynamic>>;
+
       if (mounted) {
-        if (docSnapshot.exists) {
-          final data = docSnapshot.data()!;
+        if (targetUserSnapshot.exists) {
+          final data = targetUserSnapshot.data()!;
           _displayName = data['displayName'] ?? 'User';
           _username = data['username'] ?? 'username';
           _bio = data['bio'] ?? '';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
+          _connectionCount = (data['connections'] as List?)?.length ?? 0;
+          _determineConnectionStatus(
+            currentUserSnapshot.data(),
+            targetUserSnapshot.id,
+          );
         } else {
           _displayName = 'User Not Found';
         }
@@ -88,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+          SnackBar(content: Text("Error loading data: ${e.toString()}")),
         );
       }
     } finally {
@@ -96,52 +123,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- ADD THE COMPRESSION HELPER FUNCTION ---
-  Future<File?> _compressImage(File file) async {
-    final tempDir = await getTemporaryDirectory();
-    final tempPath =
-        '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final XFile? compressedXFile =
-        await FlutterImageCompress.compressAndGetFile(
-          file.absolute.path,
-          tempPath,
-          quality: 70,
-          minWidth: 1080,
-          minHeight: 1080,
-        );
-    if (compressedXFile == null) return null;
-    return File(compressedXFile.path);
+  void _determineConnectionStatus(
+    Map<String, dynamic>? currentUserData,
+    String targetUserId,
+  ) {
+    if (isCurrentUser || currentUserData == null) {
+      setState(() => _connectionStatus = ConnectionStatus.none);
+      return;
+    }
+    final List<dynamic> connections = currentUserData['connections'] ?? [];
+    final List<dynamic> sentRequests = currentUserData['sentRequests'] ?? [];
+    final List<dynamic> receivedRequests =
+        currentUserData['receivedRequests'] ?? [];
+
+    if (connections.contains(targetUserId)) {
+      _connectionStatus = ConnectionStatus.connected;
+    } else if (sentRequests.contains(targetUserId)) {
+      _connectionStatus = ConnectionStatus.sent;
+    } else if (receivedRequests.contains(targetUserId)) {
+      _connectionStatus = ConnectionStatus.received;
+    } else {
+      _connectionStatus = ConnectionStatus.none;
+    }
+    setState(() {});
+  }
+
+  Future<void> _sendConnectionRequest() async {
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final targetUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUserId);
+    await currentUserRef.update({
+      'sentRequests': FieldValue.arrayUnion([targetUserId]),
+    });
+    await targetUserRef.update({
+      'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
+    });
+    _loadAllData();
+  }
+
+  Future<void> _acceptConnectionRequest() async {
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final targetUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUserId);
+    final batch = FirebaseFirestore.instance.batch();
+    batch.update(currentUserRef, {
+      'connections': FieldValue.arrayUnion([targetUserId]),
+    });
+    batch.update(targetUserRef, {
+      'connections': FieldValue.arrayUnion([_currentUser.uid]),
+    });
+    batch.update(currentUserRef, {
+      'receivedRequests': FieldValue.arrayRemove([targetUserId]),
+    });
+    batch.update(targetUserRef, {
+      'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+    });
+    await batch.commit();
+    _loadAllData();
   }
 
   Future<void> _uploadImage(File imageFile, String imageType) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || !isCurrentUser) return;
+    if (!isCurrentUser) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
-
     try {
-      // --- COMPRESS THE IMAGE BEFORE UPLOADING ---
-      final compressedFile = await _compressImage(imageFile);
-      if (compressedFile == null) {
-        throw Exception('Image compression failed.');
-      }
-
       CloudinaryResponse response = await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
-          compressedFile.path, // <-- Use compressed file
-          folder: 'users/${user.uid}',
+          imageFile.path,
+          folder: 'users/${_currentUser.uid}',
           resourceType: CloudinaryResourceType.Image,
         ),
       );
-
       final downloadUrl = response.secureUrl;
       final fieldToUpdate =
           imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        fieldToUpdate: downloadUrl,
-      }, SetOptions(merge: true));
-
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser.uid)
+          .set({fieldToUpdate: downloadUrl}, SetOptions(merge: true));
       setState(() {
         if (imageType == 'profile') {
           _profilePhotoUrl = downloadUrl;
@@ -151,24 +217,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _coverImageFile = null;
         }
       });
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Image uploaded successfully!')),
       );
-    } on CloudinaryException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: ${e.message}')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('An unexpected error occurred: $e')),
-      );
+      ).showSnackBar(SnackBar(content: Text('Upload failed: ${e.toString()}')));
     }
   }
 
@@ -192,7 +251,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // ... rest of the file is unchanged (logout, build, etc.) ...
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -208,38 +266,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color screenBackgroundColor = Colors.black;
-    const Color primaryAccentColor = Colors.yellow;
-    final Color cardBackgroundColor = Colors.grey.shade900;
     return Scaffold(
-      backgroundColor: screenBackgroundColor,
+      backgroundColor: Colors.black,
       body:
           _isLoading
               ? const Center(
-                child: CircularProgressIndicator(color: primaryAccentColor),
+                child: CircularProgressIndicator(color: Colors.yellow),
               )
               : Stack(
                 children: [
                   RefreshIndicator(
-                    onRefresh: _loadUserDataAndPosts,
-                    color: primaryAccentColor,
-                    backgroundColor: cardBackgroundColor,
+                    onRefresh: _loadAllData,
+                    color: Colors.yellow,
+                    backgroundColor: Colors.grey.shade900,
                     child: CustomScrollView(
                       slivers: [
-                        SliverToBoxAdapter(
-                          child: _buildHeaderAndProfile(cardBackgroundColor),
-                        ),
-                        _buildPhotoGallery(cardBackgroundColor),
+                        SliverToBoxAdapter(child: _buildHeaderAndProfile()),
+                        _buildPhotoGallery(),
                       ],
                     ),
                   ),
-                  _buildTopActionButtons(Colors.black, Colors.white),
+                  _buildTopActionButtons(),
                 ],
               ),
     );
   }
 
-  Widget _buildTopActionButtons(Color bgColor, Color iconColor) {
+  Widget _buildTopActionButtons() {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -247,9 +300,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             CircleAvatar(
-              backgroundColor: bgColor.withAlpha(128),
+              backgroundColor: Colors.black.withAlpha(128),
               child: IconButton(
-                icon: Icon(Icons.arrow_back, color: iconColor),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -257,17 +310,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: bgColor.withAlpha(128),
+                    backgroundColor: Colors.black.withAlpha(128),
                     child: IconButton(
-                      icon: Icon(Icons.mail_outline, color: iconColor),
-                      onPressed: () {},
+                      icon: const Icon(
+                        Icons.group_add_outlined,
+                        color: Colors.white,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RequestsScreen(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
-                    backgroundColor: bgColor.withAlpha(128),
+                    backgroundColor: Colors.black.withAlpha(128),
                     child: IconButton(
-                      icon: Icon(Icons.logout, color: iconColor),
+                      icon: const Icon(Icons.logout, color: Colors.white),
                       onPressed: _logout,
                     ),
                   ),
@@ -279,7 +342,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeaderAndProfile(Color cardColor) {
+  Widget _buildHeaderAndProfile() {
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
@@ -291,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 16.0),
             padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
             decoration: BoxDecoration(
-              color: cardColor,
+              color: Colors.grey.shade900,
               borderRadius: BorderRadius.circular(30),
             ),
             child: _buildProfileInfo(),
@@ -301,7 +364,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           top: 100,
           child: GestureDetector(
             onTap: _pickProfileImage,
-            child: _buildProfilePicture(cardColor),
+            child: _buildProfilePicture(),
           ),
         ),
       ],
@@ -309,32 +372,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileInfo() {
-    const Color primaryAccentColor = Colors.yellow;
-    const Color primaryTextColor = Colors.white;
-    const Color secondaryTextColor = Colors.white70;
-    const Color buttonTextColor = Colors.black;
     return Column(
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildStatsColumn(
-              "0",
-              "Followers",
-              primaryTextColor,
-              secondaryTextColor,
+              _connectionCount.toString(),
+              "Connections",
+              Colors.white,
+              Colors.white70,
             ),
+            const SizedBox(width: 40),
             _buildStatsColumn(
               _userPosts.length.toString(),
               "Posts",
-              primaryTextColor,
-              secondaryTextColor,
-            ),
-            _buildStatsColumn(
-              "0",
-              "Following",
-              primaryTextColor,
-              secondaryTextColor,
+              Colors.white,
+              Colors.white70,
             ),
           ],
         ),
@@ -344,94 +398,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             fontSize: 22,
-            color: primaryTextColor,
+            color: Colors.white,
           ),
         ),
         Text(
           '@$_username',
-          style: GoogleFonts.poppins(color: secondaryTextColor, fontSize: 16),
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
         ),
         const SizedBox(height: 12),
         Text(
           _bio.isEmpty ? 'This user has no bio yet.' : _bio,
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
-            color: _bio.isEmpty ? Colors.grey : secondaryTextColor,
+            color: _bio.isEmpty ? Colors.grey : Colors.white70,
             fontSize: 14,
           ),
         ),
         const SizedBox(height: 20),
-        if (isCurrentUser)
-          Column(
-            children: [
-              if (_isAdmin) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.admin_panel_settings_outlined),
-                    label: Text(
-                      'Admin Panel',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AdminPanelScreen(),
-                          ),
-                        ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EditProfileScreen(),
-                      ),
-                    );
-                    if (result == true) {
-                      _loadUserDataAndPosts();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryAccentColor,
-                    foregroundColor: buttonTextColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    'Edit Profile',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        _buildActionButtons(),
         const SizedBox(height: 24),
-        _buildTabs(primaryAccentColor, primaryTextColor, secondaryTextColor),
+        _buildTabs(Colors.yellow, Colors.white, Colors.white70),
       ],
     );
+  }
+
+  Widget _buildActionButtons() {
+    if (isCurrentUser) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isAdmin) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                label: const Text('Admin Panel'),
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminPanelScreen(),
+                      ),
+                    ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EditProfileScreen(),
+                  ),
+                );
+                _loadAllData();
+              },
+              child: const Text('Edit Profile'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    switch (_connectionStatus) {
+      case ConnectionStatus.connected:
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey.shade700,
+            ),
+            icon: const Icon(Icons.message_outlined),
+            label: const Text('Message'),
+            onPressed: () {},
+          ),
+        );
+      case ConnectionStatus.sent:
+        return SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: null,
+            child: const Text('Request Sent'),
+          ),
+        );
+      case ConnectionStatus.received:
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: _acceptConnectionRequest,
+            child: const Text('Accept Request'),
+          ),
+        );
+      case ConnectionStatus.none:
+        // The default clause is no longer needed as all enum cases are handled.
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.yellow,
+              foregroundColor: Colors.black,
+            ),
+            icon: const Icon(Icons.person_add_alt_1_outlined),
+            label: const Text('Connect'),
+            onPressed: _sendConnectionRequest,
+          ),
+        );
+    }
   }
 
   Widget _buildHeaderImage() {
@@ -453,7 +530,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfilePicture(Color borderColor) {
+  Widget _buildProfilePicture() {
+    final cardColor = Colors.grey.shade900;
     ImageProvider imageProvider;
     if (isCurrentUser && _profileImageFile != null) {
       imageProvider = FileImage(_profileImageFile!);
@@ -465,7 +543,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: borderColor, width: 5),
+        border: Border.all(color: cardColor, width: 5),
       ),
       child: CircleAvatar(radius: 45, backgroundImage: imageProvider),
     );
@@ -530,7 +608,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPhotoGallery(Color cardColor) {
+  Widget _buildPhotoGallery() {
+    final cardColor = Colors.grey.shade900;
     if (_userPosts.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -568,41 +647,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }
           return GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => PostDetailScreen(postSnapshot: postSnapshot),
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) =>
+                            PostDetailScreen(postSnapshot: postSnapshot),
+                  ),
                 ),
-              );
-            },
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15.0),
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return Container(
-                    color: Colors.grey.shade800,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.yellow,
+                loadingBuilder:
+                    (context, child, progress) =>
+                        progress == null
+                            ? child
+                            : Container(
+                              color: Colors.grey.shade800,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.yellow,
+                                ),
+                              ),
+                            ),
+                errorBuilder:
+                    (context, error, stackTrace) => Container(
+                      color: Colors.grey.shade800,
+                      child: const Icon(
+                        Icons.broken_image,
+                        color: Colors.white54,
                       ),
                     ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey.shade800,
-                    child: const Icon(
-                      Icons.broken_image,
-                      color: Colors.white54,
-                    ),
-                  );
-                },
               ),
             ),
           );
