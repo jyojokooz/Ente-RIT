@@ -6,10 +6,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'admin_panel_screen.dart';
-import 'connections_screen.dart'; // <-- 1. ADD THIS IMPORT
+import 'connections_screen.dart';
 import 'edit_profile_screen.dart';
 import 'post_detail_screen.dart';
 import 'requests_screen.dart';
+import 'chat_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -41,7 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _coverPhotoUrl;
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
-  List<dynamic> _connections = []; // <-- Store the list of connection IDs
+  List<dynamic> _connections = [];
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
 
   final cloudinary = CloudinaryPublic(
@@ -59,9 +60,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadAllData() async {
-    // ... This method is mostly the same
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       final targetUserDocFuture =
           FirebaseFirestore.instance
@@ -100,8 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
-          _connections =
-              data['connections'] ?? []; // <-- 2. POPULATE THE CONNECTIONS LIST
+          _connections = data['connections'] ?? [];
           _determineConnectionStatus(
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
@@ -122,124 +122,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // All other helper methods (_determineConnectionStatus, _sendConnectionRequest, etc.) are unchanged
-  // ...
-
-  // --- 3. NEW NAVIGATION METHOD FOR VIEWING CONNECTIONS ---
-  void _viewConnections() {
-    // A user can always see their own connections.
-    // Another user can only see connections if they are connected.
-    if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => ConnectionsScreen(
-                title: '$_displayName\'s Connections',
-                userIds: _connections,
-              ),
-        ),
-      );
-    } else {
-      // Optionally, show a message if they try to view connections but aren't connected
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'You must be connected with $_displayName to see their connections.',
-          ),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // ... The main build method is unchanged
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Colors.yellow),
-              )
-              : Stack(
-                children: [
-                  RefreshIndicator(
-                    onRefresh: _loadAllData,
-                    color: Colors.yellow,
-                    backgroundColor: Colors.grey.shade900,
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(child: _buildHeaderAndProfile()),
-                        _buildPhotoGallery(),
-                      ],
-                    ),
-                  ),
-                  _buildTopActionButtons(),
-                ],
-              ),
-    );
-  }
-
-  // --- 4. UPDATE _buildProfileInfo TO MAKE THE STATS COLUMN TAPPABLE ---
-  Widget _buildProfileInfo() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Wrap the Connections column in a GestureDetector
-            GestureDetector(
-              onTap: _viewConnections,
-              child: _buildStatsColumn(
-                _connections.length.toString(),
-                "Connections",
-                Colors.white,
-                Colors.white70,
-              ),
-            ),
-            const SizedBox(width: 40),
-            _buildStatsColumn(
-              _userPosts.length.toString(),
-              "Posts",
-              Colors.white,
-              Colors.white70,
-            ),
-          ],
-        ),
-        // ... the rest of the method is unchanged
-        const SizedBox(height: 10),
-        Text(
-          _displayName,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            color: Colors.white,
-          ),
-        ),
-        Text(
-          '@$_username',
-          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          _bio.isEmpty ? 'This user has no bio yet.' : _bio,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            color: _bio.isEmpty ? Colors.grey : Colors.white70,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _buildActionButtons(),
-        const SizedBox(height: 24),
-        _buildTabs(Colors.yellow, Colors.white, Colors.white70),
-      ],
-    );
-  }
-
-  // All other methods from here on are unchanged...
-  // ...
   void _determineConnectionStatus(
     Map<String, dynamic>? currentUserData,
     String targetUserId,
@@ -262,6 +144,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _connectionStatus = ConnectionStatus.none;
     }
     setState(() {});
+  }
+
+  void _viewConnections() {
+    if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => ConnectionsScreen(
+                title:
+                    isCurrentUser
+                        ? 'Your Connections'
+                        : '$_displayName\'s Connections',
+                userIds: _connections,
+              ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You must be connected with $_displayName to see their connections.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _sendConnectionRequest() async {
@@ -398,6 +306,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: Colors.yellow),
+              )
+              : Stack(
+                children: [
+                  RefreshIndicator(
+                    onRefresh: _loadAllData,
+                    color: Colors.yellow,
+                    backgroundColor: Colors.grey.shade900,
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(child: _buildHeaderAndProfile()),
+                        _buildPhotoGallery(),
+                      ],
+                    ),
+                  ),
+                  _buildTopActionButtons(),
+                ],
+              ),
+    );
+  }
+
   Widget _buildTopActionButtons() {
     return SafeArea(
       child: Padding(
@@ -477,6 +413,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildProfileInfo() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: _viewConnections,
+              child: _buildStatsColumn(
+                _connections.length.toString(),
+                "Connections",
+                Colors.white,
+                Colors.white70,
+              ),
+            ),
+            const SizedBox(width: 40),
+            _buildStatsColumn(
+              _userPosts.length.toString(),
+              "Posts",
+              Colors.white,
+              Colors.white70,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          _displayName,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          '@$_username',
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _bio.isEmpty ? 'This user has no bio yet.' : _bio,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            color: _bio.isEmpty ? Colors.grey : Colors.white70,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 20),
+        _buildActionButtons(),
+        const SizedBox(height: 24),
+        _buildTabs(Colors.yellow, Colors.white, Colors.white70),
+      ],
+    );
+  }
+
   Widget _buildActionButtons() {
     if (isCurrentUser) {
       return Column(
@@ -498,8 +488,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: const Text('Admin Panel'),
               ),
             ),
+            const SizedBox(height: 8),
           ],
-          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -518,17 +508,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
+
     switch (_connectionStatus) {
       case ConnectionStatus.connected:
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => ChatScreen(
+                        receiverId: targetUserId,
+                        receiverName: _displayName,
+                        receiverImageUrl: _profilePhotoUrl ?? '',
+                      ),
+                ),
+              );
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.grey.shade700,
             ),
             icon: const Icon(Icons.message_outlined),
             label: const Text('Message'),
-            onPressed: () {},
           ),
         );
       case ConnectionStatus.sent:

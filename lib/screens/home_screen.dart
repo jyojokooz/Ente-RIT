@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Import for SystemNavigator
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
@@ -9,6 +9,7 @@ import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'classify_screen.dart';
 import 'post_card.dart';
+import 'chat_list_screen.dart'; // Ensure this import is present
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,50 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
-  List<DocumentSnapshot> _posts = [];
-  bool _isLoading = true;
-
   DateTime? _lastPressedAt;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchPosts();
-  }
-
-  Future<void> _fetchPosts() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    try {
-      final querySnapshot =
-          await FirebaseFirestore.instance
-              .collection('posts')
-              .orderBy('timestamp', descending: true)
-              .get();
-      if (mounted) {
-        setState(() {
-          _posts = querySnapshot.docs;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load posts: ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  void _onCommentTapped(String postId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
-    ).then((_) {
-      _fetchPosts();
-    });
-  }
 
   Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
@@ -76,7 +34,13 @@ class _HomeScreenState extends State<HomeScreen> {
         'likes': FieldValue.arrayUnion([user.uid]),
       });
     }
-    _fetchPosts();
+  }
+
+  void _onCommentTapped(String postId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
+    );
   }
 
   void _onProfileTapped(String userId) {
@@ -120,8 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .collection('posts')
             .doc(postId)
             .delete();
-        _fetchPosts();
-
         scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Post deleted successfully.'),
@@ -149,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
-        // This is the new, correct callback. We ignore the 'result' parameter with an underscore.
+        // This is the new, correct callback. We ignore the 'result' parameter.
         if (didPop) return;
 
         final now = DateTime.now();
@@ -172,15 +134,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         backgroundColor: screenBackgroundColor,
         floatingActionButton: FloatingActionButton(
-          onPressed: () async {
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-            );
-            if (result == true) {
-              _fetchPosts();
-            }
-          },
+          onPressed:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreatePostScreen(),
+                ),
+              ),
           backgroundColor: primaryAccentColor,
           elevation: 4.0,
           child: const Icon(Icons.add, color: buttonTextColor, size: 30),
@@ -191,56 +151,72 @@ class _HomeScreenState extends State<HomeScreen> {
           Colors.white70,
         ),
         body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _fetchPosts,
-            backgroundColor: cardBackgroundColor,
-            color: primaryAccentColor,
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildTopBar(Colors.white, cardBackgroundColor),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                _isLoading
-                    ? const SliverFillRemaining(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildTopBar(Colors.white, cardBackgroundColor),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .orderBy('timestamp', descending: true)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SliverFillRemaining(
                       child: Center(
                         child: CircularProgressIndicator(
                           color: primaryAccentColor,
                         ),
                       ),
-                    )
-                    : _posts.isEmpty
-                    ? SliverFillRemaining(
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          'Something went wrong!',
+                          style: GoogleFonts.poppins(color: Colors.red),
+                        ),
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return SliverFillRemaining(
                       child: Center(
                         child: Text(
                           'No posts yet. Be the first!',
                           style: GoogleFonts.poppins(color: Colors.white70),
                         ),
                       ),
-                    )
-                    : SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final postSnapshot = _posts[index];
-                        final postData =
-                            postSnapshot.data() as Map<String, dynamic>;
-                        final postAuthorId = postData['userId'] ?? '';
+                    );
+                  }
 
-                        return PostCard(
-                          postSnapshot: postSnapshot,
-                          onCommentPressed:
-                              () => _onCommentTapped(postSnapshot.id),
-                          onDeletePressed: () => _deletePost(postSnapshot.id),
-                          onProfileTapped: () => _onProfileTapped(postAuthorId),
-                          onLikePressed:
-                              () => _toggleLike(
-                                postSnapshot.id,
-                                postData['likes'] ?? [],
-                              ),
-                        );
-                      }, childCount: _posts.length),
-                    ),
-              ],
-            ),
+                  final posts = snapshot.data!.docs;
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final postSnapshot = posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
+                      final currentLikes = postData['likes'] ?? [];
+
+                      return PostCard(
+                        postSnapshot: postSnapshot,
+                        onCommentPressed:
+                            () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onLikePressed:
+                            () => _toggleLike(postSnapshot.id, currentLikes),
+                      );
+                    }, childCount: posts.length),
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -276,13 +252,22 @@ class _HomeScreenState extends State<HomeScreen> {
               color: textColor,
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: iconBgColor,
+          GestureDetector(
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ChatListScreen(),
+                  ),
+                ),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: iconBgColor,
+              ),
+              child: Icon(Icons.message_outlined, color: textColor, size: 28),
             ),
-            child: Icon(Icons.message_outlined, color: textColor, size: 28),
           ),
         ],
       ),
