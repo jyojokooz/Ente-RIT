@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:timezone/data/latest.dart' as tz; // <-- 1. IMPORT TIMEZONE DATA
 
 import 'package:my_project/auth/auth_gate.dart';
 import 'package:my_project/screens/welcome_screen.dart';
@@ -12,12 +13,19 @@ import 'package:my_project/screens/profile_screen.dart';
 import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/screens/classify_screen.dart';
 import 'package:my_project/screens/search_screen.dart';
+// Add any other necessary screen imports here
+import 'package:my_project/screens/chat_list_screen.dart';
+import 'package:my_project/screens/requests_screen.dart';
 
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // --- 2. INITIALIZE TIME ZONE DATABASE BEFORE RUNNING THE APP ---
+  tz.initializeTimeZones();
+
   runApp(const MyApp());
 }
 
@@ -32,22 +40,15 @@ class MyApp extends StatelessWidget {
 
       theme: ThemeData(
         brightness: Brightness.dark,
-
-        // --- FIX APPLIED HERE ---
-        // This is the modern way to define colors for a theme.
         colorScheme: ColorScheme.dark(
-          primary: Colors.yellow, // Main interactive color (buttons, accents)
-          secondary: Colors.yellow, // Secondary accent
-          surface: Colors.grey.shade900, // Color for Cards, BottomNavBars, etc.
-          onPrimary: Colors.black, // Text color on top of primary color
-          onSurface: Colors.white, // Main text color
+          primary: Colors.yellow,
+          secondary: Colors.yellow,
+          surface: Colors.grey.shade900,
+          onPrimary: Colors.black,
+          onSurface: Colors.white,
         ),
-
-        // This is the correct way to set the main background color.
         scaffoldBackgroundColor: Colors.black,
-
         textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
-
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.grey.shade900,
           elevation: 0,
@@ -55,10 +56,8 @@ class MyApp extends StatelessWidget {
         bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey.shade900),
       ),
 
-      // The AuthGate is now the entry point of the app.
       home: const AuthGate(),
 
-      // These routes are still useful for named navigation from within the app.
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/signup': (context) => const SignupScreen(),
@@ -69,6 +68,8 @@ class MyApp extends StatelessWidget {
         '/create-post': (context) => const CreatePostScreen(),
         '/classify': (context) => const ClassifyScreen(),
         '/search': (context) => const SearchScreen(),
+        '/requests': (context) => const RequestsScreen(),
+        '/chat-list': (context) => const ChatListScreen(),
       },
     );
   }

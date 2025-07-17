@@ -1,18 +1,31 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart'; // <-- Import for date formatting
+import 'package:intl/intl.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
+import 'package:timezone/timezone.dart' as tz; // <-- 1. IMPORT TIMEZONE
 import '../helpers/database_helper.dart';
 
-// --- Message Model ---
+// --- Models and Classes ---
+abstract class ChatListItem {}
+
+class MessageItem extends ChatListItem {
+  final ChatMessage message;
+  MessageItem(this.message);
+}
+
+class DateSeparatorItem extends ChatListItem {
+  final DateTime date;
+  DateSeparatorItem(this.date);
+}
+
 class ChatMessage {
   final String senderId;
   final String text;
   final DateTime timestamp;
-  final String senderImageUrl; // <-- ADDED: To hold the image URL
-
+  final String senderImageUrl;
   ChatMessage({
     required this.senderId,
     required this.text,
@@ -25,7 +38,6 @@ class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
   final String receiverImageUrl;
-
   const ChatScreen({
     super.key,
     required this.receiverId,
@@ -43,12 +55,13 @@ class _ChatScreenState extends State<ChatScreen> {
   late final String _chatRoomId;
 
   final PusherChannelsFlutter pusher = PusherChannelsFlutter.getInstance();
-  final String pusherAppKey = "582fafe5cbf4968bec2c"; // Replace with your key
-  final String pusherAppCluster = "mt1"; // Replace with your cluster
+  final String pusherAppKey = "YOUR_PUSHER_KEY"; // Replace with your key
+  final String pusherAppCluster =
+      "YOUR_PUSHER_CLUSTER"; // Replace with your cluster
 
-  List<ChatMessage> _messages = [];
+  List<ChatListItem> _chatItems = [];
   bool _isLoadingHistory = true;
-  String _currentUserImageUrl = ''; // Store current user's image URL
+  String _currentUserImageUrl = '';
 
   @override
   void initState() {
@@ -56,16 +69,26 @@ class _ChatScreenState extends State<ChatScreen> {
     List<String> ids = [_currentUser.uid, widget.receiverId];
     ids.sort();
     _chatRoomId = ids.join('_');
-    _loadDataAndInitPusher();
+    _initializeChat();
   }
 
-  // Combines loading history and user data
-  Future<void> _loadDataAndInitPusher() async {
-    // 1. Get current user's image URL from Firestore (or wherever you store it)
-    // This is a placeholder. You should fetch this from your 'users' collection.
-    _currentUserImageUrl = FirebaseAuth.instance.currentUser?.photoURL ?? '';
+  @override
+  void dispose() {
+    pusher.unsubscribe(channelName: 'private-$_chatRoomId');
+    _messageController.dispose();
+    super.dispose();
+  }
 
-    // 2. Load message history from local DB
+  Future<void> _initializeChat() async {
+    final userDoc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUser.uid)
+            .get();
+    if (userDoc.exists) {
+      _currentUserImageUrl = userDoc.data()?['profilePhotoUrl'] ?? '';
+    }
+
     final historyData = await DatabaseHelper.instance.getMessages(_chatRoomId);
     final historyMessages =
         historyData.map((item) {
@@ -73,8 +96,11 @@ class _ChatScreenState extends State<ChatScreen> {
           return ChatMessage(
             senderId: item['senderId'],
             text: item['text'],
-            timestamp: DateTime.fromMillisecondsSinceEpoch(item['timestamp']),
-            // Assign the correct image URL based on who the sender is
+            // Timestamps from DB are UTC, so we create a UTC DateTime object
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              item['timestamp'],
+              isUtc: true,
+            ),
             senderImageUrl:
                 isMe ? _currentUserImageUrl : widget.receiverImageUrl,
           );
@@ -82,12 +108,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (mounted) {
       setState(() {
-        _messages = historyMessages;
+        _chatItems = _groupMessages(historyMessages);
         _isLoadingHistory = false;
       });
     }
 
-    // 3. Connect to Pusher
     try {
       await pusher.init(
         apiKey: pusherAppKey,
@@ -101,6 +126,58 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  List<ChatListItem> _groupMessages(List<ChatMessage> messages) {
+    if (messages.isEmpty) return [];
+    List<ChatListItem> groupedItems = [];
+    for (var i = 0; i < messages.length; i++) {
+      final currentMessage = messages[i];
+      groupedItems.add(MessageItem(currentMessage));
+      final bool isLastMessage = i == messages.length - 1;
+      if (isLastMessage) {
+        groupedItems.add(DateSeparatorItem(currentMessage.timestamp));
+      } else {
+        final nextMessage = messages[i + 1];
+        // Compare dates in the local timezone
+        final location = tz.getLocation('Asia/Kolkata');
+        final currentLocalTime = tz.TZDateTime.from(
+          currentMessage.timestamp,
+          location,
+        );
+        final nextLocalTime = tz.TZDateTime.from(
+          nextMessage.timestamp,
+          location,
+        );
+        if (currentLocalTime.day != nextLocalTime.day) {
+          groupedItems.add(DateSeparatorItem(currentMessage.timestamp));
+        }
+      }
+    }
+    return groupedItems;
+  }
+
+  String _formatDateSeparator(DateTime date) {
+    final location = tz.getLocation('Asia/Kolkata');
+    final istTime = tz.TZDateTime.from(date, location);
+
+    final now = tz.TZDateTime.now(location);
+    final today = tz.TZDateTime(location, now.year, now.month, now.day);
+    final yesterday = tz.TZDateTime(location, now.year, now.month, now.day - 1);
+    final messageDate = tz.TZDateTime(
+      location,
+      istTime.year,
+      istTime.month,
+      istTime.day,
+    );
+
+    if (messageDate.isAtSameMomentAs(today)) {
+      return 'Today';
+    } else if (messageDate.isAtSameMomentAs(yesterday)) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMMM d, y').format(istTime);
+    }
+  }
+
   void _onPusherEvent(PusherEvent event) {
     if (event.eventName == 'client-new-message') {
       final data = jsonDecode(event.data);
@@ -108,9 +185,11 @@ class _ChatScreenState extends State<ChatScreen> {
         final newMessage = ChatMessage(
           senderId: data['senderId'],
           text: data['text'],
-          timestamp: DateTime.fromMillisecondsSinceEpoch(data['timestamp']),
-          senderImageUrl:
-              widget.receiverImageUrl, // The sender is the other person
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            data['timestamp'],
+            isUtc: true,
+          ),
+          senderImageUrl: widget.receiverImageUrl,
         );
 
         DatabaseHelper.instance.insertMessage({
@@ -122,34 +201,65 @@ class _ChatScreenState extends State<ChatScreen> {
 
         if (mounted) {
           setState(() {
-            _messages.insert(0, newMessage);
+            final firstItem = _chatItems.isNotEmpty ? _chatItems.first : null;
+            bool isNewDay = true;
+            if (firstItem is MessageItem) {
+              final location = tz.getLocation('Asia/Kolkata');
+              final lastLocalDate = tz.TZDateTime.from(
+                firstItem.message.timestamp,
+                location,
+              );
+              final newLocalDate = tz.TZDateTime.from(
+                newMessage.timestamp,
+                location,
+              );
+              isNewDay =
+                  newLocalDate.day != lastLocalDate.day ||
+                  newLocalDate.month != lastLocalDate.month ||
+                  newLocalDate.year != lastLocalDate.year;
+            }
+            if (isNewDay) {
+              _chatItems.insert(0, DateSeparatorItem(newMessage.timestamp));
+            }
+            _chatItems.insert(0, MessageItem(newMessage));
           });
         }
       }
     }
   }
 
-  @override
-  void dispose() {
-    pusher.unsubscribe(channelName: 'private-$_chatRoomId');
-    _messageController.dispose();
-    super.dispose();
-  }
-
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final utcNow = DateTime.now().toUtc();
     final message = ChatMessage(
       senderId: _currentUser.uid,
       text: text,
-      timestamp: DateTime.now(),
-      senderImageUrl: _currentUserImageUrl, // Include our own image URL
+      timestamp: utcNow,
+      senderImageUrl: _currentUserImageUrl,
     );
 
     _messageController.clear();
     setState(() {
-      _messages.insert(0, message);
+      final firstItem = _chatItems.isNotEmpty ? _chatItems.first : null;
+      bool isNewDay = true;
+      if (firstItem is MessageItem) {
+        final location = tz.getLocation('Asia/Kolkata');
+        final lastLocalDate = tz.TZDateTime.from(
+          firstItem.message.timestamp,
+          location,
+        );
+        final newLocalDate = tz.TZDateTime.from(message.timestamp, location);
+        isNewDay =
+            newLocalDate.day != lastLocalDate.day ||
+            newLocalDate.month != lastLocalDate.month ||
+            newLocalDate.year != lastLocalDate.year;
+      }
+      if (isNewDay) {
+        _chatItems.insert(0, DateSeparatorItem(message.timestamp));
+      }
+      _chatItems.insert(0, MessageItem(message));
     });
 
     await DatabaseHelper.instance.insertMessage({
@@ -158,7 +268,6 @@ class _ChatScreenState extends State<ChatScreen> {
       'text': message.text,
       'timestamp': message.timestamp.millisecondsSinceEpoch,
     });
-
     await pusher.trigger(
       PusherEvent(
         channelName: 'private-$_chatRoomId',
@@ -203,7 +312,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? const Center(
                       child: CircularProgressIndicator(color: Colors.yellow),
                     )
-                    : _messages.isEmpty
+                    : _chatItems.isEmpty
                     ? Center(
                       child: Text(
                         'Say hello!',
@@ -212,13 +321,36 @@ class _ChatScreenState extends State<ChatScreen> {
                     )
                     : ListView.builder(
                       reverse: true,
-                      padding: const EdgeInsets.all(8.0),
-                      itemCount: _messages.length,
+                      padding: const EdgeInsets.all(12.0),
+                      itemCount: _chatItems.length,
                       itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        final isMe = message.senderId == _currentUser.uid;
-                        // Pass the full message object to the builder
-                        return _buildMessageBubble(message, isMe);
+                        final currentItem = _chatItems[index];
+                        if (currentItem is DateSeparatorItem) {
+                          return _buildDateSeparator(currentItem.date);
+                        }
+                        if (currentItem is MessageItem) {
+                          final message = currentItem.message;
+                          final isMe = message.senderId == _currentUser.uid;
+                          bool showAvatarAndTimestamp = false;
+                          if (index == 0) {
+                            showAvatarAndTimestamp = true;
+                          } else {
+                            final previousItem = _chatItems[index - 1];
+                            if (previousItem is MessageItem) {
+                              showAvatarAndTimestamp =
+                                  message.senderId !=
+                                  previousItem.message.senderId;
+                            } else {
+                              showAvatarAndTimestamp = true;
+                            }
+                          }
+                          return _buildMessageBubble(
+                            message: message,
+                            isMe: isMe,
+                            showAvatarAndTimestamp: showAvatarAndTimestamp,
+                          );
+                        }
+                        return const SizedBox.shrink();
                       },
                     ),
           ),
@@ -228,105 +360,96 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // --- THIS WIDGET IS NOW UPDATED ---
-  Widget _buildMessageBubble(ChatMessage message, bool isMe) {
-    // Format the timestamp
-    final String formattedTime = DateFormat('h:mm a').format(message.timestamp);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // Show avatar for the other person
-          if (!isMe)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: CircleAvatar(
-                radius: 15,
-                backgroundImage:
-                    message.senderImageUrl.isNotEmpty
-                        ? NetworkImage(message.senderImageUrl)
-                        : null,
-                child:
-                    message.senderImageUrl.isEmpty
-                        ? const Icon(Icons.person, size: 15)
-                        : null,
-              ),
-            ),
-
-          Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                // The message bubble
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMe ? Colors.yellow : Colors.grey.shade800,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(20),
-                      topRight: const Radius.circular(20),
-                      bottomLeft:
-                          isMe
-                              ? const Radius.circular(20)
-                              : const Radius.circular(2),
-                      bottomRight:
-                          isMe
-                              ? const Radius.circular(2)
-                              : const Radius.circular(20),
-                    ),
-                  ),
-                  child: Text(
-                    message.text,
-                    style: TextStyle(color: isMe ? Colors.black : Colors.white),
-                  ),
-                ),
-                // The timestamp below the bubble
-                Padding(
-                  padding: const EdgeInsets.only(
-                    top: 4.0,
-                    left: 8.0,
-                    right: 8.0,
-                  ),
-                  child: Text(
-                    formattedTime,
-                    style: const TextStyle(color: Colors.white54, fontSize: 10),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Show avatar for yourself
-          if (isMe)
-            Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: CircleAvatar(
-                radius: 15,
-                backgroundImage:
-                    message.senderImageUrl.isNotEmpty
-                        ? NetworkImage(message.senderImageUrl)
-                        : null,
-                child:
-                    message.senderImageUrl.isEmpty
-                        ? const Icon(Icons.person, size: 15)
-                        : null,
-              ),
-            ),
-        ],
+  Widget _buildDateSeparator(DateTime date) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          _formatDateSeparator(date),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
       ),
     );
   }
 
+  Widget _buildMessageBubble({
+    required ChatMessage message,
+    required bool isMe,
+    required bool showAvatarAndTimestamp,
+  }) {
+    // --- FIX APPLIED HERE ---
+    final location = tz.getLocation('Asia/Kolkata');
+    final istTime = tz.TZDateTime.from(message.timestamp, location);
+    final formattedTime = DateFormat('HH:mm').format(istTime);
+
+    final messageBubble = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isMe ? Colors.yellow : Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        message.text,
+        style: GoogleFonts.poppins(color: isMe ? Colors.black : Colors.white),
+      ),
+    );
+    final timestampText = Text(
+      formattedTime,
+      style: const TextStyle(color: Colors.white54, fontSize: 10),
+    );
+    final avatar = CircleAvatar(
+      radius: 16,
+      backgroundImage:
+          message.senderImageUrl.isNotEmpty
+              ? NetworkImage(message.senderImageUrl)
+              : null,
+      child:
+          message.senderImageUrl.isEmpty
+              ? const Icon(Icons.person, size: 16)
+              : null,
+    );
+    final spacer = const SizedBox(width: 40);
+
+    if (!isMe) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: showAvatarAndTimestamp ? 8.0 : 2.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (showAvatarAndTimestamp) avatar else spacer,
+            const SizedBox(width: 8),
+            Flexible(child: messageBubble),
+            if (showAvatarAndTimestamp) ...[
+              const SizedBox(width: 8),
+              timestampText,
+            ],
+          ],
+        ),
+      );
+    } else {
+      return Padding(
+        padding: EdgeInsets.only(bottom: showAvatarAndTimestamp ? 8.0 : 2.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (showAvatarAndTimestamp) ...[
+              timestampText,
+              const SizedBox(width: 8),
+            ],
+            Flexible(child: messageBubble),
+          ],
+        ),
+      );
+    }
+  }
+
   Widget _buildMessageInputField() {
-    // This widget is unchanged
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       decoration: BoxDecoration(color: Colors.grey.shade900),
