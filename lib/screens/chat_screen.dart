@@ -5,10 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
-import 'package:timezone/timezone.dart' as tz; // <-- 1. IMPORT TIMEZONE
+import 'package:timezone/timezone.dart' as tz;
+import 'package:uuid/uuid.dart'; // Import for generating unique IDs
 import '../helpers/database_helper.dart';
 
-// --- Models and Classes ---
+// --- UPDATED MESSAGE MODEL ---
+class ChatMessage {
+  final String id; // Unique message ID
+  final String senderId;
+  final String text;
+  final DateTime timestamp;
+  final String senderImageUrl;
+  ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.text,
+    required this.timestamp,
+    required this.senderImageUrl,
+  });
+}
+
 abstract class ChatListItem {}
 
 class MessageItem extends ChatListItem {
@@ -19,19 +35,6 @@ class MessageItem extends ChatListItem {
 class DateSeparatorItem extends ChatListItem {
   final DateTime date;
   DateSeparatorItem(this.date);
-}
-
-class ChatMessage {
-  final String senderId;
-  final String text;
-  final DateTime timestamp;
-  final String senderImageUrl;
-  ChatMessage({
-    required this.senderId,
-    required this.text,
-    required this.timestamp,
-    required this.senderImageUrl,
-  });
 }
 
 class ChatScreen extends StatefulWidget {
@@ -55,12 +58,13 @@ class _ChatScreenState extends State<ChatScreen> {
   late final String _chatRoomId;
 
   final PusherChannelsFlutter pusher = PusherChannelsFlutter.getInstance();
-  final String pusherAppKey = "582fafe5cbf4968bec2c"; // Replace with your key
-  final String pusherAppCluster = "mt1"; // Replace with your cluster
+  final String pusherAppKey = "YOUR_PUSHER_KEY";
+  final String pusherAppCluster = "YOUR_PUSHER_CLUSTER";
 
   List<ChatListItem> _chatItems = [];
   bool _isLoadingHistory = true;
   String _currentUserImageUrl = '';
+  var uuid = Uuid();
 
   @override
   void initState() {
@@ -88,14 +92,17 @@ class _ChatScreenState extends State<ChatScreen> {
       _currentUserImageUrl = userDoc.data()?['profilePhotoUrl'] ?? '';
     }
 
-    final historyData = await DatabaseHelper.instance.getMessages(_chatRoomId);
+    final historyData = await DatabaseHelper.instance.getMessages(
+      _chatRoomId,
+      _currentUser.uid,
+    );
     final historyMessages =
         historyData.map((item) {
           final isMe = item['senderId'] == _currentUser.uid;
           return ChatMessage(
+            id: item['messageId'],
             senderId: item['senderId'],
             text: item['text'],
-            // Timestamps from DB are UTC, so we create a UTC DateTime object
             timestamp: DateTime.fromMillisecondsSinceEpoch(
               item['timestamp'],
               isUtc: true,
@@ -104,14 +111,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 isMe ? _currentUserImageUrl : widget.receiverImageUrl,
           );
         }).toList();
-
     if (mounted) {
       setState(() {
         _chatItems = _groupMessages(historyMessages);
         _isLoadingHistory = false;
       });
     }
-
     try {
       await pusher.init(
         apiKey: pusherAppKey,
@@ -136,7 +141,6 @@ class _ChatScreenState extends State<ChatScreen> {
         groupedItems.add(DateSeparatorItem(currentMessage.timestamp));
       } else {
         final nextMessage = messages[i + 1];
-        // Compare dates in the local timezone
         final location = tz.getLocation('Asia/Kolkata');
         final currentLocalTime = tz.TZDateTime.from(
           currentMessage.timestamp,
@@ -157,7 +161,6 @@ class _ChatScreenState extends State<ChatScreen> {
   String _formatDateSeparator(DateTime date) {
     final location = tz.getLocation('Asia/Kolkata');
     final istTime = tz.TZDateTime.from(date, location);
-
     final now = tz.TZDateTime.now(location);
     final today = tz.TZDateTime(location, now.year, now.month, now.day);
     final yesterday = tz.TZDateTime(location, now.year, now.month, now.day - 1);
@@ -167,7 +170,6 @@ class _ChatScreenState extends State<ChatScreen> {
       istTime.month,
       istTime.day,
     );
-
     if (messageDate.isAtSameMomentAs(today)) {
       return 'Today';
     } else if (messageDate.isAtSameMomentAs(yesterday)) {
@@ -182,6 +184,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final data = jsonDecode(event.data);
       if (data['senderId'] != _currentUser.uid) {
         final newMessage = ChatMessage(
+          id: data['messageId'],
           senderId: data['senderId'],
           text: data['text'],
           timestamp: DateTime.fromMillisecondsSinceEpoch(
@@ -190,14 +193,13 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           senderImageUrl: widget.receiverImageUrl,
         );
-
         DatabaseHelper.instance.insertMessage({
+          'messageId': newMessage.id,
           'chatRoomId': _chatRoomId,
           'senderId': newMessage.senderId,
           'text': newMessage.text,
           'timestamp': newMessage.timestamp.millisecondsSinceEpoch,
         });
-
         if (mounted) {
           setState(() {
             final firstItem = _chatItems.isNotEmpty ? _chatItems.first : null;
@@ -231,11 +233,12 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    final utcNow = DateTime.now().toUtc();
+    final messageId = uuid.v4();
     final message = ChatMessage(
+      id: messageId,
       senderId: _currentUser.uid,
       text: text,
-      timestamp: utcNow,
+      timestamp: DateTime.now().toUtc(),
       senderImageUrl: _currentUserImageUrl,
     );
 
@@ -262,6 +265,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await DatabaseHelper.instance.insertMessage({
+      'messageId': message.id,
       'chatRoomId': _chatRoomId,
       'senderId': message.senderId,
       'text': message.text,
@@ -272,11 +276,83 @@ class _ChatScreenState extends State<ChatScreen> {
         channelName: 'private-$_chatRoomId',
         eventName: 'client-new-message',
         data: jsonEncode({
+          'messageId': message.id,
           'senderId': message.senderId,
           'text': message.text,
           'timestamp': message.timestamp.millisecondsSinceEpoch,
         }),
       ),
+    );
+  }
+
+  Future<void> _deleteMessageForMe(String messageId) async {
+    await DatabaseHelper.instance.markMessageAsDeletedFor(
+      messageId,
+      _currentUser.uid,
+    );
+    if (mounted) {
+      setState(() {
+        _chatItems.removeWhere(
+          (item) => item is MessageItem && item.message.id == messageId,
+        );
+      });
+    }
+  }
+
+  void _showDeleteDialog(String messageId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(8.0),
+            child: Wrap(
+              children: <Widget>[
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade900,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                    title: const Text(
+                      'Delete for me',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _deleteMessageForMe(messageId);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: ListTile(
+                    title: const Center(
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -343,10 +419,17 @@ class _ChatScreenState extends State<ChatScreen> {
                               showAvatarAndTimestamp = true;
                             }
                           }
-                          return _buildMessageBubble(
-                            message: message,
-                            isMe: isMe,
-                            showAvatarAndTimestamp: showAvatarAndTimestamp,
+                          return GestureDetector(
+                            onLongPress: () {
+                              if (isMe) {
+                                _showDeleteDialog(message.id);
+                              }
+                            },
+                            child: _buildMessageBubble(
+                              message: message,
+                              isMe: isMe,
+                              showAvatarAndTimestamp: showAvatarAndTimestamp,
+                            ),
                           );
                         }
                         return const SizedBox.shrink();
@@ -381,11 +464,9 @@ class _ChatScreenState extends State<ChatScreen> {
     required bool isMe,
     required bool showAvatarAndTimestamp,
   }) {
-    // --- FIX APPLIED HERE ---
     final location = tz.getLocation('Asia/Kolkata');
     final istTime = tz.TZDateTime.from(message.timestamp, location);
     final formattedTime = DateFormat('HH:mm').format(istTime);
-
     final messageBubble = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(

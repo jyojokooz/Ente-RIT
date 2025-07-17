@@ -16,11 +16,17 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
-  // This function will fetch the last message for each chat room
-  // from the local SQLite database.
+  // Use a Future to hold the state, so we can refresh it.
+  late Future<List<Map<String, dynamic>>> _conversationsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _conversationsFuture = _getConversations();
+  }
+
   Future<List<Map<String, dynamic>>> _getConversations() async {
     final db = await DatabaseHelper.instance.database;
-    // This is a complex SQL query to get the latest message from each chat room.
     final List<Map<String, dynamic>> conversations = await db.rawQuery('''
       SELECT T1.* FROM messages T1
       INNER JOIN (
@@ -31,6 +37,32 @@ class _ChatListScreenState extends State<ChatListScreen> {
       ORDER BY T1.timestamp DESC
     ''');
     return conversations;
+  }
+
+  // --- NEW METHOD TO DELETE A CONVERSATION ---
+  Future<void> _deleteConversation(String chatRoomId) async {
+    // 1. Delete all messages for this chat from the local database
+    final db = await DatabaseHelper.instance.database;
+    await db.delete(
+      'messages',
+      where: 'chatRoomId = ?',
+      whereArgs: [chatRoomId],
+    );
+
+    // 2. Refresh the UI to show the chat has been removed
+    setState(() {
+      _conversationsFuture = _getConversations();
+    });
+
+    // 3. Show a confirmation message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Conversation deleted.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -45,7 +77,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         backgroundColor: Colors.grey.shade900,
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _getConversations(),
+        future: _conversationsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -76,71 +108,90 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
               if (otherUserId.isEmpty) return const SizedBox.shrink();
 
-              // Use another FutureBuilder to get the other user's profile details
-              return FutureBuilder<DocumentSnapshot>(
-                future:
-                    FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(otherUserId)
-                        .get(),
-                builder: (context, userSnapshot) {
-                  if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                    return const ListTile(title: Text("Loading chat..."));
-                  }
-
-                  final otherUserData =
-                      userSnapshot.data!.data() as Map<String, dynamic>;
-                  final timestamp = DateTime.fromMillisecondsSinceEpoch(
-                    chatData['timestamp'],
-                  );
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      radius: 28,
-                      backgroundImage:
-                          otherUserData['profilePhotoUrl'] != null &&
-                                  otherUserData['profilePhotoUrl'].isNotEmpty
-                              ? NetworkImage(otherUserData['profilePhotoUrl'])
-                              : null,
-                      child:
-                          otherUserData['profilePhotoUrl'] == null ||
-                                  otherUserData['profilePhotoUrl'].isEmpty
-                              ? const Icon(Icons.person)
-                              : null,
-                    ),
-                    title: Text(otherUserData['displayName'] ?? 'User'),
-                    subtitle: Text(
-                      chatData['text'] ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Text(
-                      DateFormat('h:mm a').format(timestamp),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => ChatScreen(
-                                receiverId: otherUserId,
-                                receiverName:
-                                    otherUserData['displayName'] ?? 'User',
-                                receiverImageUrl:
-                                    otherUserData['profilePhotoUrl'] ?? '',
-                              ),
-                        ),
-                      ).then((_) {
-                        // When we return from a chat, refresh the list
-                        setState(() {});
-                      });
-                    },
-                  );
+              // --- WRAP THE LISTTILE IN A DISMISSIBLE WIDGET ---
+              return Dismissible(
+                // Each item must have a unique key. The chatRoomId is perfect.
+                key: Key(chatRoomId),
+                // Provide a background that appears when swiping
+                background: Container(
+                  color: Colors.red.shade800,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20.0),
+                  child: const Icon(Icons.delete_forever, color: Colors.white),
+                ),
+                // We only want to swipe from right to left
+                direction: DismissDirection.endToStart,
+                // The function that is called after the swipe animation is complete
+                onDismissed: (direction) {
+                  _deleteConversation(chatRoomId);
                 },
+                child: FutureBuilder<DocumentSnapshot>(
+                  future:
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(otherUserId)
+                          .get(),
+                  builder: (context, userSnapshot) {
+                    if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
+                      return const ListTile(title: Text("Loading chat..."));
+                    }
+
+                    final otherUserData =
+                        userSnapshot.data!.data() as Map<String, dynamic>;
+                    final timestamp = DateTime.fromMillisecondsSinceEpoch(
+                      chatData['timestamp'],
+                    );
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 28,
+                        backgroundImage:
+                            otherUserData['profilePhotoUrl'] != null &&
+                                    otherUserData['profilePhotoUrl'].isNotEmpty
+                                ? NetworkImage(otherUserData['profilePhotoUrl'])
+                                : null,
+                        child:
+                            otherUserData['profilePhotoUrl'] == null ||
+                                    otherUserData['profilePhotoUrl'].isEmpty
+                                ? const Icon(Icons.person)
+                                : null,
+                      ),
+                      title: Text(otherUserData['displayName'] ?? 'User'),
+                      subtitle: Text(
+                        chatData['text'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Text(
+                        DateFormat('h:mm a').format(timestamp),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => ChatScreen(
+                                  receiverId: otherUserId,
+                                  receiverName:
+                                      otherUserData['displayName'] ?? 'User',
+                                  receiverImageUrl:
+                                      otherUserData['profilePhotoUrl'] ?? '',
+                                ),
+                          ),
+                        ).then((_) {
+                          // When we return from a chat, refresh the list to show the latest message
+                          setState(() {
+                            _conversationsFuture = _getConversations();
+                          });
+                        });
+                      },
+                    );
+                  },
+                ),
               );
             },
           );

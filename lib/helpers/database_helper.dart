@@ -9,7 +9,9 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('kampus_konnect.db');
+    _database = await _initDB(
+      'kampus_konnect_v2.db',
+    ); // Use a new DB name to force recreation
     return _database!;
   }
 
@@ -23,27 +25,55 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        messageId TEXT UNIQUE NOT NULL, -- Unique ID for each message
         chatRoomId TEXT NOT NULL,
         senderId TEXT NOT NULL,
         text TEXT NOT NULL,
-        timestamp INTEGER NOT NULL
+        timestamp INTEGER NOT NULL,
+        deletedFor TEXT -- Will store the userId of the person who deleted it
       )
     ''');
   }
 
   Future<void> insertMessage(Map<String, dynamic> message) async {
     final db = await instance.database;
-    await db.insert('messages', message);
+    await db.insert(
+      'messages',
+      message,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  Future<List<Map<String, dynamic>>> getMessages(String chatRoomId) async {
+  Future<void> markMessageAsDeletedFor(String messageId, String userId) async {
+    final db = await instance.database;
+    await db.update(
+      'messages',
+      {'deletedFor': userId},
+      where: 'messageId = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getMessages(
+    String chatRoomId,
+    String currentUserId,
+  ) async {
     final db = await instance.database;
     final result = await db.query(
       'messages',
-      where: 'chatRoomId = ?',
-      whereArgs: [chatRoomId],
+      where: 'chatRoomId = ? AND (deletedFor IS NULL OR deletedFor != ?)',
+      whereArgs: [chatRoomId, currentUserId],
       orderBy: 'timestamp DESC',
     );
     return result;
+  }
+
+  Future<void> deleteConversation(String chatRoomId) async {
+    final db = await instance.database;
+    await db.delete(
+      'messages',
+      where: 'chatRoomId = ?',
+      whereArgs: [chatRoomId],
+    );
   }
 }
