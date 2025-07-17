@@ -55,9 +55,8 @@ class _ChatScreenState extends State<ChatScreen> {
   late final String _chatRoomId;
 
   final PusherChannelsFlutter pusher = PusherChannelsFlutter.getInstance();
-  final String pusherAppKey = "YOUR_PUSHER_KEY"; // Replace with your key
-  final String pusherAppCluster =
-      "YOUR_PUSHER_CLUSTER"; // Replace with your cluster
+  final String pusherAppKey = "582fafe5cbf4968bec2c"; // Replace with your key
+  final String pusherAppCluster = "mt1"; // Replace with your cluster
 
   List<ChatListItem> _chatItems = [];
   bool _isLoadingHistory = true;
