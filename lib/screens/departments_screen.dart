@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'web_view_screen.dart'; // <-- Import the new screen
 
 class DepartmentsScreen extends StatelessWidget {
   const DepartmentsScreen({super.key});
@@ -49,19 +50,34 @@ class DepartmentsScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final dept = departments[index];
               final deptData = dept.data() as Map<String, dynamic>;
+              final String departmentName = deptData['name'] ?? 'No Name';
 
-              // We can use the existing CategoryCard widget for a consistent look
               return CategoryCard(
-                label: deptData['name'] ?? 'No Name',
-                icon:
-                    Icons.school_outlined, // A generic icon for all departments
-                color: Colors.blue.shade400, // A consistent color
+                label: departmentName,
+                icon: Icons.school_outlined,
+                color: Colors.blue.shade400,
                 cardColor: Colors.grey.shade900,
                 textColor: Colors.white70,
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Tapped on ${deptData['name']}')),
-                  );
+                  // --- THIS IS THE NEW LOGIC ---
+                  // Check if the department name is "MCA" (case-insensitive)
+                  if (departmentName.toLowerCase() == 'mca') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => const WebViewScreen(
+                              title: 'MCA Department',
+                              url: 'https://techworldthink.github.io/MCA/',
+                            ),
+                      ),
+                    );
+                  } else {
+                    // For all other departments, just show a message for now
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Tapped on $departmentName')),
+                    );
+                  }
                 },
               );
             },
@@ -72,14 +88,14 @@ class DepartmentsScreen extends StatelessWidget {
   }
 }
 
-// We can move the CategoryCard widget here to be reusable
+// Reusable CategoryCard widget
 class CategoryCard extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
   final Color cardColor;
   final Color textColor;
-  final VoidCallback? onTap; // Make onTap callback optional
+  final VoidCallback? onTap;
 
   const CategoryCard({
     super.key,

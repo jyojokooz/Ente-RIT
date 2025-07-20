@@ -52,6 +52,7 @@ dependencies:
   timezone: ^0.9.3
   pusher_channels_flutter: ^2.2.1
   uuid: ^4.4.0
+  webview_flutter: ^4.7.0
 
 dev_dependencies:
   flutter_test:
