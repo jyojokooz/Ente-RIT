@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'web_view_screen.dart'; // <-- Import the new screen
+import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'web_view_screen.dart';
 
 class DepartmentsScreen extends StatelessWidget {
   const DepartmentsScreen({super.key});
@@ -59,8 +59,6 @@ class DepartmentsScreen extends StatelessWidget {
                 cardColor: Colors.grey.shade900,
                 textColor: Colors.white70,
                 onTap: () {
-                  // --- THIS IS THE NEW LOGIC ---
-                  // Check if the department name is "MCA" (case-insensitive)
                   if (departmentName.toLowerCase() == 'mca') {
                     Navigator.push(
                       context,
@@ -73,7 +71,6 @@ class DepartmentsScreen extends StatelessWidget {
                       ),
                     );
                   } else {
-                    // For all other departments, just show a message for now
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Tapped on $departmentName')),
                     );
@@ -88,7 +85,6 @@ class DepartmentsScreen extends StatelessWidget {
   }
 }
 
-// Reusable CategoryCard widget
 class CategoryCard extends StatefulWidget {
   final String label;
   final IconData icon;

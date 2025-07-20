@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'departments_screen.dart'; // <-- Import the new screen and the reusable CategoryCard
+import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'departments_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -12,13 +12,12 @@ class ClassifyScreen extends StatelessWidget {
     final Color cardColor = Colors.grey.shade900;
     const Color secondaryTextColor = Colors.white70;
 
-    // We add a special "Departments" card to the top of our static list
     final List<Map<String, dynamic>> categories = [
       {
         'label': 'Departments',
         'icon': Icons.school,
         'color': Colors.blue.shade600,
-        'isDepartment': true, // A flag to identify this special card
+        'isDepartment': true,
       },
       {
         'label': 'Transport',
@@ -45,12 +44,6 @@ class ClassifyScreen extends StatelessWidget {
         'icon': Icons.local_grocery_store,
         'color': Colors.green.shade600,
       },
-      {
-        'label': 'Food',
-        'icon': Icons.restaurant,
-        'color': Colors.deepOrange.shade400,
-      },
-      {'label': 'Health', 'icon': Icons.healing, 'color': Colors.teal.shade400},
     ];
 
     return Scaffold(
@@ -127,7 +120,6 @@ class ClassifyScreen extends StatelessWidget {
                           cardColor: cardColor,
                           textColor: secondaryTextColor,
                           onTap: () {
-                            // Use our flag to decide where to navigate
                             if (category['isDepartment'] == true) {
                               Navigator.push(
                                 context,
@@ -137,7 +129,6 @@ class ClassifyScreen extends StatelessWidget {
                                 ),
                               );
                             } else {
-                              // Handle other card taps if you need to
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -179,7 +170,5 @@ class HeaderClipper extends CustomClipper<Path> {
   }
 
   @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) {
-    return false;
-  }
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
