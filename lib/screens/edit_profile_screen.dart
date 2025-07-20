@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // It's good practice to import what you use
+import 'package:google_fonts/google_fonts.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -21,14 +21,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = true;
   String _initialUsername = '';
 
+  List<String> _departmentOptions = [];
+  String? _selectedDepartment;
+
   @override
   void initState() {
     super.initState();
-    _loadProfileForEditing();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await _fetchDepartments();
+    await _loadProfileForEditing();
+  }
+
+  Future<void> _fetchDepartments() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('departments')
+              .orderBy('name')
+              .get();
+      final departments =
+          snapshot.docs.map((doc) => doc.data()['name'] as String).toList();
+      if (mounted) {
+        setState(() {
+          _departmentOptions = departments;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Could not load departments: $e")),
+        );
+      }
+    }
   }
 
   Future<void> _loadProfileForEditing() async {
-    setState(() => _isLoading = true);
     try {
       final docSnapshot =
           await FirebaseFirestore.instance
@@ -43,16 +73,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _initialUsername = data['username'] ?? '';
           _bioController.text = data['bio'] ?? '';
           _linksController.text = data['links'] ?? '';
-        } else {
-          _nameController.text = user.displayName ?? '';
-          _usernameController.text = user.email?.split('@').first ?? '';
+
+          // Ensure the user's current department is a valid option
+          final currentDept = data['department'];
+          if (currentDept != null && _departmentOptions.contains(currentDept)) {
+            _selectedDepartment = currentDept;
+          }
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
+        ).showSnackBar(SnackBar(content: Text("Could not load profile: $e")));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -68,35 +101,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // --- THIS IS THE CORRECTED SAVE FUNCTION ---
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // --- FIX APPLIED HERE ---
-    // Capture context-dependent objects BEFORE the first await.
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-
     final newUsername = _usernameController.text.trim();
     final newDisplayName = _nameController.text.trim();
 
-    // Check if the username has been changed
     if (newUsername.toLowerCase() != _initialUsername.toLowerCase()) {
       final usersRef = FirebaseFirestore.instance.collection('users');
       final querySnapshot =
           await usersRef
               .where('searchableUsername', isEqualTo: newUsername.toLowerCase())
               .get();
-
       if (querySnapshot.docs.isNotEmpty) {
-        // Username is taken. Use the captured scaffoldMessenger.
         scaffoldMessenger.showSnackBar(
           const SnackBar(
-            content: Text(
-              'This username is already taken. Please choose another.',
-            ),
+            content: Text('This username is already taken.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -104,7 +128,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     }
 
-    // Show saving message
     scaffoldMessenger.showSnackBar(
       const SnackBar(content: Text('Saving profile...')),
     );
@@ -122,13 +145,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'searchableUsername': newUsername.toLowerCase(),
         'bio': _bioController.text.trim(),
         'links': _linksController.text.trim(),
+        'department': _selectedDepartment,
         'email': user.email,
       };
       await userDocRef.set(userData, SetOptions(merge: true));
 
-      if (!mounted) return;
-
-      // Use captured objects. This is now safe.
       scaffoldMessenger.hideCurrentSnackBar();
       scaffoldMessenger.showSnackBar(
         const SnackBar(
@@ -138,7 +159,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
       navigator.pop(true);
     } catch (e) {
-      if (!mounted) return;
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Failed to save profile: ${e.toString()}')),
       );
@@ -188,6 +208,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _selectedDepartment,
+                      decoration: const InputDecoration(
+                        labelText: 'Department',
+                      ),
+                      items:
+                          _departmentOptions.map((String department) {
+                            return DropdownMenuItem<String>(
+                              value: department,
+                              child: Text(department),
+                            );
+                          }).toList(),
+                      onChanged: (newValue) {
+                        setState(() {
+                          _selectedDepartment = newValue;
+                        });
+                      },
+                      validator:
+                          (value) =>
+                              value == null
+                                  ? 'Please select a department'
+                                  : null,
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _bioController,
                       decoration: const InputDecoration(labelText: 'Bio'),
@@ -200,7 +244,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 24),
                     TextFormField(
-                      initialValue: user.email ?? 'No email found',
+                      initialValue: user.email,
                       readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Email',

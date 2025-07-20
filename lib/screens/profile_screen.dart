@@ -38,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
+  String _department = '';
   String? _profilePhotoUrl;
   String? _coverPhotoUrl;
   List<DocumentSnapshot> _userPosts = [];
@@ -98,6 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _displayName = data['displayName'] ?? 'User';
           _username = data['username'] ?? 'username';
           _bio = data['bio'] ?? '';
+          _department = data['department'] ?? '';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
@@ -450,6 +452,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           '@$_username',
           style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
         ),
+        if (_department.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.school_outlined, size: 16, color: Colors.white70),
+                const SizedBox(width: 4),
+                Text(
+                  _department,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 12),
         Text(
           _bio.isEmpty ? 'This user has no bio yet.' : _bio,

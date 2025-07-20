@@ -1,6 +1,6 @@
-// --- FIX: REMOVED UNNECESSARY 'dart:ui' IMPORT ---
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'departments_screen.dart'; // <-- Import the new screen and the reusable CategoryCard
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -10,11 +10,16 @@ class ClassifyScreen extends StatelessWidget {
     const Color bgColor = Colors.black;
     const Color headerColor = Colors.yellow;
     final Color cardColor = Colors.grey.shade900;
-    // --- FIX: REMOVED UNUSED 'primaryTextColor' VARIABLE ---
     const Color secondaryTextColor = Colors.white70;
 
+    // We add a special "Departments" card to the top of our static list
     final List<Map<String, dynamic>> categories = [
-      {'label': 'General', 'icon': Icons.apps, 'color': Colors.blue.shade600},
+      {
+        'label': 'Departments',
+        'icon': Icons.school,
+        'color': Colors.blue.shade600,
+        'isDepartment': true, // A flag to identify this special card
+      },
       {
         'label': 'Transport',
         'icon': Icons.directions_bus,
@@ -46,22 +51,6 @@ class ClassifyScreen extends StatelessWidget {
         'color': Colors.deepOrange.shade400,
       },
       {'label': 'Health', 'icon': Icons.healing, 'color': Colors.teal.shade400},
-      {'label': 'Home', 'icon': Icons.home, 'color': Colors.brown.shade400},
-      {
-        'label': 'Education',
-        'icon': Icons.school,
-        'color': Colors.indigo.shade400,
-      },
-      {
-        'label': 'Gifts',
-        'icon': Icons.card_giftcard,
-        'color': Colors.cyan.shade400,
-      },
-      {
-        'label': 'Other',
-        'icon': Icons.more_horiz,
-        'color': Colors.grey.shade500,
-      },
     ];
 
     return Scaffold(
@@ -102,7 +91,7 @@ class ClassifyScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'Classify transaction',
+                    'Classify',
                     style: GoogleFonts.poppins(
                       color: Colors.black,
                       fontSize: 28,
@@ -111,7 +100,7 @@ class ClassifyScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Classify this transaction into a\nparticular category',
+                    'Explore campus resources\nand categories',
                     style: GoogleFonts.poppins(
                       color: Colors.black.withAlpha((255 * 0.8).toInt()),
                       fontSize: 16,
@@ -137,6 +126,28 @@ class ClassifyScreen extends StatelessWidget {
                           color: category['color'],
                           cardColor: cardColor,
                           textColor: secondaryTextColor,
+                          onTap: () {
+                            // Use our flag to decide where to navigate
+                            if (category['isDepartment'] == true) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => const DepartmentsScreen(),
+                                ),
+                              );
+                            } else {
+                              // Handle other card taps if you need to
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Tapped on ${category['label']}',
+                                  ),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            }
+                          },
                         );
                       },
                     ),
@@ -146,95 +157,6 @@ class ClassifyScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class CategoryCard extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final Color cardColor;
-  final Color textColor;
-
-  const CategoryCard({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.cardColor,
-    required this.textColor,
-  });
-
-  @override
-  State<CategoryCard> createState() => _CategoryCardState();
-}
-
-class _CategoryCardState extends State<CategoryCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.9,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onTapDown(TapDownDetails details) {
-    _controller.forward();
-  }
-
-  void _onTapUp(TapUpDetails details) {
-    _controller.reverse();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _onTapDown,
-      onTapUp: _onTapUp,
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          decoration: BoxDecoration(
-            color: widget.cardColor,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: widget.color.withAlpha(50),
-                child: Icon(widget.icon, size: 28, color: widget.color),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                widget.label,
-                style: GoogleFonts.poppins(
-                  color: widget.textColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

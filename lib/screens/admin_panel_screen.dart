@@ -19,7 +19,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             backgroundColor: Colors.grey.shade800,
             title: const Text('Delete Post?'),
             content: const Text(
-              'Are you sure you want to delete this post and all its comments? This action cannot be undone.',
+              'Are you sure you want to delete this post and all its comments?',
             ),
             actions: [
               TextButton(
@@ -38,16 +38,96 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (didRequestDelete == true) {
-      // For admins, we won't delete from Cloudinary to keep it simple,
-      // but in a production app you'd use a Cloud Function for this.
       await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+    }
+  }
+
+  Future<void> _showAddDepartmentDialog() async {
+    final departmentController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey.shade800,
+          title: const Text('Add New Department'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: departmentController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'e.g., Computer Science',
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a department name.';
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              child: const Text('Add'),
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  FirebaseFirestore.instance.collection('departments').add({
+                    'name': departmentController.text.trim(),
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteDepartment(String docId) async {
+    final bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: Colors.grey.shade800,
+            title: const Text('Delete Department?'),
+            content: const Text(
+              'Are you sure? This will not remove the department from existing user profiles.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+    if (confirmDelete == true) {
+      await FirebaseFirestore.instance
+          .collection('departments')
+          .doc(docId)
+          .delete();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -59,12 +139,65 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           bottom: const TabBar(
             indicatorColor: Colors.yellow,
             tabs: [
-              Tab(icon: Icon(Icons.article_outlined), text: 'Manage Posts'),
-              Tab(icon: Icon(Icons.people_alt_outlined), text: 'Manage Users'),
+              Tab(icon: Icon(Icons.article_outlined), text: 'Posts'),
+              Tab(icon: Icon(Icons.people_alt_outlined), text: 'Users'),
+              Tab(icon: Icon(Icons.school_outlined), text: 'Departments'),
             ],
           ),
         ),
-        body: TabBarView(children: [_buildPostsView(), _buildUsersView()]),
+        body: TabBarView(
+          children: [
+            _buildPostsView(),
+            _buildUsersView(),
+            _buildDepartmentsView(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDepartmentsView() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddDepartmentDialog,
+        backgroundColor: Colors.yellow,
+        child: const Icon(Icons.add, color: Colors.black),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('departments')
+                .orderBy('name')
+                .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.yellow),
+            );
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No departments found. Add one!'));
+          }
+          final departments = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: departments.length,
+            itemBuilder: (context, index) {
+              final dept = departments[index];
+              final deptData = dept.data() as Map<String, dynamic>;
+              return ListTile(
+                title: Text(deptData['name'] ?? 'Unnamed Department'),
+                trailing: IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
+                  onPressed: () => _deleteDepartment(dept.id),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
