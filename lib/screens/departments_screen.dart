@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'package:google_fonts/google_fonts.dart';
 import 'web_view_screen.dart';
 
 class DepartmentsScreen extends StatelessWidget {
@@ -59,18 +59,21 @@ class DepartmentsScreen extends StatelessWidget {
                 cardColor: Colors.grey.shade900,
                 textColor: Colors.white70,
                 onTap: () {
+                  // Check if the department name is "MCA" (case-insensitive)
                   if (departmentName.toLowerCase() == 'mca') {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder:
                             (context) => const WebViewScreen(
-                              title: 'MCA Department',
-                              url: 'https://techworldthink.github.io/MCA/',
+                              title: 'MCA Study Materials', // Updated title
+                              // --- FIX APPLIED HERE: UPDATED THE URL ---
+                              url: 'https://mca-study-materials.vercel.app/',
                             ),
                       ),
                     );
                   } else {
+                    // For all other departments, just show a message for now
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Tapped on $departmentName')),
                     );
@@ -85,6 +88,7 @@ class DepartmentsScreen extends StatelessWidget {
   }
 }
 
+// Reusable CategoryCard widget
 class CategoryCard extends StatefulWidget {
   final String label;
   final IconData icon;
