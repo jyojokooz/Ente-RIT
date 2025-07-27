@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import '../widgets/reusable_bottom_app_bar.dart';
 import 'admin_panel_screen.dart';
 import 'connections_screen.dart';
 import 'edit_profile_screen.dart';
 import 'post_detail_screen.dart';
 import 'requests_screen.dart';
 import 'chat_screen.dart';
+import 'create_post_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -29,11 +31,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String targetUserId;
   late final bool isCurrentUser;
-
   final ImagePicker _picker = ImagePicker();
   File? _profileImageFile;
   File? _coverImageFile;
-
   bool _isLoading = true;
   String _displayName = 'User';
   String _username = 'username';
@@ -63,7 +63,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadAllData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-
     try {
       final targetUserDocFuture =
           FirebaseFirestore.instance
@@ -83,6 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   .collection('users')
                   .doc(_currentUser.uid)
                   .get();
+
       final results = await Future.wait([
         targetUserDocFuture,
         postsQueryFuture,
@@ -93,6 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
       final currentUserSnapshot =
           results[2] as DocumentSnapshot<Map<String, dynamic>>;
+
       if (mounted) {
         if (targetUserSnapshot.exists) {
           final data = targetUserSnapshot.data()!;
@@ -310,102 +311,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color primaryAccentColor = Colors.yellow;
+    final Color cardBackgroundColor = Colors.grey.shade900;
+    const Color buttonTextColor = Colors.black;
+
     return Scaffold(
       backgroundColor: Colors.black,
+      floatingActionButton:
+          isCurrentUser
+              ? FloatingActionButton(
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreatePostScreen(),
+                      ),
+                    ),
+                backgroundColor: primaryAccentColor,
+                elevation: 4.0,
+                child: const Icon(Icons.add, color: buttonTextColor, size: 30),
+              )
+              : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar:
+          isCurrentUser
+              ? const ReusableBottomAppBar(activeScreen: ActiveScreen.profile)
+              : null,
       body:
           _isLoading
               ? const Center(
                 child: CircularProgressIndicator(color: Colors.yellow),
               )
-              : Stack(
-                children: [
-                  RefreshIndicator(
-                    onRefresh: _loadAllData,
-                    color: Colors.yellow,
-                    backgroundColor: Colors.grey.shade900,
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(child: _buildHeaderAndProfile()),
-                        _buildPhotoGallery(),
-                      ],
-                    ),
-                  ),
-                  _buildTopActionButtons(),
-                ],
-              ),
-    );
-  }
-
-  Widget _buildTopActionButtons() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.black.withAlpha(128),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-            if (isCurrentUser)
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: Colors.black.withAlpha(128),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.group_add_outlined,
-                        color: Colors.white,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RequestsScreen(),
+              : RefreshIndicator(
+                onRefresh: _loadAllData,
+                color: Colors.yellow,
+                backgroundColor: cardBackgroundColor,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      expandedHeight: 240,
+                      pinned: true,
+                      leading: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black.withAlpha(128),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: Colors.white,
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                      actions:
+                          isCurrentUser
+                              ? [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.black.withAlpha(
+                                      128,
+                                    ),
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.group_add_outlined,
+                                        color: Colors.white,
+                                      ),
+                                      onPressed:
+                                          () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder:
+                                                  (context) =>
+                                                      const RequestsScreen(),
+                                            ),
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: 8,
+                                    bottom: 8,
+                                    right: 8,
+                                  ),
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.black.withAlpha(
+                                      128,
+                                    ),
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.logout,
+                                        color: Colors.white,
+                                      ),
+                                      onPressed: _logout,
+                                    ),
+                                  ),
+                                ),
+                              ]
+                              : null,
+                      flexibleSpace: FlexibleSpaceBar(
+                        background: GestureDetector(
+                          onTap: _pickCoverImage,
+                          child: _buildHeaderImage(),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: Colors.black.withAlpha(128),
-                    child: IconButton(
-                      icon: const Icon(Icons.logout, color: Colors.white),
-                      onPressed: _logout,
+                    SliverToBoxAdapter(
+                      child: _buildProfileHeaderAndInfo(cardBackgroundColor),
                     ),
-                  ),
-                ],
+                    _buildPhotoGallery(),
+                  ],
+                ),
               ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildHeaderAndProfile() {
+  Widget _buildProfileHeaderAndInfo(Color cardColor) {
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        GestureDetector(onTap: _pickCoverImage, child: _buildHeaderImage()),
         Container(
-          margin: const EdgeInsets.only(top: 150),
+          margin: const EdgeInsets.only(top: 60),
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
+            padding: const EdgeInsets.only(
+              top: 70,
+              left: 20,
+              right: 20,
+              bottom: 20,
+            ),
             decoration: BoxDecoration(
-              color: Colors.grey.shade900,
+              color: cardColor,
               borderRadius: BorderRadius.circular(30),
             ),
             child: _buildProfileInfo(),
           ),
         ),
         Positioned(
-          top: 100,
+          top: 0,
           child: GestureDetector(
             onTap: _pickProfileImage,
             child: _buildProfilePicture(),

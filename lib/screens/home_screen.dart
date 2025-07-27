@@ -3,13 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../widgets/reusable_bottom_app_bar.dart'; // Reusable widget handles navigation
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
-import 'classify_screen.dart';
+import 'chat_list_screen.dart';
 import 'post_card.dart';
-import 'chat_list_screen.dart'; // Ensure this import is present
+// import 'classify_screen.dart'; // <-- FIX #1: REMOVED UNUSED IMPORT
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -102,16 +103,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color screenBackgroundColor = Colors.black;
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
-    // --- FIX APPLIED HERE: Using PopScope with the latest callback ---
+    // --- FIX #2: USING POPSCOPE WITH THE LATEST CALLBACK ---
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
-        // This is the new, correct callback. We ignore the 'result' parameter.
         if (didPop) return;
 
         final now = DateTime.now();
@@ -132,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: screenBackgroundColor,
+        backgroundColor: Colors.black,
         floatingActionButton: FloatingActionButton(
           onPressed:
               () => Navigator.push(
@@ -146,9 +145,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: const Icon(Icons.add, color: buttonTextColor, size: 30),
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-        bottomNavigationBar: _buildBottomAppBar(
-          cardBackgroundColor,
-          Colors.white70,
+        bottomNavigationBar: const ReusableBottomAppBar(
+          activeScreen: ActiveScreen.home,
         ),
         body: SafeArea(
           child: CustomScrollView(
@@ -270,51 +268,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  BottomAppBar _buildBottomAppBar(Color bgColor, Color iconColor) {
-    return BottomAppBar(
-      shape: const CircularNotchedRectangle(),
-      notchMargin: 10.0,
-      color: bgColor,
-      child: SizedBox(
-        height: 60,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: <Widget>[
-            IconButton(
-              icon: Icon(Icons.home, color: iconColor),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: Icon(Icons.category_outlined, color: iconColor),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ClassifyScreen(),
-                    ),
-                  ),
-            ),
-            const SizedBox(width: 40),
-            IconButton(
-              icon: Icon(Icons.person_outline, color: iconColor),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ProfileScreen(),
-                    ),
-                  ),
-            ),
-            IconButton(
-              icon: Icon(Icons.notifications_none, color: iconColor),
-              onPressed: () {},
-            ),
-          ],
-        ),
       ),
     );
   }
