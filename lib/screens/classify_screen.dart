@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../widgets/reusable_bottom_app_bar.dart'; // Import the new reusable widget
+import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import '../widgets/reusable_bottom_app_bar.dart';
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
+import 'id_card_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -15,7 +16,6 @@ class ClassifyScreen extends StatelessWidget {
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
-    // The list of categories for the grid
     final List<Map<String, dynamic>> categories = [
       {
         'label': 'Departments',
@@ -46,6 +46,16 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'label': 'Digital ID',
+        'icon': Icons.badge_outlined,
+        'color': Colors.green.shade500,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const IdCardScreen()),
+            ),
+      },
+      {
         'label': 'Transport',
         'icon': Icons.directions_bus,
         'color': Colors.purple.shade500,
@@ -64,15 +74,6 @@ class ClassifyScreen extends StatelessWidget {
             ).showSnackBar(const SnackBar(content: Text('Tapped on Shopping'))),
       },
       {
-        'label': 'Bills',
-        'icon': Icons.receipt,
-        'color': Colors.orange.shade600,
-        'action':
-            () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Tapped on Bills'))),
-      },
-      {
         'label': 'Entertainment',
         'icon': Icons.movie,
         'color': Colors.red.shade500,
@@ -85,7 +86,6 @@ class ClassifyScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      // --- ADDED THE FLOATINGACTIONBUTTON AND BOTTOMAPPBAR ---
       floatingActionButton: FloatingActionButton(
         onPressed:
             () => Navigator.push(
@@ -100,15 +100,12 @@ class ClassifyScreen extends StatelessWidget {
       bottomNavigationBar: const ReusableBottomAppBar(
         activeScreen: ActiveScreen.classify,
       ),
-
-      // The body is now a simpler layout without the custom header
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Main screen title
               Text(
                 'Classify',
                 style: GoogleFonts.poppins(
@@ -118,13 +115,11 @@ class ClassifyScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              // Subtitle
               Text(
                 'Explore campus resources and categories',
                 style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
               ),
               const SizedBox(height: 20),
-              // Grid view to show the categories
               Expanded(
                 child: GridView.builder(
                   padding: const EdgeInsets.only(top: 10),
@@ -155,6 +150,3 @@ class ClassifyScreen extends StatelessWidget {
     );
   }
 }
-
-// The CategoryCard widget is now imported from departments_screen.dart,
-// so it is no longer needed here. We assume it's in the other file.

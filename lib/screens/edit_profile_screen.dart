@@ -1,3 +1,4 @@
+import 'dart:math'; // <-- 1. IMPORT FOR RANDOM NUMBER GENERATION
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -73,12 +74,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _initialUsername = data['username'] ?? '';
           _bioController.text = data['bio'] ?? '';
           _linksController.text = data['links'] ?? '';
-
-          // Ensure the user's current department is a valid option
           final currentDept = data['department'];
           if (currentDept != null && _departmentOptions.contains(currentDept)) {
             _selectedDepartment = currentDept;
           }
+        } else {
+          _usernameController.text = user.email?.split('@').first ?? '';
         }
       }
     } catch (e) {
@@ -101,6 +102,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  // --- THIS IS THE UPDATED SAVE FUNCTION ---
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -136,9 +138,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
+
+      // --- 2. LOGIC TO GENERATE STUDENT ID ---
+      final userDoc = await userDocRef.get();
+      String? studentId;
+      if (userDoc.exists &&
+          (userDoc.data() as Map<String, dynamic>).containsKey('studentId')) {
+        // If ID already exists, keep the existing one.
+        studentId = userDoc.data()!['studentId'];
+      } else {
+        // If no ID exists, generate a new 9-digit random one.
+        studentId = (Random().nextInt(900000000) + 100000000).toString();
+      }
+
       await user.updateDisplayName(newDisplayName);
 
       final userData = {
+        'studentId': studentId, // <-- 3. SAVE THE STUDENT ID
         'displayName': newDisplayName,
         'username': newUsername,
         'searchableDisplayName': newDisplayName.toLowerCase(),
