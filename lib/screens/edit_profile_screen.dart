@@ -1,4 +1,4 @@
-import 'dart:math'; // <-- 1. IMPORT FOR RANDOM NUMBER GENERATION
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
-
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
@@ -78,8 +77,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           if (currentDept != null && _departmentOptions.contains(currentDept)) {
             _selectedDepartment = currentDept;
           }
-        } else {
-          _usernameController.text = user.email?.split('@').first ?? '';
         }
       }
     } catch (e) {
@@ -102,7 +99,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // --- THIS IS THE UPDATED SAVE FUNCTION ---
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -139,22 +135,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .collection('users')
           .doc(user.uid);
 
-      // --- 2. LOGIC TO GENERATE STUDENT ID ---
       final userDoc = await userDocRef.get();
       String? studentId;
+      FieldValue joinedAt;
+
       if (userDoc.exists &&
           (userDoc.data() as Map<String, dynamic>).containsKey('studentId')) {
-        // If ID already exists, keep the existing one.
         studentId = userDoc.data()!['studentId'];
+        joinedAt = userDoc.data()!['joinedAt'] ?? FieldValue.serverTimestamp();
       } else {
-        // If no ID exists, generate a new 9-digit random one.
         studentId = (Random().nextInt(900000000) + 100000000).toString();
+        joinedAt = FieldValue.serverTimestamp();
       }
 
       await user.updateDisplayName(newDisplayName);
 
       final userData = {
-        'studentId': studentId, // <-- 3. SAVE THE STUDENT ID
+        'studentId': studentId,
+        'joinedAt': joinedAt,
         'displayName': newDisplayName,
         'username': newUsername,
         'searchableDisplayName': newDisplayName.toLowerCase(),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'package:google_fonts/google_fonts.dart';
 import '../widgets/reusable_bottom_app_bar.dart';
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
