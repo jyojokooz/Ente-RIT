@@ -6,6 +6,8 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+
+    kotlin("android")
 }
 
 android {
@@ -33,15 +35,36 @@ android {
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+android {
+        buildTypes {
+            getByName("release") {
+                isMinifyEnabled = true
+
+                // ✅ Correct way in Kotlin DSL
+                // Use 'buildConfigField' for boolean properties
+                // shrinkResources = true → SET via property below
+                // If using AGP 8.0+, the new syntax is:
+                // enable resource shrinking with:
+                // isShrinkResources = true
+                isShrinkResources = true
+
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    file("proguard-rules.pro")
+                )
+            }
         }
     }
+
+
+
+
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 }
