@@ -57,6 +57,7 @@ dependencies:
   qr_flutter: ^4.1.0
   flip_card: ^0.7.0
   barcode_widget: ^2.0.4
+  http: ^1.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

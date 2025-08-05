@@ -5,6 +5,7 @@ import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
 import 'id_card_screen.dart';
+import 'ai_chat_screen.dart'; // <-- Import the new AI chat screen
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -55,10 +56,23 @@ class ClassifyScreen extends StatelessWidget {
               MaterialPageRoute(builder: (context) => const IdCardScreen()),
             ),
       },
+
+      // --- ADD THE NEW AI CHAT CARD ---
+      {
+        'label': 'Connect AI',
+        'icon': Icons.auto_awesome,
+        'color': Colors.purple.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AIChatScreen()),
+            ),
+      },
+
       {
         'label': 'Transport',
         'icon': Icons.directions_bus,
-        'color': Colors.purple.shade500,
+        'color': Colors.orange.shade600,
         'action':
             () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Tapped on Transport')),
@@ -72,15 +86,6 @@ class ClassifyScreen extends StatelessWidget {
             () => ScaffoldMessenger.of(
               context,
             ).showSnackBar(const SnackBar(content: Text('Tapped on Shopping'))),
-      },
-      {
-        'label': 'Entertainment',
-        'icon': Icons.movie,
-        'color': Colors.red.shade500,
-        'action':
-            () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tapped on Entertainment')),
-            ),
       },
     ];
 
