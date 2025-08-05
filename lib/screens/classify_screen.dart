@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_bottom_app_bar.dart';
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
 import 'id_card_screen.dart';
-import 'ai_chat_screen.dart'; // <-- Import the new AI chat screen
+import 'ai_chat_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
+
+  // Helper function to launch URLs in an external browser
+  Future<void> _launchURLInBrowser(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    if (!await canLaunchUrl(uri)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
+      }
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,8 +71,6 @@ class ClassifyScreen extends StatelessWidget {
               MaterialPageRoute(builder: (context) => const IdCardScreen()),
             ),
       },
-
-      // --- ADD THE NEW AI CHAT CARD ---
       {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
@@ -68,24 +81,20 @@ class ClassifyScreen extends StatelessWidget {
               MaterialPageRoute(builder: (context) => const AIChatScreen()),
             ),
       },
-
+      {
+        'label': 'No-Note',
+        'icon': Icons.note_alt_outlined,
+        'color': Colors.orange.shade600,
+        'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
+      },
       {
         'label': 'Transport',
         'icon': Icons.directions_bus,
-        'color': Colors.orange.shade600,
+        'color': Colors.deepOrange.shade400,
         'action':
             () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Tapped on Transport')),
             ),
-      },
-      {
-        'label': 'Shopping',
-        'icon': Icons.shopping_bag,
-        'color': Colors.pink.shade400,
-        'action':
-            () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Tapped on Shopping'))),
       },
     ];
 
