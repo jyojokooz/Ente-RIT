@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import for reading .env file
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 
+// A simple model for our chat messages
 class AiChatMessage {
   final String text;
   final bool isUserMessage;
@@ -21,7 +23,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
   final List<AiChatMessage> _messages = [];
   bool _isTyping = false;
 
-  static const _apiKey = String.fromEnvironment('OPENROUTER_API_KEY');
+  // Read the API key securely from the loaded environment variables
+  final String _apiKey = dotenv.env['OPENROUTER_API_KEY'] ?? '';
 
   @override
   void dispose() {
@@ -33,14 +36,14 @@ class _AIChatScreenState extends State<AIChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    // final scaffoldMessenger = ScaffoldMessenger.of(context); // <-- FIX: REMOVED THIS LINE
-
+    // Add user message to the UI immediately (optimistic update)
     _messageController.clear();
     setState(() {
       _messages.insert(0, AiChatMessage(text: text, isUserMessage: true));
-      _isTyping = true;
+      _isTyping = true; // Show the AI typing indicator
     });
 
+    // Prepare the conversation history for the API call
     final conversationHistory =
         _messages.reversed.map((msg) {
           return {
@@ -55,11 +58,14 @@ class _AIChatScreenState extends State<AIChatScreen> {
         headers: {
           "Authorization": "Bearer $_apiKey",
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://yourapp.com",
-          "X-Title": "Kampus Konnect",
+          // OpenRouter requires these headers for unauthenticated (client-side) requests
+          "HTTP-Referer":
+              "https://yourapp.com", // Replace with your app's domain if you have one
+          "X-Title": "Kampus Konnect", // Your app's name
         },
         body: jsonEncode({
-          "model": "mistralai/mistral-7b-instruct:free",
+          "model":
+              "mistralai/mistral-7b-instruct:free", // Using a high-quality free model
           "messages": conversationHistory,
         }),
       );
@@ -78,6 +84,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
           );
         });
       } else {
+        // Handle API errors (e.g., bad request, invalid key)
         final error = jsonDecode(response.body)['error']['message'];
         setState(() {
           _isTyping = false;
@@ -88,6 +95,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
         });
       }
     } catch (e) {
+      // Handle network errors (e.g., no internet connection)
       if (mounted) {
         setState(() {
           _isTyping = false;
@@ -105,9 +113,11 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Crucial check to ensure the API key was loaded from the .env file
     if (_apiKey.isEmpty) {
       return _buildErrorScaffold("OpenRouter API Key is not set!");
     }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -136,6 +146,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     );
   }
 
+  // Helper widget to show a clear error message if the API key is missing
   Scaffold _buildErrorScaffold(String error) {
     return Scaffold(
       backgroundColor: Colors.black,
@@ -147,7 +158,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: Text(
-            "FATAL ERROR:\n$error\n\nMake sure you run the app with the --dart-define flag:\nflutter run --dart-define=OPENROUTER_API_KEY=YOUR_KEY",
+            "FATAL ERROR:\n$error\n\nMake sure you have a .env file in your project root with your OPENROUTER_API_KEY set.",
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(color: Colors.red, fontSize: 16),
           ),
@@ -156,6 +167,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     );
   }
 
+  // Widget for a single chat bubble
   Widget _buildMessageBubble(String text, bool isMe) {
     return Row(
       mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -181,6 +193,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     );
   }
 
+  // Widget for the text input field at the bottom
   Widget _buildMessageInputField() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),

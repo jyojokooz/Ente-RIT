@@ -1,7 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // <-- 1. IMPORT DOTENV
 import 'package:google_fonts/google_fonts.dart';
-import 'package:timezone/data/latest.dart' as tz; // <-- 1. IMPORT TIMEZONE DATA
+import 'package:timezone/data/latest.dart' as tz;
 
 import 'package:my_project/auth/auth_gate.dart';
 import 'package:my_project/screens/welcome_screen.dart';
@@ -13,17 +14,23 @@ import 'package:my_project/screens/profile_screen.dart';
 import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/screens/classify_screen.dart';
 import 'package:my_project/screens/search_screen.dart';
-// Add any other necessary screen imports here
 import 'package:my_project/screens/chat_list_screen.dart';
 import 'package:my_project/screens/requests_screen.dart';
 
 import 'firebase_options.dart';
 
-void main() async {
+Future<void> main() async {
+  // <-- Ensure `main` is async
   WidgetsFlutterBinding.ensureInitialized();
+
+  // --- 2. LOAD THE .ENV FILE ---
+  // This must be done before Firebase and other initializations
+  await dotenv.load(fileName: ".env");
+
+  // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // --- 2. INITIALIZE TIME ZONE DATABASE BEFORE RUNNING THE APP ---
+  // Initialize Time Zone Database
   tz.initializeTimeZones();
 
   runApp(const MyApp());
