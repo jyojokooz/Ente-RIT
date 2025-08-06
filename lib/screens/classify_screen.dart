@@ -8,6 +8,7 @@ import 'create_post_screen.dart';
 import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
 import 'code_playground_screen.dart';
+import 'dev_community_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -95,10 +96,31 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'label': 'Dev Community',
+        'icon': Icons.question_answer_outlined,
+        'color': Colors.orange.shade600,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DevCommunityScreen(),
+              ),
+            ),
+      },
+      {
         'label': 'No-Note',
         'icon': Icons.note_alt_outlined,
-        'color': Colors.orange.shade600,
+        'color': Colors.red.shade400,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
+      },
+      {
+        'label': 'Transport',
+        'icon': Icons.directions_bus,
+        'color': Colors.deepOrange.shade400,
+        'action':
+            () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Tapped on Transport')),
+            ),
       },
     ];
 
