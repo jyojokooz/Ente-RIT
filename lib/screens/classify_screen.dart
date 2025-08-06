@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // <-- FIX APPLIED HERE
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_bottom_app_bar.dart';
 import 'departments_screen.dart';
@@ -7,6 +7,7 @@ import 'game_view_screen.dart';
 import 'create_post_screen.dart';
 import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
+import 'code_playground_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -82,19 +83,22 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'label': 'Code Playground',
+        'icon': Icons.code,
+        'color': Colors.indigo.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CodePlaygroundScreen(),
+              ),
+            ),
+      },
+      {
         'label': 'No-Note',
         'icon': Icons.note_alt_outlined,
         'color': Colors.orange.shade600,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
-      },
-      {
-        'label': 'Transport',
-        'icon': Icons.directions_bus,
-        'color': Colors.deepOrange.shade400,
-        'action':
-            () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tapped on Transport')),
-            ),
       },
     ];
 
