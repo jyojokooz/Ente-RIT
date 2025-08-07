@@ -59,7 +59,10 @@ dependencies:
   barcode_widget: ^2.0.4
   http: ^1.2.1
   flutter_dotenv: ^5.1.0
-
+  google_maps_flutter: ^2.6.1
+  location: ^6.0.2
+  firebase_database: ^10.4.9
+  share_plus: ^9.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -116,3 +119,4 @@ flutter:
     - assets/welcome_illustration.png
     - assets/google_logo.png
     - .env
+    - assets/map_style.json

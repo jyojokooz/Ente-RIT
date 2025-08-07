@@ -11,6 +11,42 @@ class AdminPanelScreen extends StatefulWidget {
 }
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  Future<void> _toggleUserRole(String userId, String currentRole) async {
+    final newRole = currentRole == 'driver' ? 'user' : 'driver';
+    final bool confirmChange =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                backgroundColor: Colors.grey.shade800,
+                title: const Text('Change Role?'),
+                content: Text(
+                  'Do you want to change this user\'s role to "$newRole"?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text(
+                      'Confirm',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (confirmChange) {
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'role': newRole,
+      });
+    }
+  }
+
   Future<void> _deletePost(String postId) async {
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
@@ -18,9 +54,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           (ctx) => AlertDialog(
             backgroundColor: Colors.grey.shade800,
             title: const Text('Delete Post?'),
-            content: const Text(
-              'Are you sure you want to delete this post and all its comments?',
-            ),
+            content: const Text('Are you sure you want to delete this post?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
@@ -36,7 +70,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ],
           ),
     );
-
     if (didRequestDelete == true) {
       await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
     }
@@ -45,7 +78,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _showAddDepartmentDialog() async {
     final departmentController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -60,12 +92,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               decoration: const InputDecoration(
                 hintText: 'e.g., Computer Science',
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a department name.';
-                }
-                return null;
-              },
+              validator:
+                  (value) =>
+                      (value == null || value.trim().isEmpty)
+                          ? 'Please enter a department name.'
+                          : null,
             ),
           ),
           actions: <Widget>[
@@ -99,7 +130,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             backgroundColor: Colors.grey.shade800,
             title: const Text('Delete Department?'),
             content: const Text(
-              'Are you sure? This will not remove the department from existing user profiles.',
+              'Are you sure? This won\'t remove it from existing user profiles.',
             ),
             actions: [
               TextButton(
@@ -270,6 +301,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             final user = users[index];
             final userData = user.data() as Map<String, dynamic>;
             final bool isAdmin = userData['isAdmin'] ?? false;
+            final String role = userData['role'] ?? 'user';
             return ListTile(
               leading: CircleAvatar(
                 backgroundImage:
@@ -285,17 +317,46 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
               title: Text(userData['displayName'] ?? 'No Name'),
               subtitle: Text(userData['email'] ?? 'No Email'),
-              trailing:
-                  isAdmin
-                      ? const Chip(
-                        label: Text('Admin'),
-                        backgroundColor: Colors.yellow,
-                        labelStyle: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                      : null,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (role == 'driver')
+                    const Chip(
+                      label: Text('Driver'),
+                      backgroundColor: Colors.cyan,
+                      labelStyle: TextStyle(color: Colors.black, fontSize: 12),
+                    ),
+                  if (isAdmin)
+                    const Chip(
+                      label: Text('Admin'),
+                      backgroundColor: Colors.yellow,
+                      labelStyle: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  if (!isAdmin)
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'toggle_role') {
+                          _toggleUserRole(user.id, role);
+                        }
+                      },
+                      itemBuilder:
+                          (BuildContext context) => <PopupMenuEntry<String>>[
+                            PopupMenuItem<String>(
+                              value: 'toggle_role',
+                              child: Text(
+                                role == 'driver'
+                                    ? 'Set as User'
+                                    : 'Set as Driver',
+                              ),
+                            ),
+                          ],
+                    ),
+                ],
+              ),
             );
           },
         );

@@ -9,11 +9,11 @@ import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
+import 'student_map_view_screen.dart'; // Only student map view is needed here
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
 
-  // Helper function to launch URLs in an external browser
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await canLaunchUrl(uri)) {
@@ -113,13 +113,17 @@ class ClassifyScreen extends StatelessWidget {
         'color': Colors.red.shade400,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
+      // This card is now for everyone and always shows the map.
       {
-        'label': 'Transport',
+        'label': 'Bus Tracking',
         'icon': Icons.directions_bus,
-        'color': Colors.deepOrange.shade400,
+        'color': Colors.amber.shade600,
         'action':
-            () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Tapped on Transport')),
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StudentMapViewScreen(),
+              ),
             ),
       },
     ];

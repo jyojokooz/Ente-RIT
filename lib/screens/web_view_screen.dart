@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart'; // <-- 1. ADD THIS IMPORT
+import 'package:url_launcher/url_launcher.dart'; // <-- Make sure this is imported
 import 'package:webview_flutter/webview_flutter.dart';
 
 class WebViewScreen extends StatefulWidget {
@@ -34,40 +34,38 @@ class _WebViewScreenState extends State<WebViewScreen> {
               onPageFinished: (String url) {
                 _controller.runJavaScript(adBlockerScript);
                 if (mounted) {
-                  setState(() => _isLoading = false);
+                  setState(() {
+                    _isLoading = false;
+                  });
                 }
               },
               onWebResourceError: (WebResourceError error) {
                 // ... error handling ...
               },
 
-              // --- 2. ADD THE NAVIGATION INTERCEPTOR ---
+              // --- THIS IS THE UPDATED LOGIC ---
               onNavigationRequest: (NavigationRequest request) {
                 final url = request.url;
-                // List of common file extensions that should trigger a download
-                const downloadExtensions = [
-                  '.pdf',
-                  '.zip',
-                  '.doc',
-                  '.docx',
-                  '.xls',
-                  '.xlsx',
-                  '.ppt',
-                  '.pptx',
-                  '.apk',
-                ];
 
-                // Check if the URL ends with a downloadable file extension
-                if (downloadExtensions.any(
+                // --- CHECK FOR LOGIN AND DOWNLOAD LINKS ---
+                const downloadExtensions = ['.pdf', '.zip', '.doc', '.docx'];
+                final isDownloadLink = downloadExtensions.any(
                   (ext) => url.toLowerCase().endsWith(ext),
-                )) {
-                  // If it's a download link, launch it in an external browser
+                );
+
+                // Stack Overflow's login page URL and Google's account URL
+                final isLoginLink =
+                    url.contains('stackoverflow.com/users/login') ||
+                    url.contains('accounts.google.com');
+
+                if (isDownloadLink || isLoginLink) {
+                  // If it's a download or login link, launch it in the external browser
                   _launchURLInBrowser(url);
-                  // And prevent the WebView from trying to navigate to it
+                  // And prevent the WebView from trying to handle it
                   return NavigationDecision.prevent;
                 }
 
-                // For all other links, let the WebView handle it normally
+                // For all other links, let the WebView handle navigation
                 return NavigationDecision.navigate;
               },
             ),
@@ -75,21 +73,18 @@ class _WebViewScreenState extends State<WebViewScreen> {
           ..loadRequest(Uri.parse(widget.url));
   }
 
-  // --- 3. ADD THE HELPER FUNCTION TO LAUNCH URLS ---
+  // Helper function to launch URLs in the default system browser
   Future<void> _launchURLInBrowser(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      // mode: LaunchMode.externalApplication is crucial.
-      // It forces the link to open in the default browser (Chrome, Safari)
-      // instead of an in-app browser view.
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    if (!await canLaunchUrl(uri)) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
       }
+      return;
     }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
