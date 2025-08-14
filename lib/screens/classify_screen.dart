@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_bottom_app_bar.dart';
-import '../widgets/category_card.dart'; // <-- 1. IMPORT THE REUSABLE WIDGET
+import '../widgets/category_card.dart';
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
@@ -10,8 +10,7 @@ import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
-import 'student_map_view_screen.dart';
-import 'tech_news_screen.dart';
+import 'event_list_screen.dart'; // <-- 1. IMPORT THE EVENT LIST SCREEN
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -36,6 +35,7 @@ class ClassifyScreen extends StatelessWidget {
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
+    // --- 2. ADD THE "EVENTS" CARD BACK TO THE LIST ---
     final List<Map<String, dynamic>> categories = [
       {
         'label': 'Departments',
@@ -47,6 +47,16 @@ class ClassifyScreen extends StatelessWidget {
               MaterialPageRoute(
                 builder: (context) => const DepartmentsScreen(),
               ),
+            ),
+      },
+      {
+        'label': 'Events',
+        'icon': Icons.calendar_today,
+        'color': Colors.pink.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const EventListScreen()),
             ),
       },
       {
@@ -115,28 +125,6 @@ class ClassifyScreen extends StatelessWidget {
         'color': Colors.red.shade400,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
-      {
-        'label': 'Bus Tracking',
-        'icon': Icons.directions_bus,
-        'color': Colors.amber.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const StudentMapViewScreen(),
-              ),
-            ),
-      },
-      {
-        'label': 'Tech News',
-        'icon': Icons.newspaper_outlined,
-        'color': Colors.cyan.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TechNewsScreen()),
-            ),
-      },
     ];
 
     return Scaffold(
@@ -187,8 +175,6 @@ class ClassifyScreen extends StatelessWidget {
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     final category = categories[index];
-                    // --- 2. USING THE REUSABLE WIDGET ---
-                    // This will restore the original, better UI style
                     return CategoryCard(
                       label: category['label'],
                       icon: category['icon'],
@@ -207,5 +193,3 @@ class ClassifyScreen extends StatelessWidget {
     );
   }
 }
-
-// HeaderClipper is no longer needed, so it can be removed if it's not used elsewhere.

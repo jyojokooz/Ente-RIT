@@ -1,7 +1,14 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
+
+const String cloudinaryCloudName = "dcboqibnx";
+const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -155,10 +162,237 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  Future<void> _showAddEventDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    File? eventImageFile;
+    bool isUploading = false;
+    final ImagePicker picker = ImagePicker();
+
+    // Capture the context BEFORE the dialog is shown.
+    final dialogContext = context;
+
+    await showDialog<void>(
+      context: dialogContext,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.grey.shade800,
+              title: const Text('Add New Event'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap:
+                            isUploading
+                                ? null
+                                : () async {
+                                  final XFile? image = await picker.pickImage(
+                                    source: ImageSource.gallery,
+                                  );
+                                  if (image != null) {
+                                    setDialogState(
+                                      () => eventImageFile = File(image.path),
+                                    );
+                                  }
+                                },
+                        child: Container(
+                          height: 150,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade700,
+                            borderRadius: BorderRadius.circular(12),
+                            image:
+                                eventImageFile != null
+                                    ? DecorationImage(
+                                      image: FileImage(eventImageFile!),
+                                      fit: BoxFit.cover,
+                                    )
+                                    : null,
+                          ),
+                          child:
+                              eventImageFile == null
+                                  ? const Center(
+                                    child: Icon(
+                                      Icons.add_a_photo_outlined,
+                                      color: Colors.white70,
+                                      size: 40,
+                                    ),
+                                  )
+                                  : null,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Event Title',
+                        ),
+                        validator: (v) => v!.isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                        ),
+                        maxLines: 3,
+                        validator: (v) => v!.isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 20),
+                      ListTile(
+                        leading: const Icon(Icons.date_range),
+                        title: Text(
+                          selectedDate == null
+                              ? 'Select Date'
+                              : DateFormat.yMMMMd().format(selectedDate!),
+                        ),
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100),
+                          );
+                          if (pickedDate != null) {
+                            setDialogState(() => selectedDate = pickedDate);
+                          }
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.access_time),
+                        title: Text(
+                          selectedTime == null
+                              ? 'Select Time'
+                              : selectedTime!.format(context),
+                        ),
+                        onTap: () async {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (pickedTime != null) {
+                            setDialogState(() => selectedTime = pickedTime);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      isUploading
+                          ? null
+                          : () async {
+                            if (formKey.currentState!.validate() &&
+                                selectedDate != null &&
+                                selectedTime != null &&
+                                eventImageFile != null) {
+                              final navigator = Navigator.of(dialogContext);
+                              final scaffoldMessenger = ScaffoldMessenger.of(
+                                dialogContext,
+                              );
+
+                              setDialogState(() => isUploading = true);
+
+                              try {
+                                final cloudinary = CloudinaryPublic(
+                                  cloudinaryCloudName,
+                                  cloudinaryUploadPreset,
+                                );
+                                CloudinaryResponse response = await cloudinary
+                                    .uploadFile(
+                                      CloudinaryFile.fromFile(
+                                        eventImageFile!.path,
+                                        folder: 'events',
+                                      ),
+                                    );
+                                final imageUrl = response.secureUrl;
+                                final eventTimestamp = Timestamp.fromDate(
+                                  DateTime(
+                                    selectedDate!.year,
+                                    selectedDate!.month,
+                                    selectedDate!.day,
+                                    selectedTime!.hour,
+                                    selectedTime!.minute,
+                                  ),
+                                );
+                                await FirebaseFirestore.instance
+                                    .collection('events')
+                                    .add({
+                                      'title': titleController.text.trim(),
+                                      'description':
+                                          descriptionController.text.trim(),
+                                      'eventDate': eventTimestamp,
+                                      'imageUrl': imageUrl,
+                                      'createdAt': FieldValue.serverTimestamp(),
+                                    });
+
+                                navigator.pop();
+                              } catch (e) {
+                                if (scaffoldMessenger.mounted) {
+                                  scaffoldMessenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Failed to create event: $e",
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                if (formKey.currentContext != null) {
+                                  setDialogState(() => isUploading = false);
+                                }
+                              }
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Please fill all fields, including the image.",
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                  child:
+                      isUploading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Text('Add Event'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteEvent(String docId) async {
+    await FirebaseFirestore.instance.collection('events').doc(docId).delete();
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -168,11 +402,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           ),
           backgroundColor: Colors.grey.shade900,
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: Colors.yellow,
             tabs: [
               Tab(icon: Icon(Icons.article_outlined), text: 'Posts'),
               Tab(icon: Icon(Icons.people_alt_outlined), text: 'Users'),
               Tab(icon: Icon(Icons.school_outlined), text: 'Departments'),
+              Tab(icon: Icon(Icons.event_outlined), text: 'Events'),
             ],
           ),
         ),
@@ -181,8 +417,67 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             _buildPostsView(),
             _buildUsersView(),
             _buildDepartmentsView(),
+            _buildEventsView(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEventsView() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddEventDialog,
+        backgroundColor: Colors.yellow,
+        child: const Icon(Icons.add, color: Colors.black),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('events')
+                .orderBy('eventDate', descending: false)
+                .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.yellow),
+            );
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No events found. Add one!'));
+          }
+
+          final events = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: events.length,
+            itemBuilder: (context, index) {
+              final event = events[index];
+              final eventData = event.data() as Map<String, dynamic>;
+              final eventDate =
+                  (eventData['eventDate'] as Timestamp?)?.toDate();
+
+              return ListTile(
+                leading: const Icon(Icons.calendar_today, color: Colors.yellow),
+                title: Text(eventData['title'] ?? 'No Title'),
+                subtitle: Text(
+                  eventDate != null
+                      ? DateFormat(
+                        'EEE, MMM d, yyyy • h:mm a',
+                      ).format(eventDate)
+                      : 'No date',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
+                  onPressed: () => _deleteEvent(event.id),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
