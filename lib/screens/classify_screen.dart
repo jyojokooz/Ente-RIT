@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_bottom_app_bar.dart';
+import '../widgets/category_card.dart'; // <-- 1. IMPORT THE REUSABLE WIDGET
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
@@ -9,8 +10,8 @@ import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
-import 'student_map_view_screen.dart'; // Only student map view is needed here
-import 'tech_news_screen.dart'; // <-- 1. IMPORT THE NEW SCREEN
+import 'student_map_view_screen.dart';
+import 'tech_news_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -114,7 +115,6 @@ class ClassifyScreen extends StatelessWidget {
         'color': Colors.red.shade400,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
-      // This card is now for everyone and always shows the map.
       {
         'label': 'Bus Tracking',
         'icon': Icons.directions_bus,
@@ -127,16 +127,14 @@ class ClassifyScreen extends StatelessWidget {
               ),
             ),
       },
-      // <-- 2. ADD THE NEW CARD DATA HERE
       {
         'label': 'Tech News',
         'icon': Icons.newspaper_outlined,
         'color': Colors.cyan.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => const TechNewsScreen(),
-              ),
+              MaterialPageRoute(builder: (context) => const TechNewsScreen()),
             ),
       },
     ];
@@ -179,7 +177,7 @@ class ClassifyScreen extends StatelessWidget {
               const SizedBox(height: 20),
               Expanded(
                 child: GridView.builder(
-                  padding: const EdgeInsets.only(top: 10, bottom: 20), // Added bottom padding for better spacing
+                  padding: const EdgeInsets.only(top: 10, bottom: 20),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 20,
@@ -189,6 +187,8 @@ class ClassifyScreen extends StatelessWidget {
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     final category = categories[index];
+                    // --- 2. USING THE REUSABLE WIDGET ---
+                    // This will restore the original, better UI style
                     return CategoryCard(
                       label: category['label'],
                       icon: category['icon'],
@@ -208,50 +208,4 @@ class ClassifyScreen extends StatelessWidget {
   }
 }
 
-// I'm assuming you have this CategoryCard widget defined somewhere,
-// probably in another file. If not, you'll need it.
-class CategoryCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final Color cardColor;
-  final Color textColor;
-  final VoidCallback onTap;
-
-  const CategoryCard({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.cardColor,
-    required this.textColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Card(
-        color: cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 48, color: color),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// HeaderClipper is no longer needed, so it can be removed if it's not used elsewhere.
