@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math'; // <-- FIX APPLIED HERE
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -77,6 +77,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           if (currentDept != null && _departmentOptions.contains(currentDept)) {
             _selectedDepartment = currentDept;
           }
+        } else {
+          _usernameController.text = user.email?.split('@').first ?? '';
         }
       }
     } catch (e) {
@@ -134,7 +136,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
-
       final userDoc = await userDocRef.get();
       String? studentId;
       FieldValue joinedAt;
@@ -149,7 +150,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       await user.updateDisplayName(newDisplayName);
-
       final userData = {
         'studentId': studentId,
         'joinedAt': joinedAt,
@@ -258,7 +258,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 24),
                     TextFormField(
-                      initialValue: user.email,
+                      initialValue: user.email ?? 'No email found',
                       readOnly: true,
                       decoration: const InputDecoration(
                         labelText: 'Email',

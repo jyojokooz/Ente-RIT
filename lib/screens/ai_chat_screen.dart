@@ -1,13 +1,14 @@
-import 'dart:convert'; // <-- THE CRITICAL FIX
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class AiChatMessage {
-  final String text;
+  String text;
   final bool isUserMessage;
   AiChatMessage({required this.text, required this.isUserMessage});
 }
@@ -22,9 +23,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
   final _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<AiChatMessage> _messages = [];
-  bool _isTyping = false;
+  bool _isResponding = false;
 
-  final String _apiKey = dotenv.env['OPENROUTER_API_KEY'] ?? '';
+  final String _openRouterApiKey = dotenv.env['OPENROUTER_API_KEY'] ?? '';
+  final String _serperApiKey = dotenv.env['SERPER_API_KEY'] ?? '';
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
   @override
@@ -33,7 +35,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     _scrollController.dispose();
     super.dispose();
   }
-  
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -47,13 +49,18 @@ class _AIChatScreenState extends State<AIChatScreen> {
   }
 
   Future<void> _processAndSendMessage({String? prepopulatedMessage}) async {
-    final userMessageText = prepopulatedMessage ?? _messageController.text.trim();
-    if (userMessageText.isEmpty) return;
+    final userMessageText =
+        prepopulatedMessage ?? _messageController.text.trim();
+    if (userMessageText.isEmpty || _isResponding) return;
 
     _messageController.clear();
     setState(() {
-      _messages.insert(0, AiChatMessage(text: userMessageText, isUserMessage: true));
-      _isTyping = true;
+      _messages.insert(
+        0,
+        AiChatMessage(text: userMessageText, isUserMessage: true),
+      );
+      _messages.insert(0, AiChatMessage(text: "", isUserMessage: false));
+      _isResponding = true;
     });
     _scrollToBottom();
 
@@ -65,77 +72,138 @@ class _AIChatScreenState extends State<AIChatScreen> {
     } else if (decision == 'web_search') {
       contextData = await _fetchWebContext(userMessageText);
     }
-    
-    await _getAiResponse(userMessageText, contextData);
+
+    await _getAiStreamingResponse(userMessageText, contextData);
   }
 
   Future<String> _getAiDecision(String userQuestion) async {
-    if (_apiKey.isEmpty) return 'chat';
+    if (_openRouterApiKey.isEmpty) {
+      return 'chat';
+    }
     try {
       final response = await http.post(
         Uri.parse("https://openrouter.ai/api/v1/chat/completions"),
-        headers: { "Authorization": "Bearer $_apiKey", "Content-Type": "application/json" },
+        headers: {
+          "Authorization": "Bearer $_openRouterApiKey",
+          "Content-Type": "application/json",
+        },
         body: jsonEncode({
           "model": "mistralai/mistral-7b-instruct:free",
           "messages": [
-            {"role": "system", "content": "You are a routing expert. Your job is to classify the user's query into one of three categories: 'database_search', 'web_search', or 'chat'. Keywords for 'database_search' include 'my profile', 'my post', 'connections', 'my name', 'my stats'. Keywords for 'web_search' include 'who is', 'what is', 'search for', 'find information on'. For anything else, like greetings or general conversation, respond with 'chat'. Respond with ONLY ONE of these three category names and nothing else."},
-            {"role": "user", "content": userQuestion}
+            {
+              "role": "system",
+              "content":
+                  "You are a routing expert. Your job is to classify the user's query into one of three categories: 'database_search', 'web_search', or 'chat'. Keywords for 'database_search' include 'my profile', 'my post', 'connections', 'my name', 'my stats'. Keywords for 'web_search' include 'who is', 'what is', 'search for', 'find information on'. For anything else, like greetings or general conversation, respond with 'chat'. Respond with ONLY ONE of these three category names and nothing else.",
+            },
+            {"role": "user", "content": userQuestion},
           ],
         }),
       );
       if (response.statusCode == 200) {
-        final decision = jsonDecode(response.body)['choices'][0]['message']['content'].trim().toLowerCase();
+        final decision =
+            jsonDecode(
+              response.body,
+            )['choices'][0]['message']['content'].trim().toLowerCase();
         if (['database_search', 'web_search', 'chat'].contains(decision)) {
           return decision;
         }
       }
-    } catch (e) { /* Fallback */ }
+    } catch (e) {
+      /* Fallback */
+    }
     return 'chat';
   }
 
   Future<String> _fetchDatabaseContext(String userMessageText) async {
     final lowerCaseMessage = userMessageText.toLowerCase();
     List<String> contextSnippets = [];
-    
-    if (lowerCaseMessage.contains('profile') || lowerCaseMessage.contains('name') || lowerCaseMessage.contains('bio') || lowerCaseMessage.contains('department') || lowerCaseMessage.contains('username')) {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).get();
+
+    if (lowerCaseMessage.contains('profile') ||
+        lowerCaseMessage.contains('name') ||
+        lowerCaseMessage.contains('bio') ||
+        lowerCaseMessage.contains('department') ||
+        lowerCaseMessage.contains('username')) {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser.uid)
+              .get();
       if (userDoc.exists) {
         final userData = userDoc.data()!;
-        contextSnippets.add("User's Profile: Name is '${userData['displayName'] ?? 'Not set'}', Username is '@${userData['username'] ?? 'Not set'}', Bio is '${userData['bio'] ?? 'Not set'}', Department is '${userData['department'] ?? 'Not set'}'.");
+        contextSnippets.add(
+          "User's Profile: Name is '${userData['displayName'] ?? 'Not set'}', Username is '@${userData['username'] ?? 'Not set'}', Bio is '${userData['bio'] ?? 'Not set'}', Department is '${userData['department'] ?? 'Not set'}'.",
+        );
       }
     }
-    if (lowerCaseMessage.contains('last post') || lowerCaseMessage.contains('latest post') || lowerCaseMessage.contains('recent post')) {
-      final postQuery = await FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: _currentUser.uid).orderBy('timestamp', descending: true).limit(1).get();
+    if (lowerCaseMessage.contains('last post') ||
+        lowerCaseMessage.contains('latest post') ||
+        lowerCaseMessage.contains('recent post')) {
+      final postQuery =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: _currentUser.uid)
+              .orderBy('timestamp', descending: true)
+              .limit(1)
+              .get();
       if (postQuery.docs.isNotEmpty) {
         final lastPost = postQuery.docs.first.data();
-        final caption = lastPost['caption']?.isNotEmpty ?? false ? "'${lastPost['caption']}'" : "no caption";
+        final caption =
+            lastPost['caption']?.isNotEmpty ?? false
+                ? "'${lastPost['caption']}'"
+                : "no caption";
         final likeCount = (lastPost['likes'] as List?)?.length ?? 0;
         final commentCount = lastPost['comments'] ?? 0;
-        contextSnippets.add("User's Last Post: The post with caption $caption has $likeCount likes and $commentCount comments.");
-      } else { contextSnippets.add("User's Last Post: The user has not made any posts yet."); }
-    }
-    if (lowerCaseMessage.contains('connection')) {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).get();
-      if (userDoc.exists) {
-        final connectionCount = (userDoc.data()!['connections'] as List?)?.length ?? 0;
-        contextSnippets.add("User's Connections: The user currently has $connectionCount connections.");
+        contextSnippets.add(
+          "User's Last Post: The post with caption $caption has $likeCount likes and $commentCount comments.",
+        );
+      } else {
+        contextSnippets.add(
+          "User's Last Post: The user has not made any posts yet.",
+        );
       }
     }
-    if (lowerCaseMessage.contains('total post') || lowerCaseMessage.contains('how many posts')) {
-      final postQuery = await FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: _currentUser.uid).get();
-      contextSnippets.add("User's Total Posts: The user has made a total of ${postQuery.docs.length} posts.");
+    if (lowerCaseMessage.contains('connection')) {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser.uid)
+              .get();
+      if (userDoc.exists) {
+        final connectionCount =
+            (userDoc.data()!['connections'] as List?)?.length ?? 0;
+        contextSnippets.add(
+          "User's Connections: The user currently has $connectionCount connections.",
+        );
+      }
     }
-    
-    return contextSnippets.isNotEmpty ? contextSnippets.join('\n') : 'No relevant app data found for the query.';
+    if (lowerCaseMessage.contains('total post') ||
+        lowerCaseMessage.contains('how many posts')) {
+      final postQuery =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: _currentUser.uid)
+              .get();
+      contextSnippets.add(
+        "User's Total Posts: The user has made a total of ${postQuery.docs.length} posts.",
+      );
+    }
+
+    return contextSnippets.isNotEmpty
+        ? contextSnippets.join('\n')
+        : 'No relevant app data found for the query.';
   }
 
   Future<String> _fetchWebContext(String userMessageText) async {
-    final serperApiKey = dotenv.env['SERPER_API_KEY'] ?? '';
-    if (serperApiKey.isEmpty) return "Web search is not configured because the SERPER_API_KEY is missing.";
+    if (_serperApiKey.isEmpty) {
+      return "Web search is not configured because the SERPER_API_KEY is missing.";
+    }
     try {
       final response = await http.post(
         Uri.parse("https://google.serper.dev/search"),
-        headers: {'X-API-KEY': serperApiKey, 'Content-Type': 'application/json'},
+        headers: {
+          'X-API-KEY': _serperApiKey,
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({'q': userMessageText}),
       );
       if (response.statusCode == 200) {
@@ -145,7 +213,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
           int count = 0;
           for (var result in data['organic']) {
             if (count < 3) {
-              searchContext += "Title: ${result['title']}\nSnippet: ${result['snippet']}\n\n";
+              searchContext +=
+                  "Title: ${result['title']}\nSnippet: ${result['snippet']}\n\n";
               count++;
             }
           }
@@ -154,67 +223,129 @@ class _AIChatScreenState extends State<AIChatScreen> {
         }
         return searchContext;
       }
-    } catch (e) { /* Fallback */ }
+    } catch (e) {
+      /* Fallback */
+    }
     return "Failed to perform web search due to a network error.";
   }
-  
-  Future<void> _getAiResponse(String userQuestion, String? context) async {
+
+  Future<void> _getAiStreamingResponse(
+    String userQuestion,
+    String? context,
+  ) async {
     final messagesForApi = [
-      {"role": "system", "content": "You are a friendly and helpful assistant for a campus social app called Kampus Konnect. Your name is Tom. Your tone should be encouraging and conversational. When context is provided, you MUST base your answer ONLY on that context. Do not make up information. If the context says 'No specific context provided', you can chat normally."},
-      {"role": "user", "content": "My question is: '$userQuestion'.\n\nHere is some context from the app's database or a web search to help you answer:\n${context ?? 'No specific context provided. You can answer this from your general knowledge.'}"}
+      {
+        "role": "system",
+        "content":
+            "You are a friendly and helpful assistant for a campus social app called Kampus Konnect. Your name is Tom. You MUST format your responses using Markdown (e.g., use **bold** for emphasis, `code blocks` for code, and lists for steps). When context is provided, you MUST base your answer ONLY on that context.",
+      },
+      {
+        "role": "user",
+        "content":
+            "My question is: '$userQuestion'.\n\nHere is some context to help you answer:\n${context ?? 'No specific context provided. You can chat normally.'}",
+      },
     ];
 
     try {
-      final response = await http.post(
+      final request = http.Request(
+        "POST",
         Uri.parse("https://openrouter.ai/api/v1/chat/completions"),
-        headers: { "Authorization": "Bearer $_apiKey", "Content-Type": "application/json", "HTTP-Referer": "https://kampuskonnect.app", "X-Title": "Kampus Konnect" },
-        body: jsonEncode({ "model": "mistralai/mistral-7b-instruct:free", "messages": messagesForApi }),
       );
-      if (!mounted) return;
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final aiResponse = data['choices'][0]['message']['content'];
-        setState(() => _messages.insert(0, AiChatMessage(text: aiResponse.trim(), isUserMessage: false)));
-      } else {
-        final error = jsonDecode(response.body)['error']['message'];
-        setState(() => _messages.insert(0, AiChatMessage(text: "Sorry, I ran into an error: $error", isUserMessage: false)));
-      }
+      request.headers.addAll({
+        "Authorization": "Bearer $_openRouterApiKey",
+        "Content-Type": "application/json",
+      });
+      request.body = jsonEncode({
+        "model":
+            "deepseek/deepseek-chat", // Using a high-quality free DeepSeek model
+        "messages": messagesForApi,
+        "stream": true,
+      });
+
+      final response = await request.send();
+
+      response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+            (line) {
+              if (line.startsWith("data: ")) {
+                final dataString = line.substring(6);
+                if (dataString == "[DONE]") return;
+                try {
+                  final data = jsonDecode(dataString);
+                  final delta = data['choices'][0]['delta'];
+                  if (delta != null && delta['content'] != null) {
+                    final textChunk = delta['content'];
+                    if (mounted) {
+                      setState(() => _messages.first.text += textChunk);
+                      _scrollToBottom();
+                    }
+                  }
+                } catch (e) {
+                  /* Ignore parsing errors for incomplete chunks */
+                }
+              }
+            },
+            onDone: () {
+              if (mounted) {
+                setState(() => _isResponding = false);
+              }
+            },
+            onError: (error) {
+              if (mounted) {
+                setState(() {
+                  _messages.first.text =
+                      "Sorry, an error occurred while streaming the response.";
+                  _isResponding = false;
+                });
+              }
+            },
+          );
     } catch (e) {
-      if(mounted) { setState(() => _messages.insert(0, AiChatMessage(text: "I'm having trouble connecting. Please check your internet.", isUserMessage: false))); }
-    } finally {
-      if(mounted) { setState(() => _isTyping = false); }
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {
+          _messages.first.text =
+              "I'm having trouble connecting. Please check your internet.";
+          _isResponding = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_apiKey.isEmpty) { return _buildErrorScaffold("OpenRouter API Key is not set!"); }
-    
+    if (_openRouterApiKey.isEmpty) {
+      return _buildErrorScaffold("OpenRouter API Key is not set!");
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text("AI Assistant", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: Text(
+          "AI Assistant",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.grey.shade900,
       ),
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty && !_isTyping
-                ? _buildIntroView()
-                : ListView.builder(
-                    controller: _scrollController,
-                    reverse: true,
-                    padding: const EdgeInsets.all(16.0),
-                    itemCount: _messages.length + (_isTyping ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (_isTyping && index == 0) {
-                        return AnimatedMessage(child: _buildMessageBubble(AiChatMessage(text: "...", isUserMessage: false), true));
-                      }
-                      final message = _messages[_isTyping ? index - 1 : index];
-                      return AnimatedMessage(child: _buildMessageBubble(message, false));
-                    },
-                  ),
+            child:
+                _messages.isEmpty && !_isResponding
+                    ? _buildIntroView()
+                    : ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        return AnimatedMessage(
+                          child: _buildMessageBubble(message),
+                        );
+                      },
+                    ),
           ),
           _buildMessageInputField(),
         ],
@@ -229,11 +360,36 @@ class _AIChatScreenState extends State<AIChatScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/ai_character.png', height: 150, color: Colors.white70, errorBuilder: (c, e, s) => const Icon(Icons.smart_toy_outlined, size: 120, color: Colors.blueGrey)),
+            Image.asset(
+              'assets/ai_character.png',
+              height: 150,
+              color: Colors.white70,
+              errorBuilder:
+                  (c, e, s) => const Icon(
+                    Icons.smart_toy_outlined,
+                    size: 120,
+                    color: Colors.blueGrey,
+                  ),
+            ),
             const SizedBox(height: 24),
-            Text("Hey there!", style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text(
+              "Hey there!",
+              style: GoogleFonts.poppins(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(height: 12),
-            Text("I'm your personal assistant.\nAsk about your app data or search the web!", textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 16, color: Colors.white70, height: 1.5)),
+            Text(
+              "I'm your personal assistant.\nAsk about your app data or search the web!",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: Colors.white70,
+                height: 1.5,
+              ),
+            ),
             const SizedBox(height: 32),
             _buildSuggestionChip("What are the stats on my last post?"),
             _buildSuggestionChip("Search for the latest news on Flutter"),
@@ -257,7 +413,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
   Scaffold _buildErrorScaffold(String error) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text("Configuration Error"), backgroundColor: Colors.grey.shade900),
+      appBar: AppBar(
+        title: const Text("Configuration Error"),
+        backgroundColor: Colors.grey.shade900,
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
@@ -271,31 +430,72 @@ class _AIChatScreenState extends State<AIChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(AiChatMessage message, bool isTypingIndicator) {
+  Widget _buildMessageBubble(AiChatMessage message) {
     final bool isMe = message.isUserMessage;
+    final bool isTyping = !isMe && message.text.isEmpty && _isResponding;
+
+    final markdownStyle = MarkdownStyleSheet.fromTheme(
+      Theme.of(context).copyWith(
+        textTheme: Theme.of(context).textTheme.apply(
+          bodyColor: isMe ? Colors.black : Colors.white,
+          displayColor: isMe ? Colors.black : Colors.white,
+        ),
+      ),
+    ).copyWith(
+      p: GoogleFonts.poppins(fontSize: 15),
+      code: GoogleFonts.robotoMono(
+        backgroundColor:
+            isMe ? Colors.black.withAlpha(25) : Colors.white.withAlpha(25),
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: isMe ? Colors.black.withAlpha(25) : Colors.white.withAlpha(25),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      listBullet: GoogleFonts.poppins(),
+      h1: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+      h2: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+    );
+
     return Row(
       mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: [
         Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           margin: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
             color: isMe ? Colors.yellow : Colors.grey.shade800,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: isTypingIndicator
-            ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54))
-            : Text(message.text, style: GoogleFonts.poppins(color: isMe ? Colors.black : Colors.white)),
+          child:
+              isTyping
+                  ? const SizedBox(
+                    width: 25,
+                    height: 25,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white54,
+                    ),
+                  )
+                  : MarkdownBody(
+                    data: message.text.isEmpty ? " " : message.text,
+                    selectable: true,
+                    styleSheet: markdownStyle,
+                  ),
         ),
       ],
     );
   }
-  
+
   Widget _buildMessageInputField() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      decoration: BoxDecoration(color: Colors.grey.shade900, border: Border(top: BorderSide(color: Colors.grey.shade800))),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        border: Border(top: BorderSide(color: Colors.grey.shade800)),
+      ),
       child: SafeArea(
         child: Row(
           children: [
@@ -309,8 +509,14 @@ class _AIChatScreenState extends State<AIChatScreen> {
                   hintStyle: TextStyle(color: Colors.grey.shade500),
                   filled: true,
                   fillColor: Colors.grey.shade800,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
                 ),
                 onSubmitted: (_) => _processAndSendMessage(),
               ),
@@ -333,22 +539,38 @@ class AnimatedMessage extends StatefulWidget {
   @override
   State<AnimatedMessage> createState() => _AnimatedMessageState();
 }
-class _AnimatedMessageState extends State<AnimatedMessage> with SingleTickerProviderStateMixin {
+
+class _AnimatedMessageState extends State<AnimatedMessage>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _offsetAnimation;
   late Animation<double> _fadeAnimation;
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-    _offsetAnimation = Tween<Offset>(begin: const Offset(0.0, 0.5), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _offsetAnimation = Tween<Offset>(
+      begin: const Offset(0.0, 0.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
     _controller.forward();
   }
+
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(opacity: _fadeAnimation, child: SlideTransition(position: _offsetAnimation, child: widget.child));
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(position: _offsetAnimation, child: widget.child),
+    );
   }
 }
