@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:code_text_field/code_text_field.dart';
+import 'package:highlight/highlight.dart' show Mode;
+import 'package:flutter_highlight/themes/vs2015.dart';
+import 'package:highlight/languages/python.dart';
+// --- THIS IS THE CORRECTED LINE ---
+import 'package:highlight/languages/javascript.dart';
+import 'package:highlight/languages/java.dart';
+import 'package:highlight/languages/cpp.dart';
+
 import '../services/piston_api_service.dart';
 
 class CodePlaygroundScreen extends StatefulWidget {
@@ -11,23 +22,77 @@ class CodePlaygroundScreen extends StatefulWidget {
 
 class _CodePlaygroundScreenState extends State<CodePlaygroundScreen> {
   final _apiService = PistonApiService();
-  final _codeController = TextEditingController();
+  CodeController? _codeController;
 
   String _output = 'Your output will appear here...';
   bool _isLoading = false;
   late String _selectedLanguage;
 
+  bool _isInitializing = true;
+  static const String _lastLanguageKey = 'last_selected_language';
+  String _prefsKeyForLanguage(String lang) => 'code_snippet_$lang';
+
+  final Map<String, Mode> _languageModes = {
+    'python': python,
+    'javascript': javascript, // This will now be defined correctly
+    'java': java,
+    'c++': cpp,
+  };
+
   @override
   void initState() {
     super.initState();
-    _selectedLanguage = _apiService.supportedLanguages.keys.first;
-    _codeController.text = _getBoilerplateCode(_selectedLanguage);
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _selectedLanguage =
+        prefs.getString(_lastLanguageKey) ??
+        _apiService.supportedLanguages.keys.first;
+    final savedCode = prefs.getString(_prefsKeyForLanguage(_selectedLanguage));
+    _initializeCodeController(
+      initialCode: savedCode ?? _getBoilerplateCode(_selectedLanguage),
+    );
+    setState(() {
+      _isInitializing = false;
+    });
+  }
+
+  void _initializeCodeController({required String initialCode}) {
+    final languageMode = _languageModes[_selectedLanguage];
+    _codeController = CodeController(text: initialCode, language: languageMode);
   }
 
   @override
   void dispose() {
-    _codeController.dispose();
+    _saveCurrentCode();
+    _codeController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveCurrentCode() async {
+    if (_codeController == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefsKeyForLanguage(_selectedLanguage),
+      _codeController!.text,
+    );
+    await prefs.setString(_lastLanguageKey, _selectedLanguage);
+  }
+
+  Future<void> _switchLanguage(String newLanguage) async {
+    await _saveCurrentCode();
+    setState(() {
+      _selectedLanguage = newLanguage;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final savedCode = prefs.getString(_prefsKeyForLanguage(newLanguage));
+    _codeController?.dispose();
+    _initializeCodeController(
+      initialCode: savedCode ?? _getBoilerplateCode(newLanguage),
+    );
+    setState(() {});
   }
 
   String _getBoilerplateCode(String language) {
@@ -41,32 +106,31 @@ class _CodePlaygroundScreenState extends State<CodePlaygroundScreen> {
       case 'c++':
         return '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!";\n    return 0;\n}';
       default:
-        return '';
+        return '// Select a language to see boilerplate code';
     }
   }
 
   Future<void> _runCode() async {
-    if (_isLoading) return;
+    if (_isLoading || _codeController == null) return;
+    FocusScope.of(context).unfocus();
     setState(() {
       _isLoading = true;
       _output = 'Executing...';
     });
-
     try {
       final result = await _apiService.executeCode(
         _selectedLanguage,
-        _codeController.text,
+        _codeController!.text,
       );
       final runInfo = result['run'];
       if (runInfo != null) {
-        // Combine standard output and standard error for a complete console view
         final String stdout = runInfo['stdout'] ?? '';
         final String stderr = runInfo['stderr'] ?? '';
         setState(() {
           _output =
               (stdout.isEmpty && stderr.isEmpty)
                   ? 'Execution finished with no output.'
-                  : stdout + stderr;
+                  : '$stdout$stderr';
         });
       } else {
         setState(() {
@@ -75,7 +139,7 @@ class _CodePlaygroundScreenState extends State<CodePlaygroundScreen> {
       }
     } catch (e) {
       setState(() {
-        _output = e.toString();
+        _output = 'Error: ${e.toString()}';
       });
     } finally {
       setState(() {
@@ -84,71 +148,112 @@ class _CodePlaygroundScreenState extends State<CodePlaygroundScreen> {
     }
   }
 
+  void _showLanguageSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2D2D2D),
+      builder: (context) {
+        return ListView.builder(
+          itemCount: _apiService.supportedLanguages.length,
+          itemBuilder: (context, index) {
+            final lang = _apiService.supportedLanguages.keys.elementAt(index);
+            return ListTile(
+              title: Text(
+                lang[0].toUpperCase() + lang.substring(1),
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              onTap: () {
+                _switchLanguage(lang);
+                Navigator.pop(context);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF1E1E1E),
       appBar: AppBar(
         title: Text('Code Playground', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF2D2D2D),
+        elevation: 0,
       ),
-      body: Column(
-        children: [
-          _buildControls(),
-          // The Code Editor
-          Expanded(
-            flex: 3, // Give more space to the editor
-            child: Container(
-              color: const Color(0xFF1E1E1E),
-              padding: const EdgeInsets.all(8.0),
-              child: TextField(
-                controller: _codeController,
-                style: GoogleFonts.robotoMono(color: Colors.white),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  hintText: 'Enter your code here...',
-                ),
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-              ),
-            ),
-          ),
-          // The Output Console
-          Expanded(
-            flex: 2, // Give less space to the output
-            child: Container(
-              width: double.infinity,
-              color: Colors.grey.shade900,
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body:
+          _isInitializing
+              ? const Center(
+                child: CircularProgressIndicator(color: Colors.greenAccent),
+              )
+              : Row(
                 children: [
-                  Text(
-                    'Output:',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Divider(color: Colors.white24, height: 16),
+                  _buildActivityBar(),
                   Expanded(
-                    child: SingleChildScrollView(
-                      child:
-                          _isLoading
-                              ? const Center(
-                                child: CircularProgressIndicator(
-                                  color: Colors.yellow,
-                                ),
-                              )
-                              : SelectableText(
-                                _output,
-                                style: GoogleFonts.robotoMono(
-                                  color: Colors.white70,
-                                ),
-                              ),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child:
+                              _codeController == null
+                                  ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                  : CodeTheme(
+                                    data: CodeThemeData(styles: vs2015Theme),
+                                    child: CodeField(
+                                      controller: _codeController!,
+                                      textStyle: GoogleFonts.robotoMono(
+                                        fontSize: 14,
+                                      ),
+                                      expands: true,
+                                    ),
+                                  ),
+                        ),
+                        _buildOutputTerminal(),
+                      ],
                     ),
                   ),
                 ],
+              ),
+    );
+  }
+
+  Widget _buildActivityBar() {
+    return Container(
+      width: 60,
+      color: const Color(0xFF333333),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.greenAccent,
+              size: 30,
+            ),
+            onPressed: _runCode,
+            tooltip: 'Run Code',
+          ),
+          const SizedBox(height: 20),
+          IconButton(
+            icon: const Icon(
+              Icons.tune_rounded,
+              color: Colors.white70,
+              size: 28,
+            ),
+            onPressed: _showLanguageSelector,
+            tooltip: 'Change Language',
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Text(
+              _selectedLanguage.substring(0, 2).toUpperCase(),
+              style: GoogleFonts.poppins(
+                color: Colors.white38,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -157,50 +262,50 @@ class _CodePlaygroundScreenState extends State<CodePlaygroundScreen> {
     );
   }
 
-  Widget _buildControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      color: Colors.grey.shade800,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          DropdownButton<String>(
-            value: _selectedLanguage,
-            dropdownColor: Colors.grey.shade800,
-            style: GoogleFonts.poppins(color: Colors.white),
-            onChanged: (String? newValue) {
-              if (newValue != null) {
-                setState(() {
-                  _selectedLanguage = newValue;
-                  _codeController.text = _getBoilerplateCode(newValue);
-                });
-              }
-            },
-            items:
-                _apiService.supportedLanguages.keys
-                    .map<DropdownMenuItem<String>>((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(
-                          value[0].toUpperCase() + value.substring(1),
-                        ), // Capitalize first letter
-                      );
-                    })
-                    .toList(),
-          ),
-          ElevatedButton.icon(
-            onPressed: _runCode,
-            icon: const Icon(Icons.play_arrow_rounded, color: Colors.black),
-            label: Text(
-              'Run',
-              style: GoogleFonts.poppins(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
+  Widget _buildOutputTerminal() {
+    return Expanded(
+      flex: 2,
+      child: Container(
+        width: double.infinity,
+        color: const Color(0xFF252526),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              width: double.infinity,
+              color: const Color(0xFF333333),
+              child: Text(
+                'TERMINAL',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  letterSpacing: 1,
+                ),
               ),
             ),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.yellow),
-          ),
-        ],
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child:
+                    _isLoading
+                        ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.greenAccent,
+                          ),
+                        )
+                        : SingleChildScrollView(
+                          child: SelectableText(
+                            _output,
+                            style: GoogleFonts.robotoMono(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
