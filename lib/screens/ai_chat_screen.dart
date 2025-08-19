@@ -8,37 +8,69 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import '../services/chat_ai_service.dart';
 
-// Data model for messages with source tracking
+// --- DATA MODEL ---
 enum MessageSource { app, web, chat, error }
 
 class AiChatMessage {
   String text;
   final bool isUserMessage;
   MessageSource source;
+  final Timestamp timestamp;
 
   AiChatMessage({
     required this.text,
     required this.isUserMessage,
     this.source = MessageSource.chat,
+    required this.timestamp,
   });
+
+  factory AiChatMessage.fromMap(Map<String, dynamic> map) {
+    return AiChatMessage(
+      text: map['text'] ?? '',
+      isUserMessage: map['isUserMessage'] ?? false,
+      source: MessageSource.values[map['source'] ?? MessageSource.chat.index],
+      timestamp: map['timestamp'] ?? Timestamp.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'text': text,
+      'isUserMessage': isUserMessage,
+      'source': source.index,
+      'timestamp': timestamp,
+    };
+  }
 }
 
-class AIChatScreen extends StatefulWidget {
-  const AIChatScreen({super.key});
+// Renamed to AiConversationScreen to reflect its new purpose
+class AiConversationScreen extends StatefulWidget {
+  final String? conversationId;
+  const AiConversationScreen({super.key, this.conversationId});
+
   @override
-  State<AIChatScreen> createState() => _AIChatScreenState();
+  State<AiConversationScreen> createState() => _AiConversationScreenState();
 }
 
-class _AIChatScreenState extends State<AIChatScreen> {
+class _AiConversationScreenState extends State<AiConversationScreen> {
   final _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<AiChatMessage> _messages = [];
+  final ChatAiService _chatAiService = ChatAiService();
+
   bool _isResponding = false;
+  String? _currentConversationId;
 
   final String _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
   final String _serperApiKey = dotenv.env['SERPER_API_KEY'] ?? '';
   final _currentUser = FirebaseAuth.instance.currentUser!;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentConversationId = widget.conversationId;
+  }
 
   @override
   void dispose() {
@@ -59,7 +91,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     });
   }
 
-  // --- LOGIC FUNCTIONS ---
+  // --- REWRITTEN LOGIC FUNCTIONS ---
 
   Future<void> _processAndSendMessage({String? prepopulatedMessage}) async {
     final userMessageText =
@@ -68,26 +100,132 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
     _messageController.clear();
     setState(() {
-      _messages.add(AiChatMessage(text: userMessageText, isUserMessage: true));
-      _isResponding = true; // Show the TypingIndicator
+      _isResponding = true;
     });
-    _scrollToBottom();
 
-    final decision = await _getAiDecision(userMessageText);
-    String? contextData;
-    MessageSource responseSource = MessageSource.chat;
+    final userMessage = AiChatMessage(
+      text: userMessageText,
+      isUserMessage: true,
+      timestamp: Timestamp.now(),
+    );
 
-    if (decision == 'database_search') {
-      contextData = await _fetchDatabaseContext(userMessageText);
-      responseSource = MessageSource.app;
-    } else if (decision == 'web_search') {
-      contextData = await _fetchWebContext(userMessageText);
-      responseSource = MessageSource.web;
+    String conversationId = _currentConversationId ?? '';
+
+    try {
+      // If it's a new chat, create the conversation first
+      if (conversationId.isEmpty) {
+        final newId = await _chatAiService.createConversation(
+          _currentUser.uid,
+          userMessage,
+        );
+        if (mounted) {
+          setState(() {
+            _currentConversationId = newId;
+            conversationId = newId;
+          });
+        }
+      } else {
+        await _chatAiService.addMessage(
+          _currentUser.uid,
+          conversationId,
+          userMessage,
+        );
+      }
+
+      // Immediately start getting AI response after user message is handled
+      final decision = await _getAiDecision(userMessageText);
+      String? contextData;
+      MessageSource responseSource = MessageSource.chat;
+
+      if (decision == 'database_search') {
+        contextData = await _fetchDatabaseContext(userMessageText);
+        responseSource = MessageSource.app;
+      } else if (decision == 'web_search') {
+        contextData = await _fetchWebContext(userMessageText);
+        responseSource = MessageSource.web;
+      }
+
+      await _streamAiResponseToFirestore(
+        conversationId,
+        userMessageText,
+        contextData,
+        responseSource,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
+        setState(() => _isResponding = false);
+      }
     }
-
-    await _getAiStreamingResponse(userMessageText, contextData, responseSource);
   }
 
+  Future<void> _streamAiResponseToFirestore(
+    String conversationId,
+    String userQuestion,
+    String? context,
+    MessageSource source,
+  ) async {
+    // 1. Create an empty placeholder message in Firestore
+    final placeholderMessage = AiChatMessage(
+      text: "",
+      isUserMessage: false,
+      source: source,
+      timestamp: Timestamp.now(),
+    );
+    final messageRef = await _chatAiService.addMessage(
+      _currentUser.uid,
+      conversationId,
+      placeholderMessage,
+    );
+
+    // 2. Stream response from Gemini and update the document
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: _geminiApiKey,
+        systemInstruction: Content.system(
+          "You are a friendly and helpful assistant for a campus social app called Kampus Konnect. Your name is Tom. You MUST format your responses using Markdown (e.g., use **bold** for emphasis, `code blocks` for code, and lists for steps). When context is provided, you MUST base your answer ONLY on that context.",
+        ),
+      );
+      final prompt =
+          "My question is: '$userQuestion'.\n\nHere is some context to help you answer:\n${context ?? 'No specific context provided. You can chat normally.'}";
+      final content = [Content.text(prompt)];
+      final Stream<GenerateContentResponse> stream = model
+          .generateContentStream(content);
+
+      String streamedText = "";
+      await for (var chunk in stream) {
+        streamedText += chunk.text ?? "";
+        // Update the Firestore document with the new text chunk
+        await _chatAiService.updateMessageContent(
+          _currentUser.uid,
+          conversationId,
+          messageRef.id,
+          streamedText,
+        );
+      }
+    } catch (e) {
+      String errorText =
+          e is GenerativeAIException
+              ? "API Error: ${e.message}"
+              : "I'm having trouble connecting.";
+      await _chatAiService.updateMessageContent(
+        _currentUser.uid,
+        conversationId,
+        messageRef.id,
+        errorText,
+      );
+      // You could also update the source to error here if needed
+    } finally {
+      if (mounted) {
+        setState(() => _isResponding = false);
+      }
+    }
+  }
+
+  // --- Helper functions for AI decision making ---
   Future<String> _getAiDecision(String userQuestion) async {
     if (_geminiApiKey.isEmpty) return 'chat';
     try {
@@ -223,69 +361,12 @@ class _AIChatScreenState extends State<AIChatScreen> {
     return "Failed to perform web search due to a network error.";
   }
 
-  Future<void> _getAiStreamingResponse(
-    String userQuestion,
-    String? context,
-    MessageSource source,
-  ) async {
-    if (mounted) {
-      setState(() {
-        _messages.add(
-          AiChatMessage(text: "", isUserMessage: false, source: source),
-        );
-        _isResponding = false;
-      });
-    }
-
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: _geminiApiKey,
-        systemInstruction: Content.system(
-          "You are a friendly and helpful assistant for a campus social app called Kampus Konnect. Your name is Tom. You MUST format your responses using Markdown (e.g., use **bold** for emphasis, `code blocks` for code, and lists for steps). When context is provided, you MUST base your answer ONLY on that context.",
-        ),
-      );
-      final prompt =
-          "My question is: '$userQuestion'.\n\nHere is some context to help you answer:\n${context ?? 'No specific context provided. You can chat normally.'}";
-      final content = [Content.text(prompt)];
-
-      final Stream<GenerateContentResponse> stream = model
-          .generateContentStream(content);
-
-      await for (var chunk in stream) {
-        final textChunk = chunk.text;
-        if (textChunk != null && mounted) {
-          setState(() {
-            _messages.last.text += textChunk;
-            _scrollToBottom();
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _messages.last.text =
-              e is GenerativeAIException
-                  ? "API Error: ${e.message}"
-                  : "I'm having trouble connecting.";
-          _messages.last.source = MessageSource.error;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isResponding = false);
-      }
-    }
-  }
-
   // --- UI BUILD METHODS ---
-
   @override
   Widget build(BuildContext context) {
     if (_geminiApiKey.isEmpty) {
       return _buildErrorScaffold("Gemini API Key is not set!");
     }
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -300,19 +381,46 @@ class _AIChatScreenState extends State<AIChatScreen> {
         children: [
           Expanded(
             child:
-                _messages.isEmpty && !_isResponding
+                _currentConversationId == null
                     ? _buildIntroView()
-                    : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16.0),
-                      itemCount: _messages.length + (_isResponding ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == _messages.length) {
-                          return const TypingIndicator();
+                    : StreamBuilder<List<AiChatMessage>>(
+                      stream: _chatAiService.getMessagesStream(
+                        _currentUser.uid,
+                        _currentConversationId!,
+                      ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            !snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
-                        final message = _messages[index];
-                        return AnimatedMessage(
-                          child: _buildMessageBubble(message),
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              "Error: ${snapshot.error}",
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          );
+                        }
+                        final messages = snapshot.data ?? [];
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _scrollToBottom(),
+                        );
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16.0),
+                          itemCount: messages.length + (_isResponding ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == messages.length) {
+                              return const TypingIndicator();
+                            }
+                            final message = messages[index];
+                            return AnimatedMessage(
+                              child: _buildMessageBubble(message),
+                            );
+                          },
                         );
                       },
                     ),
@@ -364,22 +472,23 @@ class _AIChatScreenState extends State<AIChatScreen> {
   }
 
   Widget _buildSuggestionChip(String text) {
-    return ActionChip(
-      onPressed: () => _processAndSendMessage(prepopulatedMessage: text),
-      backgroundColor: Colors.grey.shade800,
-      avatar: Icon(Icons.auto_awesome, size: 16, color: Colors.blue.shade200),
-      label: Text(text, style: GoogleFonts.poppins(color: Colors.white)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      side: BorderSide(color: Colors.grey.shade700),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: ActionChip(
+        onPressed: () => _processAndSendMessage(prepopulatedMessage: text),
+        backgroundColor: Colors.grey.shade800,
+        avatar: Icon(Icons.auto_awesome, size: 16, color: Colors.blue.shade200),
+        label: Text(text, style: GoogleFonts.poppins(color: Colors.white)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        side: BorderSide(color: Colors.grey.shade700),
+      ),
     );
   }
 
   Widget _buildMessageBubble(AiChatMessage message) {
     final bool isMe = message.isUserMessage;
-
     final alignment = isMe ? MainAxisAlignment.end : MainAxisAlignment.start;
     final bubbleColor = isMe ? Colors.blue : const Color(0xFF2A2A2A);
-    final textColor = isMe ? Colors.white : Colors.white;
     final borderRadius =
         isMe
             ? const BorderRadius.only(
@@ -392,11 +501,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
               topRight: Radius.circular(20),
               bottomRight: Radius.circular(20),
             );
-
     final bool isError = message.source == MessageSource.error;
-
-    // FINAL FIX: Use withAlpha to set opacity, resolving all deprecation warnings.
-    // 128 is ~50% opacity since the alpha channel goes from 0 (transparent) to 255 (opaque).
     final errorColor = Colors.red[900]!.withAlpha(128);
 
     return Column(
@@ -433,7 +538,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                 data: message.text.isEmpty ? " " : message.text,
                 selectable: true,
                 styleSheet: MarkdownStyleSheet(
-                  p: GoogleFonts.poppins(color: textColor, fontSize: 15),
+                  p: GoogleFonts.poppins(color: Colors.white, fontSize: 15),
                 ),
               ),
             ),
@@ -541,7 +646,6 @@ class _TypingIndicatorState extends State<TypingIndicator>
         duration: const Duration(milliseconds: 300),
       ),
     );
-
     for (int i = 0; i < 3; i++) {
       _animations.add(
         Tween<double>(begin: 0, end: -8).animate(
@@ -636,7 +740,6 @@ class ContextLabel extends StatelessWidget {
       default:
         return const SizedBox.shrink();
     }
-
     return Container(
       margin: const EdgeInsets.only(left: 48, bottom: 4),
       child: Row(

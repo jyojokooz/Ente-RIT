@@ -7,11 +7,12 @@ import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
 import 'id_card_screen.dart';
-import 'ai_chat_screen.dart';
+// --- FIX: Import the new chat history screen ---
+import 'ai_chat_history_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
 import 'event_list_screen.dart';
-import 'peer_rooms_screen.dart'; // Make sure this import path is correct for your project
+import 'peer_rooms_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -37,13 +38,11 @@ class ClassifyScreen extends StatelessWidget {
     const Color buttonTextColor = Colors.black;
 
     final List<Map<String, dynamic>> categories = [
-      // ... other categories are correct ...
       {
         'label': 'Departments',
         'icon': Icons.school,
         'color': Colors.blue.shade600,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const DepartmentsScreen(),
@@ -54,8 +53,7 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Events',
         'icon': Icons.calendar_today,
         'color': Colors.pink.shade400,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EventListScreen()),
             ),
@@ -64,12 +62,10 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
         'color': Colors.teal.shade400,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder:
-                    (context) => const GameViewScreen(
+                builder: (context) => const GameViewScreen(
                       title: 'Smash Karts',
                       url: 'https://poki.com/en/g/smash-karts',
                     ),
@@ -80,8 +76,7 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Digital ID',
         'icon': Icons.badge_outlined,
         'color': Colors.green.shade500,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const IdCardScreen()),
             ),
@@ -90,18 +85,17 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
         'color': Colors.purple.shade400,
-        'action':
-            () => Navigator.push(
+        // --- FIX: Navigate to the correct history screen ---
+        'action': () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const AIChatScreen()),
+              MaterialPageRoute(builder: (context) => const AiChatHistoryScreen()),
             ),
       },
       {
         'label': 'Code Playground',
         'icon': Icons.code,
         'color': Colors.indigo.shade400,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const CodePlaygroundScreen(),
@@ -112,8 +106,7 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Dev Community',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade600,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const DevCommunityScreen(),
@@ -124,11 +117,9 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
         'color': Colors.cyan.shade400,
-        'action':
-            () => Navigator.push(
+        'action': () => Navigator.push(
               context,
               MaterialPageRoute(
-                // THIS IS THE CORRECTED LINE
                 builder: (context) => const PeerRoomsScreen(),
               ),
             ),
@@ -144,8 +135,7 @@ class ClassifyScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       floatingActionButton: FloatingActionButton(
-        onPressed:
-            () => Navigator.push(
+        onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const CreatePostScreen()),
             ),
