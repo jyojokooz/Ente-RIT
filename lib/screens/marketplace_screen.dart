@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/marketplace_service.dart';
 import 'create_listing_screen.dart';
+import 'product_detail_screen.dart'; // <-- IMPORT DETAIL SCREEN
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -31,7 +32,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             MaterialPageRoute(builder: (_) => const CreateListingScreen()),
           );
         },
-        label: const Text('Sell Item'),
+        label: Text(
+          'Sell Item',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         icon: const Icon(Icons.add_shopping_cart),
         backgroundColor: Colors.amber.shade700,
         foregroundColor: Colors.black,
@@ -72,7 +76,18 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             itemCount: products.length,
             itemBuilder: (context, index) {
               final product = products[index];
-              return ProductCard(product: product);
+              // --- MODIFICATION: WRAP CARD IN GESTUREDETECTOR ---
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProductDetailScreen(product: product),
+                    ),
+                  );
+                },
+                child: ProductCard(product: product),
+              );
             },
           );
         },
@@ -99,7 +114,9 @@ class ProductCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
+            flex: 5,
             child: Container(
+              width: double.infinity,
               decoration: BoxDecoration(
                 image: DecorationImage(
                   image: NetworkImage(product.imageUrl),
@@ -108,51 +125,53 @@ class ProductCard extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  currencyFormatter.format(product.price),
-                  style: TextStyle(
-                    color: Colors.amber.shade600,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 10,
-                      backgroundImage: NetworkImage(product.sellerPhotoUrl),
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Text(
+                    product.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        product.sellerName,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    currencyFormatter.format(product.price),
+                    style: TextStyle(
+                      color: Colors.amber.shade600,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 10,
+                        backgroundImage: NetworkImage(product.sellerPhotoUrl),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          product.sellerName,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],

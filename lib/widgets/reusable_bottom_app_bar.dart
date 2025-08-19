@@ -1,11 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-// --- FIX APPLIED HERE: Using correct relative paths ---
 import '../helpers/fade_page_route.dart';
 import '../screens/classify_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
+// --- The import for 'inbox_screen.dart' is now removed ---
 
-// An enum to represent the active screen for highlighting the icon
+// --- 'inbox' is removed from the enum ---
 enum ActiveScreen { home, classify, profile, notifications }
 
 class ReusableBottomAppBar extends StatelessWidget {
@@ -18,6 +19,7 @@ class ReusableBottomAppBar extends StatelessWidget {
     const Color activeColor = Colors.yellow;
     final Color inactiveColor = Colors.white70;
     final Color bgColor = Colors.grey.shade900;
+    final currentUser = FirebaseAuth.instance.currentUser;
 
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
@@ -28,14 +30,12 @@ class ReusableBottomAppBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
+            // --- Home Button ---
             IconButton(
               tooltip: 'Home',
               icon: Icon(
-                Icons.home,
-                color:
-                    activeScreen == ActiveScreen.home
-                        ? activeColor
-                        : inactiveColor,
+                activeScreen == ActiveScreen.home ? Icons.home_filled : Icons.home_outlined,
+                color: activeScreen == ActiveScreen.home ? activeColor : inactiveColor,
               ),
               onPressed: () {
                 if (activeScreen != ActiveScreen.home) {
@@ -47,14 +47,12 @@ class ReusableBottomAppBar extends StatelessWidget {
                 }
               },
             ),
+            // --- Classify Button ---
             IconButton(
               tooltip: 'Classify',
               icon: Icon(
-                Icons.category_outlined,
-                color:
-                    activeScreen == ActiveScreen.classify
-                        ? activeColor
-                        : inactiveColor,
+                activeScreen == ActiveScreen.classify ? Icons.apps : Icons.apps_outlined,
+                color: activeScreen == ActiveScreen.classify ? activeColor : inactiveColor,
               ),
               onPressed: () {
                 if (activeScreen != ActiveScreen.classify) {
@@ -67,36 +65,36 @@ class ReusableBottomAppBar extends StatelessWidget {
               },
             ),
             const SizedBox(width: 40), // The space for the FloatingActionButton
+
+            // --- The Inbox button has been removed from here ---
+
+            // --- Profile Button ---
             IconButton(
               tooltip: 'Profile',
               icon: Icon(
-                Icons.person_outline,
-                color:
-                    activeScreen == ActiveScreen.profile
-                        ? activeColor
-                        : inactiveColor,
+                activeScreen == ActiveScreen.profile ? Icons.person : Icons.person_outline,
+                color: activeScreen == ActiveScreen.profile ? activeColor : inactiveColor,
               ),
               onPressed: () {
-                if (activeScreen != ActiveScreen.profile) {
+                if (currentUser != null && activeScreen != ActiveScreen.profile) {
                   Navigator.pushAndRemoveUntil(
                     context,
-                    FadePageRoute(child: const ProfileScreen()),
+                    FadePageRoute(child: ProfileScreen(userId: currentUser.uid)),
                     (route) => false,
                   );
                 }
               },
             ),
+
+            // --- Notifications Button (restored) ---
             IconButton(
               tooltip: 'Notifications',
               icon: Icon(
-                Icons.notifications_none,
-                color:
-                    activeScreen == ActiveScreen.notifications
-                        ? activeColor
-                        : inactiveColor,
+                activeScreen == ActiveScreen.notifications ? Icons.notifications : Icons.notifications_none,
+                color: activeScreen == ActiveScreen.notifications ? activeColor : inactiveColor,
               ),
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
+                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Notifications screen coming soon!'),
                   ),
