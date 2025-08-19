@@ -1,0 +1,135 @@
+import 'dart:async'; // <-- FIX: Changed period to colon
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+// A data model class for chat messages, now with helper methods for Firestore.
+class ChatMessage {
+  final String text;
+  final String sender;
+  final DateTime timestamp;
+  final String senderProfilePicUrl;
+
+  ChatMessage({
+    required this.text,
+    required this.sender,
+    required this.timestamp,
+    required this.senderProfilePicUrl,
+  });
+
+  factory ChatMessage.fromMap(Map<String, dynamic> map) {
+    final defaultAvatar =
+        'https://api.dicebear.com/7.x/pixel-art/png?seed=${map['sender'] ?? 'default'}';
+    return ChatMessage(
+      text: map['text'] ?? '',
+      sender: map['sender'] ?? 'Unknown',
+      timestamp: (map['timestamp'] as Timestamp).toDate(),
+      senderProfilePicUrl: map['senderProfilePicUrl'] ?? defaultAvatar,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'text': text,
+      'sender': sender,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'senderProfilePicUrl': senderProfilePicUrl,
+    };
+  }
+}
+
+// A data model for room information
+class Room {
+  final String name; // Document ID
+  final String hostId;
+
+  Room({required this.name, required this.hostId});
+
+  factory Room.fromSnapshot(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Room(
+      name: doc.id,
+      hostId: data['hostId'] ?? '',
+    );
+  }
+}
+
+class ChatService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Stream<List<Room>> get onRoomListChanged {
+    return _firestore.collection('rooms').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Room.fromSnapshot(doc)).toList();
+    });
+  }
+
+  Future<bool> createRoom(String name, String password, String hostId) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || password.trim().isEmpty) {
+      return false;
+    }
+    try {
+      final roomDocRef = _firestore.collection('rooms').doc(trimmedName);
+      final doc = await roomDocRef.get();
+      if (doc.exists) {
+        return false;
+      }
+      await roomDocRef.set({
+        'password': password,
+        'hostId': hostId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> deleteRoom(String roomName, String userId) async {
+    try {
+      final roomDocRef = _firestore.collection('rooms').doc(roomName);
+      final doc = await roomDocRef.get();
+      if (doc.exists && doc.data()?['hostId'] == userId) {
+        final messagesSnapshot = await roomDocRef.collection('messages').get();
+        for (var msg in messagesSnapshot.docs) {
+          await msg.reference.delete();
+        }
+        await roomDocRef.delete();
+      }
+    } catch (e) {
+      // Silently fail on error
+    }
+  }
+
+  Future<bool> verifyPassword(String roomName, String password) async {
+    try {
+      final doc = await _firestore.collection('rooms').doc(roomName).get();
+      if (!doc.exists) {
+        return false;
+      }
+      return doc.data()?['password'] == password;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  void sendMessage(String roomName, ChatMessage message) {
+    _firestore
+        .collection('rooms')
+        .doc(roomName)
+        .collection('messages')
+        .add(message.toMap());
+  }
+
+  Stream<List<ChatMessage>> getMessageStream(String roomName) {
+    return _firestore
+        .collection('rooms')
+        .doc(roomName)
+        .collection('messages')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ChatMessage.fromMap(doc.data()))
+          .toList();
+    });
+  }
+}

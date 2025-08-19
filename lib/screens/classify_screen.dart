@@ -10,7 +10,8 @@ import 'id_card_screen.dart';
 import 'ai_chat_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
-import 'event_list_screen.dart'; // <-- 1. IMPORT THE EVENT LIST SCREEN
+import 'event_list_screen.dart';
+import 'peer_rooms_screen.dart'; // Make sure this import path is correct for your project
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -35,8 +36,8 @@ class ClassifyScreen extends StatelessWidget {
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
-    // --- 2. ADD THE "EVENTS" CARD BACK TO THE LIST ---
     final List<Map<String, dynamic>> categories = [
+      // ... other categories are correct ...
       {
         'label': 'Departments',
         'icon': Icons.school,
@@ -116,6 +117,19 @@ class ClassifyScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => const DevCommunityScreen(),
+              ),
+            ),
+      },
+      {
+        'label': 'Peer Rooms',
+        'icon': Icons.group_outlined,
+        'color': Colors.cyan.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                // THIS IS THE CORRECTED LINE
+                builder: (context) => const PeerRoomsScreen(),
               ),
             ),
       },
