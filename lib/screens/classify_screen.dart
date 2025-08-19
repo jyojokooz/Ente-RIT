@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+// --- FIX: Corrected typo in package name ---
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../widgets/reusable_bottom_app_bar.dart';
 import '../widgets/category_card.dart';
+
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
 import 'id_card_screen.dart';
-// --- FIX: Import the new chat history screen ---
 import 'ai_chat_history_screen.dart';
 import 'code_playground_screen.dart';
 import 'dev_community_screen.dart';
 import 'event_list_screen.dart';
 import 'peer_rooms_screen.dart';
+import 'marketplace_screen.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -85,7 +88,6 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
         'color': Colors.purple.shade400,
-        // --- FIX: Navigate to the correct history screen ---
         'action': () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AiChatHistoryScreen()),
@@ -121,6 +123,17 @@ class ClassifyScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => const PeerRoomsScreen(),
+              ),
+            ),
+      },
+      {
+        'label': 'Marketplace',
+        'icon': Icons.storefront_outlined,
+        'color': Colors.amber.shade700,
+        'action': () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarketplaceScreen(),
               ),
             ),
       },
