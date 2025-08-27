@@ -3,15 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/reusable_bottom_app_bar.dart'; // Reusable widget handles navigation
+import '../widgets/reusable_bottom_app_bar.dart';
 import 'comments_screen.dart';
 import 'create_post_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'chat_list_screen.dart';
 import 'post_card.dart';
-
-// import 'classify_screen.dart'; // <-- FIX #1: REMOVED UNUSED IMPORT
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,6 +21,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   DateTime? _lastPressedAt;
+
+  Future<void> _refreshPosts() async {
+    // This provides the pull-to-refresh UX. The StreamBuilder handles live data.
+    setState(() {});
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
 
   Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
@@ -108,10 +112,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
-    // --- FIX #2: USING POPSCOPE WITH THE LATEST CALLBACK ---
+    // --- START: DEPRECATION FIX ---
     return PopScope(
       canPop: false,
+      // Replaced 'onPopInvoked' with 'onPopInvokedWithResult'
       onPopInvokedWithResult: (bool didPop, Object? _) {
+        // The logic inside remains the same. We just ignore the new result parameter with '_'
         if (didPop) return;
 
         final now = DateTime.now();
@@ -131,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SystemNavigator.pop();
         }
       },
+      // --- END: DEPRECATION FIX ---
       child: Scaffold(
         backgroundColor: Colors.black,
         floatingActionButton: FloatingActionButton(
@@ -149,73 +156,78 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: const ReusableBottomAppBar(
           activeScreen: ActiveScreen.home,
         ),
-        body: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _buildTopBar(Colors.white, cardBackgroundColor),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
-              StreamBuilder<QuerySnapshot>(
-                stream:
-                    FirebaseFirestore.instance
-                        .collection('posts')
-                        .orderBy('timestamp', descending: true)
-                        .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SliverFillRemaining(
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: primaryAccentColor,
+        body: RefreshIndicator(
+          onRefresh: _refreshPosts,
+          color: primaryAccentColor,
+          backgroundColor: cardBackgroundColor,
+          child: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildTopBar(Colors.white, cardBackgroundColor),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                StreamBuilder<QuerySnapshot>(
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection('posts')
+                          .orderBy('timestamp', descending: true)
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SliverFillRemaining(
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: primaryAccentColor,
+                          ),
                         ),
-                      ),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return SliverFillRemaining(
-                      child: Center(
-                        child: Text(
-                          'Something went wrong!',
-                          style: GoogleFonts.poppins(color: Colors.red),
-                        ),
-                      ),
-                    );
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return SliverFillRemaining(
-                      child: Center(
-                        child: Text(
-                          'No posts yet. Be the first!',
-                          style: GoogleFonts.poppins(color: Colors.white70),
-                        ),
-                      ),
-                    );
-                  }
-
-                  final posts = snapshot.data!.docs;
-                  return SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final postSnapshot = posts[index];
-                      final postData =
-                          postSnapshot.data() as Map<String, dynamic>;
-                      final postAuthorId = postData['userId'] ?? '';
-                      final currentLikes = postData['likes'] ?? [];
-
-                      return PostCard(
-                        postSnapshot: postSnapshot,
-                        onCommentPressed:
-                            () => _onCommentTapped(postSnapshot.id),
-                        onDeletePressed: () => _deletePost(postSnapshot.id),
-                        onProfileTapped: () => _onProfileTapped(postAuthorId),
-                        onLikePressed:
-                            () => _toggleLike(postSnapshot.id, currentLikes),
                       );
-                    }, childCount: posts.length),
-                  );
-                },
-              ),
-            ],
+                    }
+                    if (snapshot.hasError) {
+                      return SliverFillRemaining(
+                        child: Center(
+                          child: Text(
+                            'Something went wrong!',
+                            style: GoogleFonts.poppins(color: Colors.red),
+                          ),
+                        ),
+                      );
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return SliverFillRemaining(
+                        child: Center(
+                          child: Text(
+                            'No posts yet. Be the first!',
+                            style: GoogleFonts.poppins(color: Colors.white70),
+                          ),
+                        ),
+                      );
+                    }
+
+                    final posts = snapshot.data!.docs;
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final postSnapshot = posts[index];
+                        final postData =
+                            postSnapshot.data() as Map<String, dynamic>;
+                        final postAuthorId = postData['userId'] ?? '';
+                        final currentLikes = postData['likes'] ?? [];
+
+                        return PostCard(
+                          postSnapshot: postSnapshot,
+                          onCommentPressed:
+                              () => _onCommentTapped(postSnapshot.id),
+                          onDeletePressed: () => _deletePost(postSnapshot.id),
+                          onProfileTapped: () => _onProfileTapped(postAuthorId),
+                          onLikePressed:
+                              () => _toggleLike(postSnapshot.id, currentLikes),
+                        );
+                      }, childCount: posts.length),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),

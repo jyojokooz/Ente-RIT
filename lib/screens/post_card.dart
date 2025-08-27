@@ -25,23 +25,14 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final postData = postSnapshot.data() as Map<String, dynamic>;
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
 
-    // --- Data that belongs to the post itself ---
     final String postImage = postData['postImageUrl'] ?? '';
     final String caption = postData['caption'] ?? '';
-    final List<dynamic> likesList = postData['likes'] ?? [];
-    final bool isLiked = likesList.contains(currentUserId);
-    final int likeCount = likesList.length;
-    final int commentCount = postData['comments'] ?? 0;
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-
-    // --- Post Author ID ---
     final String postAuthorId = postData['userId'];
-
     final String heroTag = 'postImage-${postSnapshot.id}';
 
     return Padding(
@@ -55,7 +46,6 @@ class PostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- FIX: This header now fetches live user data ---
             _buildPostHeader(
               context: context,
               postAuthorId: postAuthorId,
@@ -114,11 +104,41 @@ class PostCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            _buildActionButtons(
-              context,
-              isLiked: isLiked,
-              likeCount: likeCount,
-              commentCount: commentCount,
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('posts')
+                      .doc(postSnapshot.id)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                // --- START: ROBUST DATA HANDLING FIX ---
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  // While loading, show an empty placeholder of the correct height
+                  return const SizedBox(height: 24);
+                }
+
+                // If post was deleted or data is otherwise unavailable, show nothing
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const SizedBox.shrink(); // Takes up no space
+                }
+
+                final realTimePostData =
+                    snapshot.data!.data() as Map<String, dynamic>;
+                // Safely get likes and comments, defaulting to empty/zero if the field doesn't exist yet
+                final List<dynamic> likesList = realTimePostData['likes'] ?? [];
+                final int commentCount = realTimePostData['comments'] ?? 0;
+                // --- END: ROBUST DATA HANDLING FIX ---
+
+                final bool isLiked = likesList.contains(currentUserId);
+                final int likeCount = likesList.length;
+
+                return _buildActionButtons(
+                  context,
+                  isLiked: isLiked,
+                  likeCount: likeCount,
+                  commentCount: commentCount,
+                );
+              },
             ),
           ],
         ),
@@ -126,8 +146,6 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  /// A helper widget that builds the post header using a StreamBuilder
-  /// to get real-time user data (name, username, profile picture).
   Widget _buildPostHeader({
     required BuildContext context,
     required String postAuthorId,
@@ -136,6 +154,7 @@ class PostCard extends StatelessWidget {
     required VoidCallback onProfileTapped,
     required VoidCallback onDeletePressed,
   }) {
+    // This widget is already robust and doesn't need changes.
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
 
@@ -145,16 +164,13 @@ class PostCard extends StatelessWidget {
             : '...';
 
     return StreamBuilder<DocumentSnapshot>(
-      // Listen to the specific user's document
       stream:
           FirebaseFirestore.instance
               .collection('users')
               .doc(postAuthorId)
               .snapshots(),
       builder: (context, snapshot) {
-        // --- Loading State ---
         if (!snapshot.hasData) {
-          // Show a placeholder while data is loading
           return Row(
             children: [
               const CircleAvatar(radius: 20, backgroundColor: Colors.grey),
@@ -181,13 +197,10 @@ class PostCard extends StatelessWidget {
           );
         }
 
-        // --- Data Loaded State ---
         final userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-        final String name =
-            userData['displayName'] ?? 'Unknown User'; // Use displayName
+        final String name = userData['displayName'] ?? 'Unknown User';
         final String username = userData['username'] ?? '';
-        final String userImage =
-            userData['profilePhotoUrl'] ?? ''; // Use profilePhotoUrl
+        final String userImage = userData['profilePhotoUrl'] ?? '';
 
         return GestureDetector(
           onTap: onProfileTapped,
@@ -252,13 +265,13 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  /// A helper widget for the action buttons (like, comment, share)
   Widget _buildActionButtons(
     BuildContext context, {
     required bool isLiked,
     required int likeCount,
     required int commentCount,
   }) {
+    // This widget is fine and doesn't need changes.
     const Color primaryAccentColor = Colors.yellow;
     const Color secondaryTextColor = Colors.white70;
 

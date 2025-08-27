@@ -22,50 +22,80 @@ class _CommentsScreenState extends State<CommentsScreen> {
     super.dispose();
   }
 
+  // --- START: THE DEFINITIVE _postComment METHOD ---
   Future<void> _postComment() async {
-    // This function remains the same
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
     final currentFocus = FocusScope.of(context);
+    if (currentFocus.hasFocus) {
+      currentFocus.unfocus();
+    }
+
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postId);
-    final commentRef = postRef.collection('comments');
+    final commentCollectionRef = postRef.collection('comments');
     final userDoc =
         await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser.uid)
             .get();
+
+    if (!userDoc.exists) return; // Guard against missing user data
+
     final userData = userDoc.data() as Map<String, dynamic>;
 
-    if (currentFocus.hasFocus) {
-      currentFocus.unfocus();
-    }
-    _commentController.clear();
-
-    await commentRef.add({
+    final newCommentData = {
       'text': text,
       'userName': userData['displayName'] ?? 'A User',
       'userImageUrl': userData['profilePhotoUrl'] ?? '',
       'userId': _currentUser.uid,
       'timestamp': FieldValue.serverTimestamp(),
-    });
+    };
 
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      transaction.update(postRef, {'comments': FieldValue.increment(1)});
-    });
+    // Clear the input field immediately for better UX
+    _commentController.clear();
+
+    // THIS TRANSACTION IS THE FIX. IT GUARANTEES THE 'comments' FIELD IS CREATED AND UPDATED.
+    await FirebaseFirestore.instance
+        .runTransaction((transaction) async {
+          // Step 1: Read the post document inside the transaction.
+          final postSnapshot = await transaction.get(postRef);
+
+          if (!postSnapshot.exists) {
+            throw Exception("Post does not exist!");
+          }
+
+          // Step 2: Safely get the current comment count. If the 'comments' field doesn't exist, default to 0.
+          final currentCommentCount =
+              (postSnapshot.data() as Map<String, dynamic>)['comments'] ?? 0;
+
+          // Step 3: Update the post document with the new count (current count + 1).
+          // This will CREATE the field if it's missing or UPDATE it if it exists.
+          transaction.update(postRef, {'comments': currentCommentCount + 1});
+
+          // Step 4: Add the new comment document to the subcollection.
+          final newCommentDocRef = commentCollectionRef.doc();
+          transaction.set(newCommentDocRef, newCommentData);
+        })
+        .catchError((error) {
+          // Handle any errors during the transaction
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Failed to post comment: $error")),
+            );
+          }
+        });
   }
+  // --- END: DEFINITIVE METHOD ---
 
-  // --- NEW METHOD TO DELETE A COMMENT ---
   Future<void> _deleteComment(String commentId) async {
-    // Get a reference to the post and the specific comment
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postId);
     final commentRef = postRef.collection('comments').doc(commentId);
 
-    // Show a confirmation dialog
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -92,13 +122,10 @@ class _CommentsScreenState extends State<CommentsScreen> {
       },
     );
 
-    // If the user confirmed the deletion
     if (didRequestDelete == true) {
-      // Delete the comment document from the subcollection
-      await commentRef.delete();
-
-      // Use a transaction to safely decrement the comment count on the main post
+      // Using a transaction for deletion is also safer.
       await FirebaseFirestore.instance.runTransaction((transaction) async {
+        transaction.delete(commentRef);
         transaction.update(postRef, {'comments': FieldValue.increment(-1)});
       });
     }
@@ -106,6 +133,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The rest of your build method is correct and does not need changes.
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -154,8 +182,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
                     final timestamp =
                         (commentData['timestamp'] as Timestamp?)?.toDate();
                     final commentAuthorId = commentData['userId'];
-
-                    // --- CHECK IF THE CURRENT USER IS THE AUTHOR OF THE COMMENT ---
                     final bool isAuthor = _currentUser.uid == commentAuthorId;
 
                     return ListTile(
@@ -200,7 +226,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
                           ),
                         ),
                       ),
-                      // --- SHOW DELETE BUTTON ONLY IF isAuthor IS TRUE ---
                       trailing:
                           isAuthor
                               ? IconButton(
@@ -211,7 +236,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                                 ),
                                 onPressed: () => _deleteComment(comment.id),
                               )
-                              : null, // Show nothing if not the author
+                              : null,
                     );
                   },
                 );
@@ -225,7 +250,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
   }
 
   Widget _buildCommentInputField() {
-    // This widget remains the same
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       decoration: BoxDecoration(
