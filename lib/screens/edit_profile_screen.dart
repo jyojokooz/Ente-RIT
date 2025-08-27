@@ -1,4 +1,4 @@
-import 'dart:math'; // <-- FIX APPLIED HERE
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -138,11 +138,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .doc(user.uid);
       final userDoc = await userDocRef.get();
       String? studentId;
-      FieldValue joinedAt;
+      dynamic joinedAt; // <-- FIX: Changed FieldValue to dynamic
 
       if (userDoc.exists &&
           (userDoc.data() as Map<String, dynamic>).containsKey('studentId')) {
         studentId = userDoc.data()!['studentId'];
+        // This line now works because 'dynamic' can hold a Timestamp or FieldValue
         joinedAt = userDoc.data()!['joinedAt'] ?? FieldValue.serverTimestamp();
       } else {
         studentId = (Random().nextInt(900000000) + 100000000).toString();
