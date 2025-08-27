@@ -19,7 +19,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   final user = FirebaseAuth.instance.currentUser!;
   bool _isLoading = true;
-  String _initialUsername = '';
+  String _initialUsername = ''; // <-- ADDED: To store the username on load
 
   List<String> _departmentOptions = [];
   String? _selectedDepartment;
@@ -70,7 +70,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           final data = docSnapshot.data()!;
           _nameController.text = data['displayName'] ?? user.displayName ?? '';
           _usernameController.text = data['username'] ?? '';
-          _initialUsername = data['username'] ?? '';
+          _initialUsername =
+              data['username'] ?? ''; // <-- ADDED: Store the username
           _bioController.text = data['bio'] ?? '';
           _linksController.text = data['links'] ?? '';
           final currentDept = data['department'];
@@ -111,22 +112,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final newUsername = _usernameController.text.trim();
     final newDisplayName = _nameController.text.trim();
 
+    // --- START: USERNAME UNIQUENESS CHECK ---
+    // Only query the database if the username has actually been changed.
     if (newUsername.toLowerCase() != _initialUsername.toLowerCase()) {
       final usersRef = FirebaseFirestore.instance.collection('users');
+      // Query for the new username (case-insensitive)
       final querySnapshot =
           await usersRef
               .where('searchableUsername', isEqualTo: newUsername.toLowerCase())
               .get();
+
+      // If any documents are found, the username is already taken.
       if (querySnapshot.docs.isNotEmpty) {
+        // Show a "pop-up" error message and stop the function
         scaffoldMessenger.showSnackBar(
           const SnackBar(
-            content: Text('This username is already taken.'),
+            content: Text(
+              'This username is already taken. Please choose another.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
-        return;
+        return; // Stop the function here
       }
     }
+    // --- END: USERNAME UNIQUENESS CHECK ---
 
     scaffoldMessenger.showSnackBar(
       const SnackBar(content: Text('Saving profile...')),
@@ -138,12 +148,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .doc(user.uid);
       final userDoc = await userDocRef.get();
       String? studentId;
-      dynamic joinedAt; // <-- FIX: Changed FieldValue to dynamic
+      dynamic joinedAt;
 
       if (userDoc.exists &&
           (userDoc.data() as Map<String, dynamic>).containsKey('studentId')) {
         studentId = userDoc.data()!['studentId'];
-        // This line now works because 'dynamic' can hold a Timestamp or FieldValue
         joinedAt = userDoc.data()!['joinedAt'] ?? FieldValue.serverTimestamp();
       } else {
         studentId = (Random().nextInt(900000000) + 100000000).toString();
@@ -157,7 +166,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'displayName': newDisplayName,
         'username': newUsername,
         'searchableDisplayName': newDisplayName.toLowerCase(),
-        'searchableUsername': newUsername.toLowerCase(),
+        'searchableUsername':
+            newUsername.toLowerCase(), // <-- Make sure this is saved
         'bio': _bioController.text.trim(),
         'links': _linksController.text.trim(),
         'department': _selectedDepartment,
