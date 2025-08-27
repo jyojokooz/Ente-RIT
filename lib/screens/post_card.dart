@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'full_screen_image_viewer.dart'; // Make sure this import is correct
+import 'full_screen_image_viewer.dart';
+import 'full_screen_video_player.dart';
 
 class PostCard extends StatelessWidget {
   final DocumentSnapshot postSnapshot;
@@ -28,7 +29,16 @@ class PostCard extends StatelessWidget {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
 
-    final String postImage = postData['postImageUrl'] ?? '';
+    // --- START: THE FIX FOR BACKWARD COMPATIBILITY ---
+    // First, try to get the new 'postMediaUrl'. If it's null (for old posts),
+    // then try to get the old 'postImageUrl'. If both are null, default to empty.
+    final String mediaUrl =
+        postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
+    // --- END: THE FIX FOR BACKWARD COMPATIBILITY ---
+
+    final String postType =
+        postData['postType'] ?? 'image'; // Default old posts to 'image'
+    final String? thumbnailUrl = postData['postThumbnailUrl'];
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
@@ -64,44 +74,13 @@ class PostCard extends StatelessWidget {
                   ),
                 ),
               ),
-            if (postImage.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => FullScreenImageViewer(
-                            imageUrl: postImage,
-                            heroTag: heroTag,
-                          ),
-                    ),
-                  );
-                },
-                child: Hero(
-                  tag: heroTag,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15.0),
-                    child: Image.network(
-                      postImage,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: 300,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          height: 300,
-                          color: Colors.grey.shade800,
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.yellow,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
+            if (mediaUrl.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child:
+                    (postType == 'video')
+                        ? _buildVideoPlayer(context, mediaUrl, thumbnailUrl)
+                        : _buildImageViewer(context, mediaUrl, heroTag),
               ),
             const SizedBox(height: 12),
             StreamBuilder<DocumentSnapshot>(
@@ -111,27 +90,18 @@ class PostCard extends StatelessWidget {
                       .doc(postSnapshot.id)
                       .snapshots(),
               builder: (context, snapshot) {
-                // --- START: ROBUST DATA HANDLING FIX ---
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  // While loading, show an empty placeholder of the correct height
                   return const SizedBox(height: 24);
                 }
-
-                // If post was deleted or data is otherwise unavailable, show nothing
                 if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const SizedBox.shrink(); // Takes up no space
+                  return const SizedBox.shrink();
                 }
-
                 final realTimePostData =
                     snapshot.data!.data() as Map<String, dynamic>;
-                // Safely get likes and comments, defaulting to empty/zero if the field doesn't exist yet
                 final List<dynamic> likesList = realTimePostData['likes'] ?? [];
                 final int commentCount = realTimePostData['comments'] ?? 0;
-                // --- END: ROBUST DATA HANDLING FIX ---
-
                 final bool isLiked = likesList.contains(currentUserId);
                 final int likeCount = likesList.length;
-
                 return _buildActionButtons(
                   context,
                   isLiked: isLiked,
@@ -146,6 +116,108 @@ class PostCard extends StatelessWidget {
     );
   }
 
+  Widget _buildVideoPlayer(
+    BuildContext context,
+    String videoUrl,
+    String? thumbnailUrl,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FullScreenVideoPlayer(videoUrl: videoUrl),
+          ),
+        );
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(15.0),
+            child: Image.network(
+              thumbnailUrl ??
+                  'https://via.placeholder.com/300/000000/FFFFFF/?text=Video',
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: 300,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Container(
+                  height: 300,
+                  color: Colors.grey.shade800,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.yellow),
+                  ),
+                );
+              },
+              errorBuilder:
+                  (context, error, stackTrace) => Container(
+                    height: 300,
+                    color: Colors.grey.shade800,
+                    child: const Center(
+                      child: Icon(Icons.error, color: Colors.red),
+                    ),
+                  ),
+            ),
+          ),
+          Container(
+            decoration: const BoxDecoration(
+              color: Colors.black38,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 80.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageViewer(
+    BuildContext context,
+    String imageUrl,
+    String heroTag,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) =>
+                    FullScreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
+          ),
+        );
+      },
+      child: Hero(
+        tag: heroTag,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15.0),
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: 300,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                height: 300,
+                color: Colors.grey.shade800,
+                child: const Center(
+                  child: CircularProgressIndicator(color: Colors.yellow),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPostHeader({
     required BuildContext context,
     required String postAuthorId,
@@ -154,7 +226,6 @@ class PostCard extends StatelessWidget {
     required VoidCallback onProfileTapped,
     required VoidCallback onDeletePressed,
   }) {
-    // This widget is already robust and doesn't need changes.
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
 
@@ -271,7 +342,6 @@ class PostCard extends StatelessWidget {
     required int likeCount,
     required int commentCount,
   }) {
-    // This widget is fine and doesn't need changes.
     const Color primaryAccentColor = Colors.yellow;
     const Color secondaryTextColor = Colors.white70;
 

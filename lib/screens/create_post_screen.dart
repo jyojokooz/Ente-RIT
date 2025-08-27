@@ -3,13 +3,15 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart'; // <-- 1. IMPORT
-import 'package:google_fonts/google_fonts.dart';
+import 'package:google_fonts/google_fonts.dart'; // <-- FIX: Corrected import path
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart'; // <-- For creating a temp path
+import 'package:video_compress/video_compress.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
+
+enum PostType { image, video, none }
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -21,82 +23,153 @@ class CreatePostScreen extends StatefulWidget {
 class _CreatePostScreenState extends State<CreatePostScreen> {
   final _captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
-  File? _imageFile;
+
+  File? _mediaFile;
+  File? _thumbnailFile;
+  PostType _postType = PostType.none;
   bool _isUploading = false;
+  String _uploadStatus = '';
 
-  // --- 2. ADD THE COMPRESSION HELPER FUNCTION ---
-  Future<File?> _compressImage(File file) async {
-    // Get a temporary directory to store the compressed file.
-    final tempDir = await getTemporaryDirectory();
-    final tempPath =
-        '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-    // Compress the file
-    final XFile? compressedXFile =
-        await FlutterImageCompress.compressAndGetFile(
-          file.absolute.path, // The path of the original file
-          tempPath, // The path to save the compressed file
-          quality: 70, // Compression quality (0-100)
-          minWidth: 1080, // Resize the image if it's wider than this
-          minHeight: 1080, // Resize the image if it's taller than this
-        );
-
-    if (compressedXFile == null) return null;
-    return File(compressedXFile.path);
-  }
-
-  Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
+  Future<void> _generateThumbnail(String videoPath) async {
+    final thumbnailPath = await VideoThumbnail.thumbnailFile(
+      video: videoPath,
+      imageFormat: ImageFormat.JPEG,
+      quality: 75,
+    );
+    if (thumbnailPath != null && mounted) {
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _thumbnailFile = File(thumbnailPath);
       });
     }
   }
 
+  Future<File?> _compressVideo(File file) async {
+    if (mounted) setState(() => _uploadStatus = 'Compressing video...');
+    final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
+      file.path,
+      quality: VideoQuality.MediumQuality,
+      deleteOrigin: false,
+    );
+    return mediaInfo?.file;
+  }
+
+  Future<void> _pickImage() async {
+    Navigator.of(context).pop();
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery); // <-- FIX: Corrected 'ImageSource'
+    if (pickedFile != null && mounted) {
+      setState(() {
+        _mediaFile = File(pickedFile.path);
+        _postType = PostType.image;
+        _thumbnailFile = null;
+      });
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    Navigator.of(context).pop();
+    final pickedFile = await _picker.pickVideo(
+      source: ImageSource.gallery, // <-- FIX: Corrected 'ImageSource'
+      maxDuration: const Duration(seconds: 60),
+    );
+    if (pickedFile != null && mounted) {
+      setState(() {
+        _mediaFile = File(pickedFile.path);
+        _postType = PostType.video;
+      });
+      await _generateThumbnail(pickedFile.path);
+    }
+  }
+
+  void _showPickOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey.shade900,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.white),
+              title: const Text('Pick Image from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: _pickImage,
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library, color: Colors.white),
+              title: const Text('Pick Video from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: _pickVideo,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _createPost() async {
-    if (_imageFile == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select an image.')));
+    if (_mediaFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select an image or video.')));
       return;
     }
-    if (_isUploading) return;
+    if (_isUploading) {
+      return;
+    }
 
-    setState(() => _isUploading = true);
+    if (mounted) setState(() => _isUploading = true);
 
     try {
-      // --- 3. COMPRESS THE IMAGE BEFORE UPLOADING ---
-      final compressedFile = await _compressImage(_imageFile!);
-      if (compressedFile == null) {
-        throw Exception('Image compression failed.');
+      final user = FirebaseAuth.instance.currentUser!;
+      final cloudinary = CloudinaryPublic(cloudinaryCloudName, cloudinaryUploadPreset);
+
+      String mediaUrl;
+      String? thumbnailUrl;
+      String postTypeString;
+
+      if (_postType == PostType.video) {
+        postTypeString = 'video';
+        final compressedVideo = await _compressVideo(_mediaFile!);
+        if (compressedVideo == null) {
+          throw Exception("Video compression failed");
+        }
+
+        if (_thumbnailFile != null) {
+          if (mounted) setState(() => _uploadStatus = 'Uploading thumbnail...');
+          CloudinaryResponse thumbResponse = await cloudinary.uploadFile(
+            CloudinaryFile.fromFile(
+              _thumbnailFile!.path,
+              folder: 'thumbnails/${user.uid}',
+              resourceType: CloudinaryResourceType.Image,
+            ),
+          );
+          thumbnailUrl = thumbResponse.secureUrl;
+        }
+
+        if (mounted) setState(() => _uploadStatus = 'Uploading video...');
+        CloudinaryResponse videoResponse = await cloudinary.uploadFile(
+          CloudinaryFile.fromFile(
+            compressedVideo.path,
+            folder: 'posts/${user.uid}',
+            resourceType: CloudinaryResourceType.Video,
+          ),
+        );
+        mediaUrl = videoResponse.secureUrl;
+      } else {
+        postTypeString = 'image';
+        if (mounted) setState(() => _uploadStatus = 'Uploading image...');
+        CloudinaryResponse imageResponse = await cloudinary.uploadFile(
+          CloudinaryFile.fromFile(
+            _mediaFile!.path,
+            folder: 'posts/${user.uid}',
+            resourceType: CloudinaryResourceType.Image,
+          ),
+        );
+        mediaUrl = imageResponse.secureUrl;
       }
 
-      final user = FirebaseAuth.instance.currentUser!;
-      final cloudinary = CloudinaryPublic(
-        cloudinaryCloudName,
-        cloudinaryUploadPreset,
-      );
-
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          compressedFile.path, // <-- Use the compressed file
-          folder: 'posts/${user.uid}',
-          resourceType: CloudinaryResourceType.Image,
-        ),
-      );
-
-      // ... rest of the function is the same ...
-      final imageUrl = response.secureUrl;
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final userData = userDoc.data() as Map<String, dynamic>;
       final postData = {
-        'postImageUrl': imageUrl,
-        'caption': _captionController.text,
+        'postType': postTypeString,
+        'postMediaUrl': mediaUrl,
+        'postThumbnailUrl': thumbnailUrl,
+        'caption': _captionController.text.trim(),
         'userId': user.uid,
         'userName': userData['displayName'] ?? 'A User',
         'username': userData['username'] ?? '',
@@ -111,18 +184,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create post: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create post: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
   }
 
-  // ... rest of the file (dispose, build) is unchanged ...
   @override
   void dispose() {
     _captionController.dispose();
+    VideoCompress.dispose();
     super.dispose();
   }
 
@@ -168,31 +239,32 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         child: Column(
           children: [
             GestureDetector(
-              onTap: _pickImage,
+              onTap: _showPickOptions,
               child: AspectRatio(
                 aspectRatio: 1,
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.grey.shade900,
                     borderRadius: BorderRadius.circular(15),
-                    image:
-                        _imageFile != null
-                            ? DecorationImage(
-                              image: FileImage(_imageFile!),
-                              fit: BoxFit.cover,
-                            )
-                            : null,
-                  ),
-                  child:
-                      _imageFile == null
-                          ? const Center(
-                            child: Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 60,
-                              color: Colors.white70,
-                            ),
+                    image: _mediaFile != null && (_postType == PostType.image || _thumbnailFile != null)
+                        ? DecorationImage(
+                            image: FileImage(_postType == PostType.video ? _thumbnailFile! : _mediaFile!),
+                            fit: BoxFit.cover,
                           )
-                          : null,
+                        : null,
+                  ),
+                  child: _mediaFile == null
+                      ? const Center(
+                          child: Icon(
+                            Icons.add_a_photo_outlined,
+                            size: 60,
+                            color: Colors.white70,
+                          ),
+                        )
+                      : (_postType == PostType.video
+                          ? const Center(
+                              child: Icon(Icons.play_circle_fill_outlined, size: 80, color: Colors.white70))
+                          : null),
                 ),
               ),
             ),
@@ -212,6 +284,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 ),
               ),
             ),
+            if (_isUploading) ...[
+              const SizedBox(height: 20),
+              const CircularProgressIndicator(color: Colors.yellow),
+              const SizedBox(height: 10),
+              Text(_uploadStatus, style: const TextStyle(color: Colors.white70)),
+            ]
           ],
         ),
       ),
