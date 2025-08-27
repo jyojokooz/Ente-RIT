@@ -12,6 +12,7 @@ class PostCard extends StatelessWidget {
   final Function() onDeletePressed;
   final Function() onProfileTapped;
   final Function() onLikePressed;
+  final Function() onEditPressed; // Callback for editing
 
   const PostCard({
     super.key,
@@ -20,6 +21,7 @@ class PostCard extends StatelessWidget {
     required this.onDeletePressed,
     required this.onProfileTapped,
     required this.onLikePressed,
+    required this.onEditPressed, // Added to constructor
   });
 
   @override
@@ -29,15 +31,9 @@ class PostCard extends StatelessWidget {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
 
-    // --- START: THE FIX FOR BACKWARD COMPATIBILITY ---
-    // First, try to get the new 'postMediaUrl'. If it's null (for old posts),
-    // then try to get the old 'postImageUrl'. If both are null, default to empty.
     final String mediaUrl =
         postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
-    // --- END: THE FIX FOR BACKWARD COMPATIBILITY ---
-
-    final String postType =
-        postData['postType'] ?? 'image'; // Default old posts to 'image'
+    final String postType = postData['postType'] ?? 'image';
     final String? thumbnailUrl = postData['postThumbnailUrl'];
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
@@ -63,6 +59,7 @@ class PostCard extends StatelessWidget {
               isAuthor: isAuthor,
               onProfileTapped: onProfileTapped,
               onDeletePressed: onDeletePressed,
+              onEditPressed: onEditPressed, // Pass callback to header
             ),
             if (caption.isNotEmpty)
               Padding(
@@ -225,6 +222,7 @@ class PostCard extends StatelessWidget {
     required bool isAuthor,
     required VoidCallback onProfileTapped,
     required VoidCallback onDeletePressed,
+    required VoidCallback onEditPressed, // Receive the edit callback
   }) {
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
@@ -315,19 +313,35 @@ class PostCard extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
-                if (isAuthor) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                if (isAuthor)
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        onEditPressed();
+                      } else if (value == 'delete') {
+                        onDeletePressed();
+                      }
+                    },
+                    itemBuilder:
+                        (BuildContext context) => <PopupMenuEntry<String>>[
+                          const PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Text('Edit Post'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text(
+                              'Delete Post',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                    color: Colors.grey.shade800,
                     icon: const Icon(
                       Icons.more_horiz,
                       color: secondaryTextColor,
                     ),
-                    onPressed: onDeletePressed,
                   ),
-                ],
               ],
             ),
           ),

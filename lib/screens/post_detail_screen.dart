@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
+import 'edit_post_screen.dart'; // <-- 1. IMPORT THE EDIT SCREEN
 import 'post_card.dart';
 import 'profile_screen.dart';
 
@@ -15,28 +16,44 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  // --- ADDED THE LIKE/UNLIKE LOGIC HERE ---
   Future<void> _toggleLike() async {
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postSnapshot.id);
     final user = FirebaseAuth.instance.currentUser!;
 
-    // We get the most current data directly from the snapshot
-    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
-    final List<dynamic> currentLikes = postData['likes'] ?? [];
+    // Use a transaction to get the most up-to-date data before writing
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final freshSnap = await transaction.get(postRef);
+      if (!freshSnap.exists) {
+        throw Exception("Post does not exist!");
+      }
+      final List<dynamic> currentLikes =
+          (freshSnap.data() as Map<String, dynamic>)['likes'] ?? [];
+      final isLiked = currentLikes.contains(user.uid);
 
-    final isLiked = currentLikes.contains(user.uid);
+      if (isLiked) {
+        transaction.update(postRef, {
+          'likes': FieldValue.arrayRemove([user.uid]),
+        });
+      } else {
+        transaction.update(postRef, {
+          'likes': FieldValue.arrayUnion([user.uid]),
+        });
+      }
+    });
+  }
 
-    if (isLiked) {
-      await postRef.update({
-        'likes': FieldValue.arrayRemove([user.uid]),
-      });
-    } else {
-      await postRef.update({
-        'likes': FieldValue.arrayUnion([user.uid]),
-      });
-    }
+  // --- 2. ADD THE EDIT POST FUNCTION ---
+  void _editPost(String postId, String currentCaption) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) =>
+                EditPostScreen(postId: postId, initialCaption: currentCaption),
+      ),
+    );
   }
 
   Future<void> _deletePost(String postId) async {
@@ -74,7 +91,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             .collection('posts')
             .doc(postId)
             .delete();
-        navigator.pop();
+        // Check if the screen can be popped before popping
+        if (navigator.canPop()) {
+          navigator.pop();
+        }
         scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Post deleted successfully.'),
@@ -107,11 +127,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // We can get static data once here, like the author ID.
     final postData = widget.postSnapshot.data() as Map<String, dynamic>;
     final postAuthorId = postData['userId'] ?? '';
 
-    // Since this screen shows a snapshot in time, we use a StreamBuilder
-    // to listen for real-time updates (likes, comments) for this single post.
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -130,7 +149,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               child: CircularProgressIndicator(color: Colors.yellow),
             );
           }
+          // If the post was deleted while the user is viewing it
+          if (!snapshot.data!.exists) {
+            return Center(
+              child: Text(
+                'This post has been deleted.',
+                style: GoogleFonts.poppins(color: Colors.white70),
+              ),
+            );
+          }
+
           final updatedPostSnapshot = snapshot.data!;
+          final updatedPostData =
+              updatedPostSnapshot.data() as Map<String, dynamic>;
+          final currentCaption = updatedPostData['caption'] ?? '';
 
           return SingleChildScrollView(
             child: Padding(
@@ -141,8 +173,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     () => _onCommentTapped(updatedPostSnapshot.id),
                 onDeletePressed: () => _deletePost(updatedPostSnapshot.id),
                 onProfileTapped: () => _onProfileTapped(postAuthorId),
-                // --- FIX APPLIED HERE ---
                 onLikePressed: _toggleLike,
+                // --- 3. ADD THE MISSING onEditPressed ARGUMENT ---
+                onEditPressed:
+                    () => _editPost(updatedPostSnapshot.id, currentCaption),
               ),
             ),
           );

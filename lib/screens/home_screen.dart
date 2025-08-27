@@ -10,6 +10,7 @@ import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'chat_list_screen.dart';
 import 'post_card.dart';
+import 'edit_post_screen.dart'; // Import the new screen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,9 +24,20 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _lastPressedAt;
 
   Future<void> _refreshPosts() async {
-    // This provides the pull-to-refresh UX. The StreamBuilder handles live data.
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  // New function to handle navigation to the edit screen
+  void _editPost(String postId, String currentCaption) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) =>
+                EditPostScreen(postId: postId, initialCaption: currentCaption),
+      ),
+    );
   }
 
   Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
@@ -112,12 +124,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color buttonTextColor = Colors.black;
 
-    // --- START: DEPRECATION FIX ---
     return PopScope(
       canPop: false,
-      // Replaced 'onPopInvoked' with 'onPopInvokedWithResult'
       onPopInvokedWithResult: (bool didPop, Object? _) {
-        // The logic inside remains the same. We just ignore the new result parameter with '_'
         if (didPop) return;
 
         final now = DateTime.now();
@@ -137,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
           SystemNavigator.pop();
         }
       },
-      // --- END: DEPRECATION FIX ---
       child: Scaffold(
         backgroundColor: Colors.black,
         floatingActionButton: FloatingActionButton(
@@ -212,6 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             postSnapshot.data() as Map<String, dynamic>;
                         final postAuthorId = postData['userId'] ?? '';
                         final currentLikes = postData['likes'] ?? [];
+                        final currentCaption = postData['caption'] ?? '';
 
                         return PostCard(
                           postSnapshot: postSnapshot,
@@ -221,6 +230,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           onProfileTapped: () => _onProfileTapped(postAuthorId),
                           onLikePressed:
                               () => _toggleLike(postSnapshot.id, currentLikes),
+                          onEditPressed:
+                              () => _editPost(
+                                postSnapshot.id,
+                                currentCaption,
+                              ), // Pass the callback
                         );
                       }, childCount: posts.length),
                     );
