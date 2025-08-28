@@ -14,6 +14,7 @@ import 'requests_screen.dart';
 import 'chat_screen.dart';
 import 'create_post_screen.dart';
 import 'driver_tracking_screen.dart';
+import 'home_screen.dart'; // <-- 1. IMPORT THE HOME SCREEN
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -370,11 +371,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Icons.arrow_back,
                               color: Colors.white,
                             ),
+                            // --- START: 2. FIX THE BACK BUTTON LOGIC ---
                             onPressed: () {
+                              // If there is a screen to go back to (e.g., you came from another profile), just pop.
                               if (Navigator.canPop(context)) {
                                 Navigator.of(context).pop();
+                              } else {
+                                // Otherwise, this screen was likely opened from the bottom nav bar.
+                                // Replace it with the HomeScreen to prevent a growing stack and a blank screen.
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const HomeScreen(),
+                                  ),
+                                );
                               }
                             },
+                            // --- END: 2. FIX THE BACK BUTTON LOGIC ---
                           ),
                         ),
                       ),
@@ -816,7 +829,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final cardColor = Colors.grey.shade900;
 
     final List<DocumentSnapshot> filteredPosts;
-    // --- START: FIX FOR REDUNDANT DEFAULT CLAUSE ---
     switch (_selectedTab) {
       case ProfileTab.photos:
         filteredPosts =
@@ -837,7 +849,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         filteredPosts = _userPosts;
         break;
     }
-    // --- END: FIX FOR REDUNDANT DEFAULT CLAUSE ---
 
     if (filteredPosts.isEmpty) {
       return SliverToBoxAdapter(
