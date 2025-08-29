@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-// --- FIX: Corrected typo in package name ---
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../widgets/reusable_bottom_app_bar.dart';
-import '../widgets/category_card.dart';
-
+// --- Screen Imports ---
 import 'departments_screen.dart';
 import 'game_view_screen.dart';
 import 'create_post_screen.dart';
@@ -16,6 +13,11 @@ import 'dev_community_screen.dart';
 import 'event_list_screen.dart';
 import 'peer_rooms_screen.dart';
 import 'marketplace_screen.dart';
+import 'tech_news_screen.dart'; // Import the Tech News screen
+
+// --- Widget Imports ---
+import '../widgets/reusable_bottom_app_bar.dart';
+import '../widgets/category_card.dart';
 
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
@@ -42,10 +44,12 @@ class ClassifyScreen extends StatelessWidget {
 
     final List<Map<String, dynamic>> categories = [
       {
-        'label': 'Departments',
+        // --- MODIFIED: Renamed 'Departments' to 'Department Notes' ---
+        'label': 'Department Notes',
         'icon': Icons.school,
         'color': Colors.blue.shade600,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const DepartmentsScreen(),
@@ -56,19 +60,33 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Events',
         'icon': Icons.calendar_today,
         'color': Colors.pink.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EventListScreen()),
+            ),
+      },
+      // --- ADDED: New card for Tech News ---
+      {
+        'label': 'Tech News',
+        'icon': Icons.newspaper_outlined,
+        'color': Colors.grey.shade600,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TechNewsScreen()),
             ),
       },
       {
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
         'color': Colors.teal.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const GameViewScreen(
+                builder:
+                    (context) => const GameViewScreen(
                       title: 'Smash Karts',
                       url: 'https://poki.com/en/g/smash-karts',
                     ),
@@ -79,7 +97,8 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Digital ID',
         'icon': Icons.badge_outlined,
         'color': Colors.green.shade500,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const IdCardScreen()),
             ),
@@ -88,16 +107,20 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
         'color': Colors.purple.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const AiChatHistoryScreen()),
+              MaterialPageRoute(
+                builder: (context) => const AiChatHistoryScreen(),
+              ),
             ),
       },
       {
         'label': 'Code Playground',
         'icon': Icons.code,
         'color': Colors.indigo.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const CodePlaygroundScreen(),
@@ -108,7 +131,8 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Dev Community',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade600,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const DevCommunityScreen(),
@@ -119,18 +143,18 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
         'color': Colors.cyan.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => const PeerRoomsScreen(),
-              ),
+              MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
             ),
       },
       {
         'label': 'Marketplace',
         'icon': Icons.storefront_outlined,
         'color': Colors.amber.shade700,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const MarketplaceScreen(),
@@ -148,7 +172,8 @@ class ClassifyScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
+        onPressed:
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const CreatePostScreen()),
             ),
