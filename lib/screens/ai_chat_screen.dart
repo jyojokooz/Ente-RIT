@@ -1,16 +1,19 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+// --- THIS IS THE CORRECTED LINE ---
 import 'package:flutter_markdown/flutter_markdown.dart';
+// ------------------------------------
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../services/chat_ai_service.dart';
 
-// --- DATA MODEL ---
+// --- DATA MODEL (No changes) ---
 enum MessageSource { app, web, chat, error }
 
 class AiChatMessage {
@@ -45,7 +48,6 @@ class AiChatMessage {
   }
 }
 
-// Renamed to AiConversationScreen to reflect its new purpose
 class AiConversationScreen extends StatefulWidget {
   final String? conversationId;
   const AiConversationScreen({super.key, this.conversationId});
@@ -91,8 +93,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     });
   }
 
-  // --- REWRITTEN LOGIC FUNCTIONS ---
-
   Future<void> _processAndSendMessage({String? prepopulatedMessage}) async {
     final userMessageText =
         prepopulatedMessage ?? _messageController.text.trim();
@@ -112,7 +112,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     String conversationId = _currentConversationId ?? '';
 
     try {
-      // If it's a new chat, create the conversation first
       if (conversationId.isEmpty) {
         final newId = await _chatAiService.createConversation(
           _currentUser.uid,
@@ -132,7 +131,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
         );
       }
 
-      // Immediately start getting AI response after user message is handled
       final decision = await _getAiDecision(userMessageText);
       String? contextData;
       MessageSource responseSource = MessageSource.chat;
@@ -140,6 +138,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       if (decision == 'database_search') {
         contextData = await _fetchDatabaseContext(userMessageText);
         responseSource = MessageSource.app;
+      } else if (decision == 'rit_kottayam_search') {
+        contextData = await _fetchRITContext(userMessageText);
+        responseSource = MessageSource.web;
       } else if (decision == 'web_search') {
         contextData = await _fetchWebContext(userMessageText);
         responseSource = MessageSource.web;
@@ -167,7 +168,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     String? context,
     MessageSource source,
   ) async {
-    // 1. Create an empty placeholder message in Firestore
     final placeholderMessage = AiChatMessage(
       text: "",
       isUserMessage: false,
@@ -180,17 +180,30 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       placeholderMessage,
     );
 
-    // 2. Stream response from Gemini and update the document
     try {
+      if (context != null &&
+          (context.startsWith("Error:") ||
+              context.contains("unable to access"))) {
+        await _chatAiService.updateMessageContent(
+          _currentUser.uid,
+          conversationId,
+          messageRef.id,
+          context,
+        );
+        return;
+      }
+
       final model = GenerativeModel(
         model: 'gemini-1.5-flash',
         apiKey: _geminiApiKey,
         systemInstruction: Content.system(
-          "You are a friendly and helpful assistant for a campus social app called Kampus Konnect. Your name is Tom. You MUST format your responses using Markdown (e.g., use **bold** for emphasis, `code blocks` for code, and lists for steps). When context is provided, you MUST base your answer ONLY on that context.",
+          "You are Connect AI, an advanced and professional assistant for the Kampus Konnect app. Your purpose is to provide accurate, helpful, and well-formatted information. Always use Markdown for formatting. You must be analytical and resourceful. When given context (like app data or web search results), your primary goal is to synthesize answers from it. If context is missing for specific questions (like a person's name), you may use your own knowledge but you MUST add a disclaimer that the information may be outdated.",
         ),
       );
+
       final prompt =
-          "My question is: '$userQuestion'.\n\nHere is some context to help you answer:\n${context ?? 'No specific context provided. You can chat normally.'}";
+          "User's Question: '$userQuestion'.\n\nProvided Context:\n${context ?? 'No context provided.'}\n\n---\nYour Task:\n1.  First, analyze the user's question and correct any spelling mistakes to understand their true intent.\n2.  Formulate a professional and comprehensive answer based PRIMARILY on the 'Provided Context'.\n3.  If the context is insufficient to answer definitively (e.g., for names of specific people like a principal or professor), use your general knowledge to provide a likely answer.\n4.  **IMPORTANT**: If you use your general knowledge for information that can change over time (like names, dates, roles), you MUST include a friendly disclaimer, like 'Please note that this information is based on my last update and may have changed. It's always a good idea to verify on the official RIT Kottayam website.'\n5.  If you have no context and no general knowledge, simply state that you couldn't find the information.";
+
       final content = [Content.text(prompt)];
       final Stream<GenerateContentResponse> stream = model
           .generateContentStream(content);
@@ -198,7 +211,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       String streamedText = "";
       await for (var chunk in stream) {
         streamedText += chunk.text ?? "";
-        // Update the Firestore document with the new text chunk
         await _chatAiService.updateMessageContent(
           _currentUser.uid,
           conversationId,
@@ -217,7 +229,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
         messageRef.id,
         errorText,
       );
-      // You could also update the source to error here if needed
     } finally {
       if (mounted) {
         setState(() => _isResponding = false);
@@ -225,7 +236,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     }
   }
 
-  // --- Helper functions for AI decision making ---
   Future<String> _getAiDecision(String userQuestion) async {
     if (_geminiApiKey.isEmpty) return 'chat';
     try {
@@ -234,11 +244,16 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
         apiKey: _geminiApiKey,
       );
       final prompt =
-          "You are a routing expert. Your job is to classify the user's query into one of three categories: 'database_search', 'web_search', or 'chat'. Keywords for 'database_search' include 'my profile', 'my post', 'connections', 'my name', 'my stats'. Keywords for 'web_search' include 'who is', 'what is', 'search for', 'find information on'. For anything else, like greetings or general conversation, respond with 'chat'. Respond with ONLY ONE of these three category names and nothing else. The user's query is: '$userQuestion'";
+          "You are an intelligent routing expert. The user's query may have spelling errors; your job is to classify their true INTENT into one of four categories: 'database_search', 'web_search', 'rit_kottayam_search', or 'chat'.\n\n- Use 'database_search' for queries about the user's own data in the app (e.g., 'my profile', 'my post', 'my connections', 'my name').\n- Use 'rit_kottayam_search' for ANY question related to the college, including 'RIT Kottayam', 'Rajiv Gandhi Institute of Technology', admissions, courses, principal, HOD, faculty, teachers, professors, or placements.\n- Use 'web_search' for general knowledge questions not about the user or the college (e.g., 'who is flutter's creator', 'latest tech news').\n- Use 'chat' for greetings, conversations, or anything that doesn't fit the other categories.\n\nRespond with ONLY ONE of the four category names. The user's query is: '$userQuestion'";
       final content = [Content.text(prompt)];
       final response = await model.generateContent(content);
       final decision = response.text?.trim().toLowerCase() ?? 'chat';
-      if (['database_search', 'web_search', 'chat'].contains(decision)) {
+      if ([
+        'database_search',
+        'web_search',
+        'rit_kottayam_search',
+        'chat',
+      ].contains(decision)) {
         return decision;
       }
     } catch (e) {
@@ -309,59 +324,103 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
         );
       }
     }
-    if (lowerCaseMessage.contains('total post') ||
-        lowerCaseMessage.contains('how many posts')) {
-      final postQuery =
-          await FirebaseFirestore.instance
-              .collection('posts')
-              .where('userId', isEqualTo: _currentUser.uid)
-              .get();
-      contextSnippets.add(
-        "User's Total Posts: The user has made a total of ${postQuery.docs.length} posts.",
-      );
-    }
+
     return contextSnippets.isNotEmpty
         ? contextSnippets.join('\n')
         : 'No relevant app data found for the query.';
   }
 
-  Future<String> _fetchWebContext(String userMessageText) async {
+  Future<String> _fetchRITContext(String userMessageText) async {
     if (_serperApiKey.isEmpty) {
-      return "Web search is not configured because the SERPER_API_KEY is missing.";
+      return "Error: Web search is not configured because the SERPER_API_KEY is missing.";
     }
     try {
-      final response = await http.post(
-        Uri.parse("https://google.serper.dev/search"),
-        headers: {
-          'X-API-KEY': _serperApiKey,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'q': userMessageText}),
-      );
+      final searchQuery =
+          "$userMessageText Rajiv Gandhi Institute of Technology Kottayam site:https://www.rit.ac.in/";
+      final response = await http
+          .post(
+            Uri.parse("https://google.serper.dev/search"),
+            headers: {
+              'X-API-KEY': _serperApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'q': searchQuery}),
+          )
+          .timeout(const Duration(seconds: 15));
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        String searchContext = "Here are some top web search results:\n";
+        String searchContext = "Web search results from rit.ac.in:\n";
         if (data['organic'] != null && data['organic'].isNotEmpty) {
           int count = 0;
           for (var result in data['organic']) {
-            if (count < 3) {
+            if (count < 5) {
               searchContext +=
                   "Title: ${result['title']}\nSnippet: ${result['snippet']}\n\n";
               count++;
             }
           }
         } else {
-          searchContext = "No web search results were found for that query.";
+          searchContext =
+              "No specific information found on the RIT Kottayam website for that query.";
         }
         return searchContext;
+      } else {
+        return "Error: Could not access the search API. Status code: ${response.statusCode}. Your API key might be invalid.";
       }
+    } on TimeoutException {
+      return "Error: The search request timed out. Please try again.";
+    } on SocketException {
+      return "Error: I was unable to access the RIT Kottayam website. Please check your internet connection.";
     } catch (e) {
-      /* Fallback */
+      return "Error: An unexpected issue occurred while searching.";
     }
-    return "Failed to perform web search due to a network error.";
   }
 
-  // --- UI BUILD METHODS ---
+  Future<String> _fetchWebContext(String userMessageText) async {
+    if (_serperApiKey.isEmpty) {
+      return "Error: Web search is not configured.";
+    }
+    try {
+      final response = await http
+          .post(
+            Uri.parse("https://google.serper.dev/search"),
+            headers: {
+              'X-API-KEY': _serperApiKey,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'q': userMessageText}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        String searchContext = "General web search results:\n";
+        if (data['organic'] != null && data['organic'].isNotEmpty) {
+          int count = 0;
+          for (var result in data['organic']) {
+            if (count < 5) {
+              searchContext +=
+                  "Title: ${result['title']}\nSnippet: ${result['snippet']}\n\n";
+              count++;
+            }
+          }
+        } else {
+          searchContext = "No web search results were found.";
+        }
+        return searchContext;
+      } else {
+        return "Error: Could not access the search API. Status code: ${response.statusCode}.";
+      }
+    } on TimeoutException {
+      return "Error: The web search request timed out.";
+    } on SocketException {
+      return "Error: Failed to perform web search. Please check your internet connection.";
+    } catch (e) {
+      return "Error: An unexpected issue occurred during the web search.";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_geminiApiKey.isEmpty) {
@@ -371,7 +430,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: Text(
-          "AI Assistant",
+          "Connect AI",
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         backgroundColor: const Color(0xFF1F1F1F),
@@ -454,7 +513,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              "Ask about your app data, search the web, or just have a chat.",
+              "Ask about your app data, the college, the web, or just have a chat.",
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 16,
@@ -463,6 +522,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            _buildSuggestionChip("Who is the principal of RIT Kottayam?"),
             _buildSuggestionChip("What are the stats on my last post?"),
             _buildSuggestionChip("Search for the latest news on Flutter"),
           ],
@@ -501,7 +561,9 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
               topRight: Radius.circular(20),
               bottomRight: Radius.circular(20),
             );
-    final bool isError = message.source == MessageSource.error;
+    final bool isError =
+        message.source == MessageSource.error ||
+        message.text.startsWith("Error:");
     final errorColor = Colors.red[900]!.withAlpha(128);
 
     return Column(
@@ -526,7 +588,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
             if (!isMe) const SizedBox(width: 8),
             Container(
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               margin: const EdgeInsets.symmetric(vertical: 4),
@@ -622,8 +684,6 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     );
   }
 }
-
-// --- SUPPORTING WIDGETS ---
 
 class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
