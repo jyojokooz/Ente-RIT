@@ -13,7 +13,8 @@ import 'dev_community_screen.dart';
 import 'event_list_screen.dart';
 import 'peer_rooms_screen.dart';
 import 'marketplace_screen.dart';
-import 'tech_news_screen.dart'; // Import the Tech News screen
+import 'tech_news_screen.dart';
+import 'etlab_webview_screen.dart'; // --- ADDED: Import the new webview screen ---
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
@@ -44,122 +45,121 @@ class ClassifyScreen extends StatelessWidget {
 
     final List<Map<String, dynamic>> categories = [
       {
-        // --- MODIFIED: Renamed 'Departments' to 'Department Notes' ---
         'label': 'Department Notes',
         'icon': Icons.school,
         'color': Colors.blue.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DepartmentsScreen(),
-              ),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DepartmentsScreen(),
+          ),
+        ),
       },
       {
         'label': 'Events',
         'icon': Icons.calendar_today,
         'color': Colors.pink.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const EventListScreen()),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const EventListScreen()),
+        ),
       },
-      // --- ADDED: New card for Tech News ---
       {
         'label': 'Tech News',
         'icon': Icons.newspaper_outlined,
         'color': Colors.grey.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TechNewsScreen()),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TechNewsScreen()),
+        ),
       },
       {
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
         'color': Colors.teal.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => const GameViewScreen(
-                      title: 'Smash Karts',
-                      url: 'https://poki.com/en/g/smash-karts',
-                    ),
-              ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const GameViewScreen(
+              title: 'Smash Karts',
+              url: 'https://poki.com/en/g/smash-karts',
             ),
+          ),
+        ),
       },
       {
         'label': 'Digital ID',
         'icon': Icons.badge_outlined,
         'color': Colors.green.shade500,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const IdCardScreen()),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const IdCardScreen()),
+        ),
       },
       {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
         'color': Colors.purple.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const AiChatHistoryScreen(),
-              ),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AiChatHistoryScreen(),
+          ),
+        ),
       },
       {
         'label': 'Code Playground',
         'icon': Icons.code,
         'color': Colors.indigo.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CodePlaygroundScreen(),
-              ),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CodePlaygroundScreen(),
+          ),
+        ),
       },
       {
         'label': 'Dev Community',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DevCommunityScreen(),
-              ),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DevCommunityScreen(),
+          ),
+        ),
+      },
+      // --- ADDED: New card for RIT ETLab Webview ---
+      {
+        'label': 'RIT ETLab',
+        'icon': Icons.computer_outlined,
+        'color': Colors.lightBlue.shade400,
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EtlabWebviewScreen(),
+          ),
+        ),
       },
       {
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
         'color': Colors.cyan.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
+        ),
       },
       {
         'label': 'Marketplace',
         'icon': Icons.storefront_outlined,
         'color': Colors.amber.shade700,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MarketplaceScreen(),
-              ),
-            ),
+        'action': () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MarketplaceScreen(),
+          ),
+        ),
       },
       {
         'label': 'No-Note',
@@ -172,11 +172,10 @@ class ClassifyScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       floatingActionButton: FloatingActionButton(
-        onPressed:
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-            ),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+        ),
         backgroundColor: primaryAccentColor,
         elevation: 4.0,
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
