@@ -73,6 +73,7 @@ dependencies:
   video_compress: ^3.1.2
   video_player: ^2.8.2
   video_thumbnail: ^0.5.3
+  fl_chart: ^0.64.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
