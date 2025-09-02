@@ -6,14 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import 'private_chat_screen.dart'; // --- This import is now USED correctly ---
+import 'private_chat_screen.dart';
 import 'item_chats_list_screen.dart';
 
 class LostFoundDetailScreen extends StatelessWidget {
   final QueryDocumentSnapshot itemDoc;
   const LostFoundDetailScreen({super.key, required this.itemDoc});
 
-  // --- FULLY IMPLEMENTED METHODS ---
+  // --- LOGIC METHODS (UNCHANGED) ---
 
   Future<void> _markAsResolved(BuildContext context) async {
     try {
@@ -96,6 +96,12 @@ class LostFoundDetailScreen extends StatelessWidget {
             ? DateFormat.yMMMMd().add_jm().format(timestamp.toDate())
             : 'Date not available';
 
+    final contentTextStyle = GoogleFonts.poppins(
+      fontSize: 15,
+      color: Colors.white70,
+      height: 1.5,
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
@@ -129,25 +135,36 @@ class LostFoundDetailScreen extends StatelessWidget {
                   _buildDetailSection(
                     Icons.description_outlined,
                     'Description',
-                    data['description'] ?? 'No description provided.',
+                    Text(
+                      data['description'] ?? 'No description provided.',
+                      style: contentTextStyle,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   _buildDetailSection(
                     Icons.location_on_outlined,
                     'Last Seen At',
-                    data['location'] ?? 'N/A',
+                    Text(data['location'] ?? 'N/A', style: contentTextStyle),
                   ),
                   const SizedBox(height: 24),
+
+                  // --- THE FIX IS HERE ---
+                  // Now the "Posted By" section ONLY shows the user's name.
                   _buildDetailSection(
                     Icons.person_outline,
                     'Posted By',
-                    data['userName'] ?? 'Anonymous',
+                    Text(
+                      data['userName'] ?? 'Anonymous',
+                      style: contentTextStyle,
+                    ),
                   ),
+
+                  // --- END OF FIX ---
                   const SizedBox(height: 24),
                   _buildDetailSection(
                     Icons.calendar_today_outlined,
                     'Date Posted',
-                    formattedDate,
+                    Text(formattedDate, style: contentTextStyle),
                   ),
                 ],
               ),
@@ -174,7 +191,11 @@ class LostFoundDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailSection(IconData icon, String title, String content) {
+  Widget _buildDetailSection(
+    IconData icon,
+    String title,
+    Widget contentWidget,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -195,14 +216,7 @@ class LostFoundDetailScreen extends StatelessWidget {
         const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.only(left: 32.0),
-          child: Text(
-            content,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              color: Colors.white70,
-              height: 1.5,
-            ),
-          ),
+          child: contentWidget,
         ),
       ],
     );

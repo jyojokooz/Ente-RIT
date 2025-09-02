@@ -1,14 +1,17 @@
-// lib/screens/lost_and_found_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../widgets/lost_found_item_card.dart'; // The new card widget
+// Import all the necessary widgets and screens.
+import '../widgets/lost_found_item_card.dart';
 import 'create_lost_found_post_screen.dart';
 import 'lost_found_detail_screen.dart';
 import 'resolved_items_screen.dart';
+import 'edit_lost_found_post_screen.dart'; // Import the new edit screen
 
+/// The main screen for the Lost & Found feature. It displays a list of
+/// active items and allows users to switch between "Lost" and "Found" categories.
 class LostAndFoundScreen extends StatefulWidget {
   const LostAndFoundScreen({super.key});
 
@@ -46,13 +49,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
         ],
       ),
       body: Column(
-        children: [
-          // Custom Tab Switcher
-          _buildTabSwitcher(),
-
-          // List of Items
-          Expanded(child: _buildItemsList()),
-        ],
+        children: [_buildTabSwitcher(), Expanded(child: _buildItemsList())],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed:
@@ -68,6 +65,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
     );
   }
 
+  /// Builds the custom, animated tab switcher widget.
   Widget _buildTabSwitcher() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -89,7 +87,11 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
     final isSelected = _selectedStatus == status;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedStatus = status),
+        onTap: () {
+          setState(() {
+            _selectedStatus = status;
+          });
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -110,7 +112,10 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
     );
   }
 
+  /// Builds the grid of items fetched from Firestore and handles owner-specific actions.
   Widget _buildItemsList() {
+    // Get the current user to check for item ownership.
+    final currentUser = FirebaseAuth.instance.currentUser;
     final query = FirebaseFirestore.instance
         .collection('lost_and_found')
         .where('status', isEqualTo: _selectedStatus)
@@ -125,6 +130,14 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
             child: CircularProgressIndicator(color: Colors.yellow),
           );
         }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              "Error: ${snapshot.error}",
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
             child: Text(
@@ -136,10 +149,10 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
 
         final items = snapshot.data!.docs;
         return GridView.builder(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 1,
-            childAspectRatio: 1.2, // Adjust this ratio for card height
+            childAspectRatio: 1.2,
             mainAxisSpacing: 20,
           ),
           itemCount: items.length,
@@ -147,11 +160,17 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
             final itemDoc = items[index];
             final item = itemDoc.data() as Map<String, dynamic>;
 
+            // Check if the current user is the owner of this specific item.
+            final bool isOwner =
+                currentUser != null && currentUser.uid == item['userId'];
+
             return LostFoundItemCard(
               title: item['title'] ?? 'No Title',
               status: item['status'] ?? 'N/A',
               location: item['location'] ?? 'N/A',
+              userName: item['userName'] ?? 'Anonymous',
               imageUrl: item['imageUrl'],
+              isOwner: isOwner, // Pass the ownership status to the card.
               onTap:
                   () => Navigator.push(
                     context,
@@ -159,10 +178,63 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
                       builder: (_) => LostFoundDetailScreen(itemDoc: itemDoc),
                     ),
                   ),
+              // Define the callback for the "Edit" action.
+              onEdit: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditLostFoundPostScreen(itemDoc: itemDoc),
+                  ),
+                );
+              },
+              // Define the callback for the "Delete" action.
+              onDelete: () => _showDeleteConfirmation(context, itemDoc.id),
             );
           },
         );
       },
+    );
+  }
+
+  /// Shows a confirmation dialog before deleting an item from Firestore.
+  void _showDeleteConfirmation(BuildContext context, String itemId) {
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: Colors.grey.shade800,
+            title: Text(
+              'Confirm Deletion',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            content: Text(
+              'Are you sure you want to permanently delete this post?',
+              style: GoogleFonts.poppins(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+              TextButton(
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                onPressed: () {
+                  // Delete the document from Firestore and close the dialog.
+                  FirebaseFirestore.instance
+                      .collection('lost_and_found')
+                      .doc(itemId)
+                      .delete();
+                  Navigator.of(ctx).pop();
+                },
+              ),
+            ],
+          ),
     );
   }
 }

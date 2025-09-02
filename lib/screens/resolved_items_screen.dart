@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/lost_found_item_card.dart'; // The new card widget
+import '../widgets/lost_found_item_card.dart';
 import 'lost_found_detail_screen.dart';
 
 class ResolvedItemsScreen extends StatelessWidget {
@@ -56,15 +56,15 @@ class ResolvedItemsScreen extends StatelessWidget {
               final itemDoc = resolvedItems[index];
               final item = itemDoc.data() as Map<String, dynamic>;
 
-              // Use the same professional card, but pass the isResolved flag
               return Opacity(
-                opacity: 0.7, // Dim the card slightly to show it's archived
+                opacity: 0.7,
                 child: LostFoundItemCard(
                   title: item['title'] ?? 'No Title',
                   status: item['status'] ?? 'N/A',
                   location: item['location'] ?? 'N/A',
+                  userName: item['userName'] ?? 'Anonymous',
                   imageUrl: item['imageUrl'],
-                  isResolved: true, // This will show the banner
+                  isResolved: true,
                   onTap:
                       () => Navigator.push(
                         context,
@@ -73,6 +73,9 @@ class ResolvedItemsScreen extends StatelessWidget {
                               (_) => LostFoundDetailScreen(itemDoc: itemDoc),
                         ),
                       ),
+                  // --- FIX: Pass empty functions for required callbacks ---
+                  onEdit: () {},
+                  onDelete: () {},
                 ),
               );
             },

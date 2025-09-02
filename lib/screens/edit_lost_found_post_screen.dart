@@ -1,30 +1,30 @@
-// lib/screens/create_lost_found_post_screen.dart
+// lib/screens/edit_lost_found_post_screen.dart
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-import 'dart:developer' as developer;
 
-class CreateLostFoundPostScreen extends StatefulWidget {
-  const CreateLostFoundPostScreen({super.key});
+class EditLostFoundPostScreen extends StatefulWidget {
+  final QueryDocumentSnapshot itemDoc;
+  const EditLostFoundPostScreen({super.key, required this.itemDoc});
 
   @override
-  State<CreateLostFoundPostScreen> createState() =>
-      _CreateLostFoundPostScreenState();
+  State<EditLostFoundPostScreen> createState() =>
+      _EditLostFoundPostScreenState();
 }
 
-class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
+class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _locationController = TextEditingController();
-
-  String _status = 'lost';
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _locationController;
+  late String _status;
+  String? _currentImageUrl;
   bool _isLoading = false;
+
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
   final cloudinary = CloudinaryPublic(
@@ -32,6 +32,19 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
     "flutter_profile_uploads",
     cache: false,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.itemDoc.data() as Map<String, dynamic>;
+    _titleController = TextEditingController(text: data['title'] ?? '');
+    _descriptionController = TextEditingController(
+      text: data['description'] ?? '',
+    );
+    _locationController = TextEditingController(text: data['location'] ?? '');
+    _status = data['status'] ?? 'lost';
+    _currentImageUrl = data['imageUrl'];
+  }
 
   @override
   void dispose() {
@@ -50,75 +63,57 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
+        _currentImageUrl = null;
       });
     }
   }
 
-  Future<void> _submitPost() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You must be logged in to post.')),
-        );
-      }
-      return;
-    }
+  Future<void> _submitUpdate() async {
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
     });
 
+    String? finalImageUrl = widget.itemDoc['imageUrl'];
+
     try {
-      String? imageUrl;
       if (_imageFile != null) {
-        CloudinaryResponse response = await cloudinary.uploadFile(
+        final response = await cloudinary.uploadFile(
           CloudinaryFile.fromFile(
             _imageFile!.path,
             resourceType: CloudinaryResourceType.Image,
           ),
         );
-        imageUrl = response.secureUrl;
+        finalImageUrl = response.secureUrl;
       }
       if (!mounted) return;
 
-      // --- THE DEFINITIVE FIX ---
-      // Instead of querying Firestore again, get the name DIRECTLY from the auth object.
-      // This is the most immediate and reliable source of the user's name after sign-in.
-      // We provide fallbacks just in case, making it incredibly robust.
-      final String userName = user.displayName ?? user.email ?? 'Anonymous';
-
-      developer.log(
-        "Using user name from Auth object: '$userName'",
-        name: "SubmitPost",
-      );
-      // --- END OF THE DEFINITIVE FIX ---
-
-      await FirebaseFirestore.instance.collection('lost_and_found').add({
-        'title': _titleController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'location': _locationController.text.trim(),
-        'status': _status,
-        'createdAt': Timestamp.now(),
-        'userId': user.uid,
-        'userName': userName, // Use the name from the Auth object.
-        'isResolved': false,
-        'imageUrl': imageUrl,
-      });
+      await FirebaseFirestore.instance
+          .collection('lost_and_found')
+          .doc(widget.itemDoc.id)
+          .update({
+            'title': _titleController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'location': _locationController.text.trim(),
+            'status': _status,
+            'imageUrl': finalImageUrl,
+          });
 
       if (!mounted) return;
       Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post updated successfully!')),
+      );
     } catch (e) {
+      // --- FIX: Added curly braces {} ---
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to submit post: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to update post: $e')));
       }
     } finally {
+      // --- FIX: Added curly braces {} ---
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -129,12 +124,11 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The build method is unchanged.
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        title: Text('Edit Item', style: GoogleFonts.poppins()),
         backgroundColor: Colors.grey.shade900,
-        title: Text('Report an Item', style: GoogleFonts.poppins()),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -153,27 +147,35 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey.shade700),
                   ),
-                  child:
-                      _imageFile != null
-                          ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_imageFile!, fit: BoxFit.cover),
-                          )
-                          : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.camera_alt_outlined,
-                                color: Colors.white70,
-                                size: 50,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Add a photo (optional)',
-                                style: TextStyle(color: Colors.white70),
-                              ),
-                            ],
-                          ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child:
+                        _imageFile != null
+                            ? Image.file(_imageFile!, fit: BoxFit.cover)
+                            : (_currentImageUrl != null &&
+                                    _currentImageUrl!.isNotEmpty
+                                ? Image.network(
+                                  _currentImageUrl!,
+                                  fit: BoxFit.cover,
+                                )
+                                : const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.camera_alt_outlined,
+                                        color: Colors.white70,
+                                        size: 50,
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Change photo',
+                                        style: TextStyle(color: Colors.white70),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -210,9 +212,7 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
               TextFormField(
                 controller: _titleController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Item Title (e.g., Black Wallet)',
-                ),
+                decoration: const InputDecoration(labelText: 'Item Title'),
                 validator:
                     (value) =>
                         value!.trim().isEmpty ? 'Please enter a title.' : null,
@@ -244,7 +244,7 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
               ),
               const SizedBox(height: 30),
               ElevatedButton(
-                onPressed: _isLoading ? null : _submitPost,
+                onPressed: _isLoading ? null : _submitUpdate,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.yellow,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -260,7 +260,7 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
                           ),
                         )
                         : Text(
-                          'Submit Post',
+                          'Save Changes',
                           style: GoogleFonts.poppins(
                             color: Colors.black,
                             fontWeight: FontWeight.bold,
