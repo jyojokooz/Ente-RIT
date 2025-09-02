@@ -16,7 +16,8 @@ import 'marketplace_screen.dart';
 import 'tech_news_screen.dart';
 import 'etlab_webview_screen.dart';
 import 'lost_and_found_screen.dart';
-import 'quiz_categories_screen.dart'; // --- ADDED: Import the new quiz categories screen ---
+import 'quiz_categories_screen.dart';
+import 'pdf_buddy_screen.dart';
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
@@ -25,7 +26,7 @@ import '../widgets/category_card.dart';
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
 
-  /// A helper method to launch external URLs.
+  /// A helper method to launch external URLs in the device's default browser.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await canLaunchUrl(uri)) {
@@ -53,16 +54,20 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Department Notes',
         'icon': Icons.school,
         'color': Colors.blue.shade600,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const DepartmentsScreen()),
+              MaterialPageRoute(
+                builder: (context) => const DepartmentsScreen(),
+              ),
             ),
       },
       {
         'label': 'Events',
         'icon': Icons.calendar_today,
         'color': Colors.pink.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EventListScreen()),
             ),
@@ -71,7 +76,8 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Tech News',
         'icon': Icons.newspaper_outlined,
         'color': Colors.grey.shade600,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const TechNewsScreen()),
             ),
@@ -80,13 +86,15 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
         'color': Colors.teal.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const GameViewScreen(
-                  title: 'Smash Karts',
-                  url: 'https://poki.com/en/g/smash-karts',
-                ),
+                builder:
+                    (context) => const GameViewScreen(
+                      title: 'Smash Karts',
+                      url: 'https://poki.com/en/g/smash-karts',
+                    ),
               ),
             ),
       },
@@ -94,7 +102,8 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Digital ID',
         'icon': Icons.badge_outlined,
         'color': Colors.green.shade500,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const IdCardScreen()),
             ),
@@ -103,52 +112,68 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
         'color': Colors.purple.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const AiChatHistoryScreen()),
+              MaterialPageRoute(
+                builder: (context) => const AiChatHistoryScreen(),
+              ),
             ),
       },
       {
         'label': 'Code Playground',
         'icon': Icons.code,
         'color': Colors.indigo.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const CodePlaygroundScreen()),
+              MaterialPageRoute(
+                builder: (context) => const CodePlaygroundScreen(),
+              ),
             ),
       },
       {
         'label': 'Dev Community',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade600,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const DevCommunityScreen()),
+              MaterialPageRoute(
+                builder: (context) => const DevCommunityScreen(),
+              ),
             ),
       },
       {
         'label': 'RIT ETLab',
         'icon': Icons.computer_outlined,
         'color': Colors.lightBlue.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const EtlabWebviewScreen()),
+              MaterialPageRoute(
+                builder: (context) => const EtlabWebviewScreen(),
+              ),
             ),
       },
       {
         'label': 'Lost & Found',
         'icon': Icons.find_in_page_outlined,
         'color': Colors.brown.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const LostAndFoundScreen()),
+              MaterialPageRoute(
+                builder: (context) => const LostAndFoundScreen(),
+              ),
             ),
       },
       {
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
         'color': Colors.cyan.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
             ),
@@ -157,19 +182,34 @@ class ClassifyScreen extends StatelessWidget {
         'label': 'Marketplace',
         'icon': Icons.storefront_outlined,
         'color': Colors.amber.shade700,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const MarketplaceScreen()),
+              MaterialPageRoute(
+                builder: (context) => const MarketplaceScreen(),
+              ),
             ),
       },
-      // --- ADDED: The new Programming Quiz card ---
       {
         'label': 'Programming Quiz',
         'icon': Icons.quiz_outlined,
         'color': Colors.deepOrange.shade400,
-        'action': () => Navigator.push(
+        'action':
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const QuizCategoriesScreen()),
+              MaterialPageRoute(
+                builder: (context) => const QuizCategoriesScreen(),
+              ),
+            ),
+      },
+      {
+        'label': 'PDF Study Buddy',
+        'icon': Icons.picture_as_pdf_outlined,
+        'color': Colors.indigo.shade300,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PdfBuddyScreen()),
             ),
       },
       {
@@ -183,10 +223,11 @@ class ClassifyScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-        ),
+        onPressed:
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+            ),
         backgroundColor: primaryAccentColor,
         elevation: 4.0,
         child: const Icon(Icons.add, color: buttonTextColor, size: 30),
