@@ -18,6 +18,7 @@ class AdminPanelScreen extends StatefulWidget {
 }
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  // --- USER MANAGEMENT ---
   Future<void> _toggleUserRole(String userId, String currentRole) async {
     final newRole = currentRole == 'driver' ? 'user' : 'driver';
     final bool confirmChange =
@@ -54,6 +55,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  // --- POST MANAGEMENT ---
   Future<void> _deletePost(String postId) async {
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
@@ -82,6 +84,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  // --- DEPARTMENT MANAGEMENT ---
   Future<void> _showAddDepartmentDialog() async {
     final departmentController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -162,6 +165,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  // --- EVENT MANAGEMENT ---
   Future<void> _showAddEventDialog() async {
     final formKey = GlobalKey<FormState>();
     final titleController = TextEditingController();
@@ -171,8 +175,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     File? eventImageFile;
     bool isUploading = false;
     final ImagePicker picker = ImagePicker();
-
-    // Capture the context BEFORE the dialog is shown.
     final dialogContext = context;
 
     await showDialog<void>(
@@ -306,9 +308,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               final scaffoldMessenger = ScaffoldMessenger.of(
                                 dialogContext,
                               );
-
                               setDialogState(() => isUploading = true);
-
                               try {
                                 final cloudinary = CloudinaryPublic(
                                   cloudinaryCloudName,
@@ -341,7 +341,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       'imageUrl': imageUrl,
                                       'createdAt': FieldValue.serverTimestamp(),
                                     });
-
                                 navigator.pop();
                               } catch (e) {
                                 if (scaffoldMessenger.mounted) {
@@ -389,10 +388,85 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     await FirebaseFirestore.instance.collection('events').doc(docId).delete();
   }
 
+  // --- LOST & FOUND MANAGEMENT ---
+  Future<void> _toggleResolvedStatus(String itemId, bool currentStatus) async {
+    final bool confirmChange =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                backgroundColor: Colors.grey.shade800,
+                title: Text(currentStatus ? 'Re-open Item?' : 'Resolve Item?'),
+                content: Text(
+                  currentStatus
+                      ? 'Do you want to mark this item as active again?'
+                      : 'Are you sure you want to mark this item as resolved?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text(
+                      'Confirm',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (confirmChange) {
+      await FirebaseFirestore.instance
+          .collection('lost_and_found')
+          .doc(itemId)
+          .update({'isResolved': !currentStatus});
+    }
+  }
+
+  Future<void> _deleteLostAndFoundItem(String itemId) async {
+    final bool confirmDelete =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                backgroundColor: Colors.grey.shade800,
+                title: const Text('Delete Item?'),
+                content: const Text(
+                  'Are you sure you want to permanently delete this item?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (confirmDelete) {
+      await FirebaseFirestore.instance
+          .collection('lost_and_found')
+          .doc(itemId)
+          .delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5, // Updated length to 5
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -409,6 +483,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               Tab(icon: Icon(Icons.people_alt_outlined), text: 'Users'),
               Tab(icon: Icon(Icons.school_outlined), text: 'Departments'),
               Tab(icon: Icon(Icons.event_outlined), text: 'Events'),
+              Tab(
+                icon: Icon(Icons.find_in_page_outlined),
+                text: 'Lost & Found',
+              ), // New Tab
             ],
           ),
         ),
@@ -418,9 +496,105 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             _buildUsersView(),
             _buildDepartmentsView(),
             _buildEventsView(),
+            _buildLostAndFoundView(), // New View
           ],
         ),
       ),
+    );
+  }
+
+  // --- TAB VIEWS ---
+
+  Widget _buildLostAndFoundView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream:
+          FirebaseFirestore.instance
+              .collection('lost_and_found')
+              .orderBy('createdAt', descending: true)
+              .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.yellow),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text('No Lost & Found items have been posted.'),
+          );
+        }
+
+        final items = snapshot.data!.docs;
+
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final itemDoc = items[index];
+            final itemData = itemDoc.data() as Map<String, dynamic>;
+            final bool isResolved = itemData['isResolved'] ?? false;
+            final timestamp = (itemData['createdAt'] as Timestamp?)?.toDate();
+
+            return ListTile(
+              leading:
+                  itemData['imageUrl'] != null &&
+                          itemData['imageUrl'].isNotEmpty
+                      ? Image.network(
+                        itemData['imageUrl'],
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
+                      )
+                      : const Icon(Icons.image_not_supported),
+              title: Text(itemData['title'] ?? 'No Title'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'by ${itemData['userName'] ?? '...'} • ${timestamp != null ? timeago.format(timestamp) : '...'}',
+                  ),
+                  const SizedBox(height: 4),
+                  Chip(
+                    label: Text(isResolved ? 'Resolved' : 'Active'),
+                    backgroundColor:
+                        isResolved ? Colors.green : Colors.blueAccent,
+                    padding: EdgeInsets.zero,
+                    labelStyle: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              isThreeLine: true,
+              trailing: PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'toggle_resolved') {
+                    _toggleResolvedStatus(itemDoc.id, isResolved);
+                  } else if (value == 'delete') {
+                    _deleteLostAndFoundItem(itemDoc.id);
+                  }
+                },
+                itemBuilder:
+                    (BuildContext context) => <PopupMenuEntry<String>>[
+                      PopupMenuItem<String>(
+                        value: 'toggle_resolved',
+                        child: Text(
+                          isResolved ? 'Mark as Active' : 'Mark as Resolved',
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          'Delete Item',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                      ),
+                    ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
