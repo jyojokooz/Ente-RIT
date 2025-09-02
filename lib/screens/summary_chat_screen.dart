@@ -1,9 +1,9 @@
-// lib/screens/summary_chat_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/youtube_summarizer_service.dart';
 
+/// A screen for a conversational chat with an AI about a video summary.
+/// It allows users to ask follow-up questions that are answered with web-enhanced context.
 class SummaryChatScreen extends StatefulWidget {
   final String initialSummary;
   final String videoTitle;
@@ -30,7 +30,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Start the chat with the initial summary from the AI
+    // Start the chat history with the initial summary from the AI.
     _chatHistory.add({'role': 'ai', 'message': widget.initialSummary});
   }
 
@@ -38,9 +38,11 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _summarizerService.close();
     super.dispose();
   }
 
+  /// Sends the user's message to the web-enhanced AI service and displays the response.
   Future<void> _sendMessage() async {
     final userMessage = _messageController.text.trim();
     if (userMessage.isEmpty) return;
@@ -48,6 +50,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     _messageController.clear();
     FocusScope.of(context).unfocus();
 
+    // Add the user's message to the UI immediately and show loading indicator.
     setState(() {
       _chatHistory.add({'role': 'user', 'message': userMessage});
       _isLoading = true;
@@ -55,15 +58,17 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     _scrollToBottom();
 
     try {
-      final aiResponse = await _summarizerService.getFollowUpAnswer(
-        summaryContext: widget.initialSummary,
+      // Call the powerful web-enhanced method from the service.
+      final aiResponse = await _summarizerService.getWebEnhancedAnswer(
         videoTitle: widget.videoTitle,
         userQuestion: userMessage,
       );
+      // Add the AI's detailed response to the chat.
       setState(() {
         _chatHistory.add({'role': 'ai', 'message': aiResponse});
       });
     } catch (e) {
+      // Handle any errors during the process.
       setState(() {
         _chatHistory.add({
           'role': 'ai',
@@ -71,6 +76,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
         });
       });
     } finally {
+      // Always hide the loading indicator.
       setState(() {
         _isLoading = false;
       });
@@ -78,6 +84,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     }
   }
 
+  /// Smoothly scrolls the chat list to the bottom to show the latest message.
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -130,6 +137,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     );
   }
 
+  /// The message input bar at the bottom of the screen.
   Widget _buildMessageComposer() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -142,7 +150,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
                 controller: _messageController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Elaborate on a key point...',
+                  hintText: 'Ask for more details...',
                   hintStyle: TextStyle(color: Colors.white54),
                   filled: true,
                   fillColor: Colors.grey.shade800,
@@ -150,12 +158,17 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
                     borderRadius: BorderRadius.circular(25),
                     borderSide: BorderSide.none,
                   ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
                 ),
-                onSubmitted: (_) => _sendMessage(),
+                onSubmitted: _isLoading ? null : (_) => _sendMessage(),
               ),
             ),
+            const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.send, color: Colors.yellow),
+              icon: const Icon(Icons.send_rounded, color: Colors.yellow),
               onPressed: _isLoading ? null : _sendMessage,
             ),
           ],
@@ -165,6 +178,7 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   }
 }
 
+/// A simple UI widget for styling a single chat message bubble.
 class _ChatMessageBubble extends StatelessWidget {
   final String message;
   final bool isUser;
@@ -186,7 +200,7 @@ class _ChatMessageBubble extends StatelessWidget {
         ),
         child: Text(
           message,
-          style: TextStyle(
+          style: GoogleFonts.poppins(
             color: isUser ? Colors.black : Colors.white,
             height: 1.5,
           ),

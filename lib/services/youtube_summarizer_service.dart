@@ -1,9 +1,12 @@
+import 'dart:convert'; // For json.decode/encode
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http; // For making API calls
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class YouTubeSummarizerService {
   final String? geminiApiKey = dotenv.env['GEMINI_API_KEY'];
+  final String? serperApiKey = dotenv.env['SERPER_API_KEY'];
   final YoutubeExplode _yt = YoutubeExplode();
 
   /// Enhanced method to get video details with transcript availability check
@@ -252,36 +255,38 @@ This summary is limited due to reliance on title and basic metadata only.
 ''';
   }
 
-  /// --- ADDED: New method for conversational follow-ups ---
-  Future<String> getFollowUpAnswer({
-    required String summaryContext,
+  /// Answers a follow-up question by first performing a web search for context.
+  Future<String> getWebEnhancedAnswer({
     required String videoTitle,
     required String userQuestion,
   }) async {
-    if (geminiApiKey == null) {
-      throw Exception('GEMINI_API_KEY not found in .env file.');
+    if (geminiApiKey == null || serperApiKey == null) {
+      throw Exception('API Key not found in .env file.');
     }
 
+    // 1. RETRIEVAL: Perform a web search
+    final searchResults = await _searchWeb(videoTitle, userQuestion);
+
+    // 2. AUGMENTED GENERATION: Use search results to answer the question
     final model = GenerativeModel(
       model: 'gemini-1.5-flash-latest',
       apiKey: geminiApiKey!,
     );
 
     final prompt = '''
-    You are an expert academic assistant. A user has already received an AI-generated summary for a YouTube video and is now asking a follow-up question.
-    Your task is to answer the user's question based ONLY on the context of the provided summary.
+    You are an expert academic assistant. A user is asking a follow-up question about a YouTube video. Your task is to provide a comprehensive, detailed answer using the provided web search results as your primary source of information.
 
-    **Video Title:** "$videoTitle"
-    
-    **Provided Summary (Context):**
-    ---
-    $summaryContext
-    ---
+    **Original Video Topic:** "$videoTitle"
     
     **User's Question:**
     "$userQuestion"
 
-    Please provide a concise and helpful answer to the user's question using only the information from the summary. If the question cannot be answered from the summary, politely state that the information is not available in the summary and suggest they watch the full video for more details.
+    **Web Search Results (Context):**
+    ---
+    $searchResults
+    ---
+
+    Based on the user's question and the context from the web search results, please generate a detailed and well-structured answer. If the user asks for a "15 mark answer" or something similar, structure it like a university-level exam answer with clear headings, bullet points, and explanations. Be thorough.
     ''';
 
     final content = [Content.text(prompt)];
@@ -292,6 +297,41 @@ This summary is limited due to reliance on title and basic metadata only.
     }
 
     return response.text!;
+  }
+
+  /// Helper method to call the Serper.dev API for web search results.
+  Future<String> _searchWeb(String videoTitle, String userQuestion) async {
+    final url = Uri.parse('https://google.serper.dev/search');
+    final headers = {
+      'X-API-KEY': serperApiKey!,
+      'Content-Type': 'application/json',
+    };
+    // Create a smart search query, removing phrases that might confuse the search engine.
+    final body = json.encode({
+      'q':
+          '$videoTitle ${userQuestion.replaceAll("15 marks", "").replaceAll("explain", "")}',
+    });
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> organicResults = data['organic'] ?? [];
+
+        // Combine the titles and snippets from the top search results into a single context string.
+        return organicResults
+            .take(5) // Use top 5 results for context
+            .map(
+              (result) =>
+                  "Title: ${result['title']}\nSnippet: ${result['snippet'] ?? ''}",
+            )
+            .join('\n\n---\n\n');
+      } else {
+        return "Web search failed with status code: ${response.statusCode}";
+      }
+    } catch (e) {
+      return "An error occurred during web search: $e";
+    }
   }
 
   /// Extract video ID from various YouTube URL formats
