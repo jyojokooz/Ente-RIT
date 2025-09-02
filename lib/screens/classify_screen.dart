@@ -1,7 +1,7 @@
 // lib/screens/classify_screen.dart
 
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // <<< --- THIS WAS THE CRITICAL FIX ---
+import 'package:flutter/material.dart'; // <<< --- THIS IS THE CRITICAL FIX ---
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // --- Screen Imports ---
@@ -21,6 +21,7 @@ import 'lost_and_found_screen.dart';
 import 'quiz_categories_screen.dart';
 import 'pdf_buddy_screen.dart';
 import 'linkedin_analyzer_screen.dart';
+import 'youtube_summarizer_screen.dart';
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
@@ -29,6 +30,7 @@ import '../widgets/category_card.dart';
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
 
+  /// A helper method to launch external URLs in the device's default browser.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await canLaunchUrl(uri)) {
@@ -221,6 +223,18 @@ class ClassifyScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => const LinkedInAnalyzerScreen(),
+              ),
+            ),
+      },
+      {
+        'label': 'YouTube Summarizer',
+        'icon': Icons.ondemand_video_outlined,
+        'color': Colors.red.shade700,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const YouTubeSummarizerScreen(),
               ),
             ),
       },
