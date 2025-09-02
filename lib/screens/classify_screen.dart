@@ -1,5 +1,7 @@
+// lib/screens/classify_screen.dart
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:google_fonts/google_fonts.dart'; // <<< --- THIS WAS THE CRITICAL FIX ---
 import 'package:url_launcher/url_launcher.dart';
 
 // --- Screen Imports ---
@@ -18,6 +20,7 @@ import 'etlab_webview_screen.dart';
 import 'lost_and_found_screen.dart';
 import 'quiz_categories_screen.dart';
 import 'pdf_buddy_screen.dart';
+import 'linkedin_analyzer_screen.dart';
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
@@ -26,7 +29,6 @@ import '../widgets/category_card.dart';
 class ClassifyScreen extends StatelessWidget {
   const ClassifyScreen({super.key});
 
-  /// A helper method to launch external URLs in the device's default browser.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await canLaunchUrl(uri)) {
@@ -42,13 +44,11 @@ class ClassifyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Define the color palette for consistency.
     final Color cardColor = Colors.grey.shade900;
     const Color secondaryTextColor = Colors.white70;
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
-    // A list of all categories/features available on this screen.
     final List<Map<String, dynamic>> categories = [
       {
         'label': 'Department Notes',
@@ -210,6 +210,18 @@ class ClassifyScreen extends StatelessWidget {
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PdfBuddyScreen()),
+            ),
+      },
+      {
+        'label': 'LinkedIn Analyzer',
+        'icon': Icons.analytics_outlined,
+        'color': Colors.blue.shade700,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LinkedInAnalyzerScreen(),
+              ),
             ),
       },
       {
