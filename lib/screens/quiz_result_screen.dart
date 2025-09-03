@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:my_project/screens/classify_screen.dart'; // Import your main screen to navigate back to it.
+import 'package:my_project/screens/pages/classify_screen.dart'; // Import your main screen to navigate back to it.
 
 /// A screen that displays the final score and results of the quiz.
 class QuizResultScreen extends StatelessWidget {

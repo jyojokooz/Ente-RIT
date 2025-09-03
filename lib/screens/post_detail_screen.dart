@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'comments_screen.dart';
 import 'edit_post_screen.dart'; // <-- 1. IMPORT THE EDIT SCREEN
 import 'post_card.dart';
-import 'profile_screen.dart';
+import 'pages/profile_screen.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final DocumentSnapshot postSnapshot;

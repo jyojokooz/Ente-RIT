@@ -1,9 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../helpers/fade_page_route.dart';
-import '../screens/classify_screen.dart';
-import '../screens/home_screen.dart';
-import '../screens/profile_screen.dart';
+import '../screens/pages/classify_screen.dart';
+import '../screens/pages/home_screen.dart';
+import '../screens/pages/profile_screen.dart';
 // --- The import for 'inbox_screen.dart' is now removed ---
 
 // --- 'inbox' is removed from the enum ---

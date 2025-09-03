@@ -1,31 +1,30 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-// FIX: Added missing package imports for google_fonts and url_launcher.
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-// --- Screen Imports ---
-import 'departments_screen.dart';
-import 'game_view_screen.dart';
-import 'create_post_screen.dart';
-import 'id_card_screen.dart';
-import 'ai_chat_history_screen.dart';
-import 'code_playground_screen.dart';
-import 'dev_community_screen.dart';
-import 'event_list_screen.dart';
-import 'peer_rooms_screen.dart';
-import 'marketplace_screen.dart';
-import 'tech_news_screen.dart';
-import 'etlab_webview_screen.dart';
-import 'lost_and_found_screen.dart';
-import 'quiz_categories_screen.dart';
-import 'pdf_buddy_screen.dart';
-import 'linkedin_analyzer_screen.dart';
-import 'youtube_summarizer_screen.dart';
+// --- Screen Imports (Paths updated with '../' to go up one directory) ---
+import '../departments_screen.dart';
+import '../game_view_screen.dart';
+import '../id_card_screen.dart';
+import '../ai_chat_history_screen.dart';
+import '../code_playground_screen.dart';
+import '../dev_community_screen.dart';
+import '../event_list_screen.dart';
+import '../peer_rooms_screen.dart';
+import '../marketplace_screen.dart';
+import '../tech_news_screen.dart';
+import '../etlab_webview_screen.dart';
+import '../lost_and_found_screen.dart';
+import '../quiz_categories_screen.dart';
+import '../pdf_buddy_screen.dart';
+import '../linkedin_analyzer_screen.dart';
+import '../youtube_summarizer_screen.dart';
 
-// --- Widget Imports ---
-import '../widgets/reusable_bottom_app_bar.dart';
-import '../widgets/feature_card.dart';
+// --- Widget Imports (Path updated to go up two directories) ---
+import '../../widgets/feature_card.dart';
+
+// NOTE: The unused 'create_post_screen.dart' import has been removed.
 
 class ClassifyScreen extends StatefulWidget {
   const ClassifyScreen({super.key});
@@ -78,7 +77,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
   /// Helper method to launch external URLs.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
-    // FIX: Corrected the method name from `canLaunch` to `canLaunchUrl`.
     if (!await canLaunchUrl(uri)) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -87,16 +85,11 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       }
       return;
     }
-    // FIX: The `launchUrl` and `LaunchMode` methods will now be recognized
-    // because of the added import statement.
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryAccentColor = Colors.yellow;
-    const Color buttonTextColor = Colors.black;
-
     final List<Map<String, dynamic>> features = [
       {
         'id': 'department_notes',
@@ -309,69 +302,51 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       },
     ];
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton: FloatingActionButton(
-        onPressed:
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+    // The Scaffold has been removed. This widget now only returns its core content.
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 16),
+            Text(
+              'Campus Connect',
+              style: GoogleFonts.poppins(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
-        backgroundColor: primaryAccentColor,
-        elevation: 4.0,
-        child: const Icon(Icons.add, color: buttonTextColor, size: 30),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: const ReusableBottomAppBar(
-        activeScreen: ActiveScreen.classify,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-              // FIX: The `GoogleFonts` class will now be recognized
-              // because of the added import statement.
-              Text(
-                'Campus Connect',
-                style: GoogleFonts.poppins(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Explore tools and resources',
-                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child:
-                    _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : ListView.builder(
-                          padding: const EdgeInsets.only(bottom: 20),
-                          itemCount: features.length,
-                          itemBuilder: (context, index) {
-                            final feature = features[index];
-                            final featureId = feature['id'];
-                            final imageUrl = _cardBackgrounds[featureId];
+            const SizedBox(height: 8),
+            Text(
+              'Explore tools and resources',
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child:
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        itemCount: features.length,
+                        itemBuilder: (context, index) {
+                          final feature = features[index];
+                          final featureId = feature['id'];
+                          final imageUrl = _cardBackgrounds[featureId];
 
-                            return FeatureCard(
-                              label: feature['label'],
-                              icon: feature['icon'],
-                              color: feature['color'],
-                              imageUrl: imageUrl,
-                              onTap: feature['action'],
-                            );
-                          },
-                        ),
-              ),
-            ],
-          ),
+                          return FeatureCard(
+                            label: feature['label'],
+                            icon: feature['icon'],
+                            color: feature['color'],
+                            imageUrl: imageUrl,
+                            onTap: feature['action'],
+                          );
+                        },
+                      ),
+            ),
+          ],
         ),
       ),
     );

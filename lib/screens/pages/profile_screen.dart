@@ -5,16 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-import '../widgets/reusable_bottom_app_bar.dart';
-import 'admin_panel_screen.dart';
-import 'connections_screen.dart';
-import 'edit_profile_screen.dart';
-import 'post_detail_screen.dart';
-import 'requests_screen.dart';
-import 'chat_screen.dart';
-import 'create_post_screen.dart';
-import 'driver_tracking_screen.dart';
-import 'home_screen.dart'; // <-- 1. IMPORT THE HOME SCREEN
+
+// --- Screen Imports (Paths updated with '../' to go up one directory) ---
+import '../admin_panel_screen.dart';
+import '../connections_screen.dart';
+import '../edit_profile_screen.dart';
+import '../post_detail_screen.dart';
+import '../requests_screen.dart';
+import '../chat_screen.dart';
+import '../driver_tracking_screen.dart';
+
+// NOTE: Unused imports for BottomAppBar, HomeScreen, and CreatePostScreen have been removed.
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -320,139 +321,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
-    const Color buttonTextColor = Colors.black;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton:
-          isCurrentUser
-              ? FloatingActionButton(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CreatePostScreen(),
-                      ),
-                    ),
-                backgroundColor: primaryAccentColor,
-                elevation: 4.0,
-                child: const Icon(Icons.add, color: buttonTextColor, size: 30),
-              )
-              : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar:
-          isCurrentUser
-              ? const ReusableBottomAppBar(activeScreen: ActiveScreen.profile)
-              : null,
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Colors.yellow),
-              )
-              : RefreshIndicator(
-                onRefresh: _loadAllData,
-                color: Colors.yellow,
-                backgroundColor: cardBackgroundColor,
-                child: CustomScrollView(
-                  slivers: [
-                    SliverAppBar(
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      expandedHeight: 240,
-                      pinned: true,
-                      leading: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: CircleAvatar(
-                          backgroundColor: Colors.black.withAlpha(128),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.white,
+    // This widget now only returns its core content. The Scaffold is in MainScreen.
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator(color: Colors.yellow))
+        : RefreshIndicator(
+          onRefresh: _loadAllData,
+          color: Colors.yellow,
+          backgroundColor: cardBackgroundColor,
+          child: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                expandedHeight: 240,
+                pinned: true,
+                // The back button is now conditional:
+                leading:
+                    isCurrentUser
+                        ? null // No back button when viewing your own profile from tabs.
+                        : Padding(
+                          // Back button appears when viewing someone else's profile.
+                          padding: const EdgeInsets.all(8.0),
+                          child: CircleAvatar(
+                            backgroundColor: Colors.black.withAlpha(128),
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
                             ),
-                            // --- START: 2. FIX THE BACK BUTTON LOGIC ---
-                            onPressed: () {
-                              // If there is a screen to go back to (e.g., you came from another profile), just pop.
-                              if (Navigator.canPop(context)) {
-                                Navigator.of(context).pop();
-                              } else {
-                                // Otherwise, this screen was likely opened from the bottom nav bar.
-                                // Replace it with the HomeScreen to prevent a growing stack and a blank screen.
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const HomeScreen(),
-                                  ),
-                                );
-                              }
-                            },
-                            // --- END: 2. FIX THE BACK BUTTON LOGIC ---
                           ),
                         ),
-                      ),
-                      actions:
-                          isCurrentUser
-                              ? [
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.black.withAlpha(
-                                      128,
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.group_add_outlined,
-                                        color: Colors.white,
-                                      ),
-                                      onPressed:
-                                          () => Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder:
-                                                  (context) =>
-                                                      const RequestsScreen(),
-                                            ),
-                                          ),
-                                    ),
-                                  ),
+                actions:
+                    isCurrentUser
+                        ? [
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: CircleAvatar(
+                              backgroundColor: Colors.black.withAlpha(128),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.group_add_outlined,
+                                  color: Colors.white,
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: 8,
-                                    bottom: 8,
-                                    right: 8,
-                                  ),
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.black.withAlpha(
-                                      128,
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.logout,
-                                        color: Colors.white,
+                                onPressed:
+                                    () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => const RequestsScreen(),
                                       ),
-                                      onPressed: _logout,
                                     ),
-                                  ),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: 8,
+                              bottom: 8,
+                              right: 8,
+                            ),
+                            child: CircleAvatar(
+                              backgroundColor: Colors.black.withAlpha(128),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.logout,
+                                  color: Colors.white,
                                 ),
-                              ]
-                              : null,
-                      flexibleSpace: FlexibleSpaceBar(
-                        background: GestureDetector(
-                          onTap: _pickCoverImage,
-                          child: _buildHeaderImage(),
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _buildProfileHeaderAndInfo(cardBackgroundColor),
-                    ),
-                    _buildPhotoGallery(),
-                  ],
+                                onPressed: _logout,
+                              ),
+                            ),
+                          ),
+                        ]
+                        : null,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: GestureDetector(
+                    onTap: _pickCoverImage,
+                    child: _buildHeaderImage(),
+                  ),
                 ),
               ),
-    );
+              SliverToBoxAdapter(
+                child: _buildProfileHeaderAndInfo(cardBackgroundColor),
+              ),
+              _buildPhotoGallery(),
+            ],
+          ),
+        );
   }
 
   Widget _buildProfileHeaderAndInfo(Color cardColor) {

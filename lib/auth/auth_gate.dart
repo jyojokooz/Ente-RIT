@@ -1,8 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:my_project/screens/home_screen.dart';
-import 'package:my_project/screens/splash_screen.dart'; // <-- Import SplashScreen
 
+// Import the two possible destinations from this gate.
+import 'package:my_project/screens/main_screen.dart';
+import 'package:my_project/screens/splash_screen.dart';
+
+/// AuthGate is the first widget that decides which screen to show the user.
+///
+/// It listens to the Firebase authentication state and acts as a router:
+/// - If the user is logged in, it shows the main app content (`MainScreen`).
+/// - If the user is logged out, it shows the entry flow (`SplashScreen`).
+/// - While checking, it shows a loading indicator.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -10,26 +18,32 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: StreamBuilder<User?>(
-        // Listen to Firebase's real-time authentication state
+        // This stream from Firebase emits a User object when the user is signed in,
+        // and null when they are signed out. It updates in real-time.
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // --- While waiting for the auth state, show a simple loading indicator ---
+          // STATE 1: Waiting for connection
+          // While the stream is connecting to Firebase to check the auth state,
+          // we show a loading indicator to prevent a blank screen.
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.yellow),
             );
           }
 
-          // --- If the snapshot has data, the user IS logged in ---
+          // STATE 2: User is LOGGED IN
+          // The snapshot has data, which means a User object was received.
           if (snapshot.hasData) {
-            // Go directly to the HomeScreen, completely skipping the splash animation.
-            return const HomeScreen();
+            // Navigate to MainScreen. This is the correct entry point for the
+            // main app, as it contains the bottom navigation bar and manages
+            // the Home, Classify, and Profile pages.
+            return const MainScreen();
           }
-          // --- Otherwise, the user is NOT logged in ---
+          // STATE 3: User is LOGGED OUT
+          // The snapshot has no data, meaning the user is not signed in.
           else {
-            // Show the SplashScreen, which will run its animation
-            // and then navigate to the WelcomeScreen on completion.
-            // This perfectly matches your requirement.
+            // Show the SplashScreen. The SplashScreen will then handle its
+            // animation and navigate to the WelcomeScreen when it's done.
             return const SplashScreen();
           }
         },
