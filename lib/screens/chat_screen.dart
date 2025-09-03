@@ -2,16 +2,18 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:uuid/uuid.dart'; // Import for generating unique IDs
+import 'package:uuid/uuid.dart';
 import '../helpers/database_helper.dart';
+import '../widgets/chat_message_placeholder.dart';
 
-// --- UPDATED MESSAGE MODEL ---
+// --- Models ---
 class ChatMessage {
-  final String id; // Unique message ID
+  final String id;
   final String senderId;
   final String text;
   final DateTime timestamp;
@@ -28,13 +30,15 @@ class ChatMessage {
 abstract class ChatListItem {}
 
 class MessageItem extends ChatListItem {
-  final ChatMessage message;
+  // --- THIS IS THE FIX ---
+  // The constructor and the field declaration are now separate, correct statements.
   MessageItem(this.message);
+  final ChatMessage message;
 }
 
 class DateSeparatorItem extends ChatListItem {
-  final DateTime date;
   DateSeparatorItem(this.date);
+  final DateTime date;
 }
 
 class ChatScreen extends StatefulWidget {
@@ -56,15 +60,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String _chatRoomId;
-
   final PusherChannelsFlutter pusher = PusherChannelsFlutter.getInstance();
-  final String pusherAppKey = "YOUR_PUSHER_KEY";
-  final String pusherAppCluster = "YOUR_PUSHER_CLUSTER";
 
-  List<ChatListItem> _chatItems = [];
+  final String pusherAppKey = dotenv.env['PUSHER_APP_KEY'] ?? '';
+  final String pusherAppCluster = dotenv.env['PUSHER_APP_CLUSTER'] ?? '';
+
+  final List<ChatListItem> _chatItems = [];
   bool _isLoadingHistory = true;
   String _currentUserImageUrl = '';
-  var uuid = Uuid();
+  final uuid = Uuid();
 
   @override
   void initState() {
@@ -111,12 +115,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 isMe ? _currentUserImageUrl : widget.receiverImageUrl,
           );
         }).toList();
+
+    for (var message in historyMessages) {
+      _addMessageToList(message, isFromHistory: true);
+    }
+
     if (mounted) {
       setState(() {
-        _chatItems = _groupMessages(historyMessages);
         _isLoadingHistory = false;
       });
     }
+
     try {
       await pusher.init(
         apiKey: pusherAppKey,
@@ -126,56 +135,50 @@ class _ChatScreenState extends State<ChatScreen> {
       await pusher.subscribe(channelName: 'private-$_chatRoomId');
       await pusher.connect();
     } catch (e) {
-      /* handle error */
+      // Handle Pusher connection error
     }
   }
 
-  List<ChatListItem> _groupMessages(List<ChatMessage> messages) {
-    if (messages.isEmpty) return [];
-    List<ChatListItem> groupedItems = [];
-    for (var i = 0; i < messages.length; i++) {
-      final currentMessage = messages[i];
-      groupedItems.add(MessageItem(currentMessage));
-      final bool isLastMessage = i == messages.length - 1;
-      if (isLastMessage) {
-        groupedItems.add(DateSeparatorItem(currentMessage.timestamp));
-      } else {
-        final nextMessage = messages[i + 1];
-        final location = tz.getLocation('Asia/Kolkata');
-        final currentLocalTime = tz.TZDateTime.from(
-          currentMessage.timestamp,
-          location,
-        );
-        final nextLocalTime = tz.TZDateTime.from(
-          nextMessage.timestamp,
-          location,
-        );
-        if (currentLocalTime.day != nextLocalTime.day) {
-          groupedItems.add(DateSeparatorItem(currentMessage.timestamp));
-        }
+  void _addMessageToList(ChatMessage message, {bool isFromHistory = false}) {
+    final location = tz.getLocation('Asia/Kolkata');
+    DateTime? adjacentMessageDate;
+
+    if (!isFromHistory && _chatItems.isNotEmpty) {
+      final firstItem = _chatItems.first;
+      if (firstItem is MessageItem) {
+        adjacentMessageDate = firstItem.message.timestamp;
+      }
+    } else if (isFromHistory && _chatItems.isNotEmpty) {
+      final lastItem = _chatItems.last;
+      if (lastItem is MessageItem) {
+        adjacentMessageDate = lastItem.message.timestamp;
       }
     }
-    return groupedItems;
-  }
 
-  String _formatDateSeparator(DateTime date) {
-    final location = tz.getLocation('Asia/Kolkata');
-    final istTime = tz.TZDateTime.from(date, location);
-    final now = tz.TZDateTime.now(location);
-    final today = tz.TZDateTime(location, now.year, now.month, now.day);
-    final yesterday = tz.TZDateTime(location, now.year, now.month, now.day - 1);
-    final messageDate = tz.TZDateTime(
-      location,
-      istTime.year,
-      istTime.month,
-      istTime.day,
-    );
-    if (messageDate.isAtSameMomentAs(today)) {
-      return 'Today';
-    } else if (messageDate.isAtSameMomentAs(yesterday)) {
-      return 'Yesterday';
+    bool needsDateSeparator = true;
+    if (adjacentMessageDate != null) {
+      final adjacentLocalDate = tz.TZDateTime.from(
+        adjacentMessageDate,
+        location,
+      );
+      final newLocalDate = tz.TZDateTime.from(message.timestamp, location);
+      if (adjacentLocalDate.day == newLocalDate.day &&
+          adjacentLocalDate.month == newLocalDate.month &&
+          adjacentLocalDate.year == newLocalDate.year) {
+        needsDateSeparator = false;
+      }
+    }
+
+    if (isFromHistory) {
+      if (needsDateSeparator) {
+        _chatItems.add(DateSeparatorItem(message.timestamp));
+      }
+      _chatItems.add(MessageItem(message));
     } else {
-      return DateFormat('MMMM d, y').format(istTime);
+      if (needsDateSeparator) {
+        _chatItems.insert(0, DateSeparatorItem(message.timestamp));
+      }
+      _chatItems.insert(0, MessageItem(message));
     }
   }
 
@@ -202,27 +205,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         if (mounted) {
           setState(() {
-            final firstItem = _chatItems.isNotEmpty ? _chatItems.first : null;
-            bool isNewDay = true;
-            if (firstItem is MessageItem) {
-              final location = tz.getLocation('Asia/Kolkata');
-              final lastLocalDate = tz.TZDateTime.from(
-                firstItem.message.timestamp,
-                location,
-              );
-              final newLocalDate = tz.TZDateTime.from(
-                newMessage.timestamp,
-                location,
-              );
-              isNewDay =
-                  newLocalDate.day != lastLocalDate.day ||
-                  newLocalDate.month != lastLocalDate.month ||
-                  newLocalDate.year != lastLocalDate.year;
-            }
-            if (isNewDay) {
-              _chatItems.insert(0, DateSeparatorItem(newMessage.timestamp));
-            }
-            _chatItems.insert(0, MessageItem(newMessage));
+            _addMessageToList(newMessage);
           });
         }
       }
@@ -231,7 +214,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      return;
+    }
 
     final messageId = uuid.v4();
     final message = ChatMessage(
@@ -241,27 +226,10 @@ class _ChatScreenState extends State<ChatScreen> {
       timestamp: DateTime.now().toUtc(),
       senderImageUrl: _currentUserImageUrl,
     );
-
     _messageController.clear();
+
     setState(() {
-      final firstItem = _chatItems.isNotEmpty ? _chatItems.first : null;
-      bool isNewDay = true;
-      if (firstItem is MessageItem) {
-        final location = tz.getLocation('Asia/Kolkata');
-        final lastLocalDate = tz.TZDateTime.from(
-          firstItem.message.timestamp,
-          location,
-        );
-        final newLocalDate = tz.TZDateTime.from(message.timestamp, location);
-        isNewDay =
-            newLocalDate.day != lastLocalDate.day ||
-            newLocalDate.month != lastLocalDate.month ||
-            newLocalDate.year != lastLocalDate.year;
-      }
-      if (isNewDay) {
-        _chatItems.insert(0, DateSeparatorItem(message.timestamp));
-      }
-      _chatItems.insert(0, MessageItem(message));
+      _addMessageToList(message);
     });
 
     await DatabaseHelper.instance.insertMessage({
@@ -356,6 +324,27 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  String _formatDateSeparator(DateTime date) {
+    final location = tz.getLocation('Asia/Kolkata');
+    final istTime = tz.TZDateTime.from(date, location);
+    final now = tz.TZDateTime.now(location);
+    final today = tz.TZDateTime(location, now.year, now.month, now.day);
+    final yesterday = tz.TZDateTime(location, now.year, now.month, now.day - 1);
+    final messageDate = tz.TZDateTime(
+      location,
+      istTime.year,
+      istTime.month,
+      istTime.day,
+    );
+    if (messageDate.isAtSameMomentAs(today)) {
+      return 'Today';
+    } else if (messageDate.isAtSameMomentAs(yesterday)) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMMM d, y').format(istTime);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -384,8 +373,13 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child:
                 _isLoadingHistory
-                    ? const Center(
-                      child: CircularProgressIndicator(color: Colors.yellow),
+                    ? ListView.builder(
+                      reverse: true,
+                      itemCount: 10,
+                      padding: const EdgeInsets.all(12.0),
+                      itemBuilder:
+                          (context, index) =>
+                              ChatMessagePlaceholder(isMe: index.isEven),
                     )
                     : _chatItems.isEmpty
                     ? Center(
