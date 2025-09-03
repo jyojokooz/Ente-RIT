@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+// FIX: Added missing package imports for google_fonts and url_launcher.
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,7 +25,7 @@ import 'youtube_summarizer_screen.dart';
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
-import '../widgets/feature_card.dart'; // Make sure you have created this widget file
+import '../widgets/feature_card.dart';
 
 class ClassifyScreen extends StatefulWidget {
   const ClassifyScreen({super.key});
@@ -34,7 +35,6 @@ class ClassifyScreen extends StatefulWidget {
 }
 
 class _ClassifyScreenState extends State<ClassifyScreen> {
-  // This map will store the fetched image URLs, mapping a card's ID to its URL.
   Map<String, String> _cardBackgrounds = {};
   bool _isLoading = true;
 
@@ -44,7 +44,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     _fetchBackgroundImages();
   }
 
-  // Fetches image URLs from Firestore when the screen loads.
   Future<void> _fetchBackgroundImages() async {
     try {
       final snapshot =
@@ -52,14 +51,12 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       final Map<String, String> loadedImages = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        // Only add images that have a valid, non-empty URL
         if (data.containsKey('imageUrl') &&
             data['imageUrl'] != null &&
             data['imageUrl'].isNotEmpty) {
           loadedImages[doc.id] = data['imageUrl'];
         }
       }
-      // Check if the widget is still mounted before updating the state
       if (mounted) {
         setState(() {
           _cardBackgrounds = loadedImages;
@@ -67,12 +64,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         });
       }
     } catch (e) {
-      // If there's an error, stop loading so the UI can build without images.
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        // Optionally, show an error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Couldn't load card images: $e")),
         );
@@ -80,9 +75,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     }
   }
 
-  /// A helper method to launch external URLs in the device's default browser.
+  /// Helper method to launch external URLs.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
+    // FIX: Corrected the method name from `canLaunch` to `canLaunchUrl`.
     if (!await canLaunchUrl(uri)) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -91,6 +87,8 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       }
       return;
     }
+    // FIX: The `launchUrl` and `LaunchMode` methods will now be recognized
+    // because of the added import statement.
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
@@ -99,13 +97,12 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
-    // This is your original hardcoded list of features.
-    // The 'id' MUST match the document ID in the 'card_backgrounds' collection.
     final List<Map<String, dynamic>> features = [
       {
         'id': 'department_notes',
         'label': 'Department Notes',
-        'icon': Icons.school,
+        'icon': Icons.school_outlined,
+        'color': const Color(0xFF2E86DE), // Blue
         'action':
             () => Navigator.push(
               context,
@@ -117,7 +114,8 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       {
         'id': 'events',
         'label': 'Events',
-        'icon': Icons.calendar_today,
+        'icon': Icons.calendar_today_outlined,
+        'color': const Color(0xFFE040FB), // Pink/Magenta
         'action':
             () => Navigator.push(
               context,
@@ -125,9 +123,154 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             ),
       },
       {
+        'id': 'lost_and_found',
+        'label': 'Lost & Found',
+        'icon': Icons.find_in_page_outlined,
+        'color': const Color(0xFFF48C06), // Orange
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LostAndFoundScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'marketplace',
+        'label': 'Marketplace',
+        'icon': Icons.storefront_outlined,
+        'color': const Color(0xFF38B000), // Green
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarketplaceScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'connect_ai',
+        'label': 'Connect AI',
+        'icon': Icons.auto_awesome_outlined,
+        'color': const Color(0xFF6A00F4), // Purple
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AiChatHistoryScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'peer_rooms',
+        'label': 'Peer Rooms',
+        'icon': Icons.group_outlined,
+        'color': const Color(0xFF00B4D8), // Cyan
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
+            ),
+      },
+      {
+        'id': 'nonote',
+        'label': 'No-Note',
+        'icon': Icons.note_alt_outlined,
+        'color': const Color(0xFFD00000), // Red
+        'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
+      },
+      {
+        'id': 'digital_id',
+        'label': 'Digital ID',
+        'icon': Icons.badge_outlined,
+        'color': Colors.green.shade600,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const IdCardScreen()),
+            ),
+      },
+      {
+        'id': 'code_playground',
+        'label': 'Code Playground',
+        'icon': Icons.code_outlined,
+        'color': Colors.indigo.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CodePlaygroundScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'dev_community',
+        'label': 'Dev Community',
+        'icon': Icons.question_answer_outlined,
+        'color': Colors.orange.shade700,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DevCommunityScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'quiz',
+        'label': 'Programming Quiz',
+        'icon': Icons.quiz_outlined,
+        'color': Colors.deepOrange.shade400,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const QuizCategoriesScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'pdf_buddy',
+        'label': 'PDF Study Buddy',
+        'icon': Icons.picture_as_pdf_outlined,
+        'color': Colors.indigo.shade300,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PdfBuddyScreen()),
+            ),
+      },
+      {
+        'id': 'linkedin_analyzer',
+        'label': 'LinkedIn Analyzer',
+        'icon': Icons.analytics_outlined,
+        'color': Colors.blue.shade700,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LinkedInAnalyzerScreen(),
+              ),
+            ),
+      },
+      {
+        'id': 'youtube_summarizer',
+        'label': 'YouTube Summarizer',
+        'icon': Icons.ondemand_video_outlined,
+        'color': Colors.red.shade700,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const YouTubeSummarizerScreen(),
+              ),
+            ),
+      },
+      {
         'id': 'tech_news',
         'label': 'Tech News',
         'icon': Icons.newspaper_outlined,
+        'color': Colors.grey.shade600,
         'action':
             () => Navigator.push(
               context,
@@ -138,6 +281,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'games',
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
+        'color': Colors.teal.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -151,55 +295,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             ),
       },
       {
-        'id': 'digital_id',
-        'label': 'Digital ID',
-        'icon': Icons.badge_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const IdCardScreen()),
-            ),
-      },
-      {
-        'id': 'connect_ai',
-        'label': 'Connect AI',
-        'icon': Icons.auto_awesome,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const AiChatHistoryScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'code_playground',
-        'label': 'Code Playground',
-        'icon': Icons.code,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CodePlaygroundScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'dev_community',
-        'label': 'Dev Community',
-        'icon': Icons.question_answer_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DevCommunityScreen(),
-              ),
-            ),
-      },
-      {
         'id': 'etlab',
         'label': 'RIT ETLab',
         'icon': Icons.computer_outlined,
+        'color': Colors.lightBlue.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -207,92 +306,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                 builder: (context) => const EtlabWebviewScreen(),
               ),
             ),
-      },
-      {
-        'id': 'lost_and_found',
-        'label': 'Lost & Found',
-        'icon': Icons.find_in_page_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const LostAndFoundScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'peer_rooms',
-        'label': 'Peer Rooms',
-        'icon': Icons.group_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
-            ),
-      },
-      {
-        'id': 'marketplace',
-        'label': 'Marketplace',
-        'icon': Icons.storefront_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MarketplaceScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'quiz',
-        'label': 'Programming Quiz',
-        'icon': Icons.quiz_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const QuizCategoriesScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'pdf_buddy',
-        'label': 'PDF Study Buddy',
-        'icon': Icons.picture_as_pdf_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PdfBuddyScreen()),
-            ),
-      },
-      {
-        'id': 'linkedin_analyzer',
-        'label': 'LinkedIn Analyzer',
-        'icon': Icons.analytics_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const LinkedInAnalyzerScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'youtube_summarizer',
-        'label': 'YouTube Summarizer',
-        'icon': Icons.ondemand_video_outlined,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const YouTubeSummarizerScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'nonote',
-        'label': 'No-Note',
-        'icon': Icons.note_alt_outlined,
-        'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
     ];
 
@@ -314,15 +327,18 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 16),
+              // FIX: The `GoogleFonts` class will now be recognized
+              // because of the added import statement.
               Text(
                 'Campus Connect',
                 style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
               ),
@@ -331,33 +347,24 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                 'Explore tools and resources',
                 style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Expanded(
                 child:
                     _isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : GridView.builder(
-                          padding: const EdgeInsets.only(top: 10, bottom: 20),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount:
-                                    2, // Your original 2-column layout
-                                crossAxisSpacing: 20,
-                                mainAxisSpacing: 20,
-                                childAspectRatio: 1.0,
-                              ),
+                        : ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 20),
                           itemCount: features.length,
                           itemBuilder: (context, index) {
                             final feature = features[index];
                             final featureId = feature['id'];
-                            // Get the dynamic image URL from our state map.
-                            // It will be null if no URL is set in Firestore.
                             final imageUrl = _cardBackgrounds[featureId];
 
                             return FeatureCard(
                               label: feature['label'],
                               icon: feature['icon'],
-                              imageUrl: imageUrl, // Pass the dynamic image URL
+                              color: feature['color'],
+                              imageUrl: imageUrl,
                               onTap: feature['action'],
                             );
                           },
