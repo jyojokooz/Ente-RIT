@@ -4,12 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-// Import the dedicated management screens from the 'admin' subfolder
+// Import all the dedicated management screens from the 'admin' subfolder
 import 'admin/admin_manage_users_screen.dart';
 import 'admin/admin_manage_posts_screen.dart';
 import 'admin/admin_manage_departments_screen.dart';
 import 'admin/admin_manage_events_screen.dart';
 import 'admin/admin_manage_lostfound_screen.dart';
+import 'admin/admin_manage_card_images_screen.dart'; // The new screen for card images
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -29,7 +30,7 @@ class AdminPanelScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // --- AT A GLANCE SECTION (RESTORED) ---
+          // --- AT A GLANCE SECTION ---
           Text(
             "At a Glance",
             style: GoogleFonts.poppins(
@@ -75,9 +76,9 @@ class AdminPanelScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // --- USER ACTIVITY SECTION ---
+          // --- USER MANAGEMENT SECTION ---
           Text(
-            "User Activity",
+            "User Management",
             style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -101,9 +102,9 @@ class AdminPanelScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // --- POSTS ACTIVITY SECTION ---
+          // --- POSTS MANAGEMENT SECTION ---
           Text(
-            "Post Activity",
+            "Post Management",
             style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -127,61 +128,9 @@ class AdminPanelScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // --- EVENT ACTIVITY SECTION ---
+          // --- CONTENT MANAGEMENT SECTION ---
           Text(
-            "Event Activity",
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _ActivityChartCard(
-            title: "New Events / 7 Days",
-            collectionName: "events",
-            timestampField: "createdAt",
-            color: Colors.green,
-          ),
-          const SizedBox(height: 16),
-          _buildManagementCard(
-            context: context,
-            label: 'Manage All Events',
-            icon: Icons.event_available_outlined,
-            color: Colors.green.shade400,
-            screen: const AdminManageEventsScreen(),
-          ),
-          const SizedBox(height: 32),
-
-          // --- LOST & FOUND ACTIVITY SECTION ---
-          Text(
-            "Lost & Found Activity",
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _ActivityChartCard(
-            title: "New Items / 7 Days",
-            collectionName: "lost_and_found",
-            timestampField: "createdAt",
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          _buildManagementCard(
-            context: context,
-            label: 'Manage Lost & Found',
-            icon: Icons.find_in_page_outlined,
-            color: Colors.red.shade400,
-            screen: const AdminManageLostFoundScreen(),
-          ),
-          const SizedBox(height: 32),
-
-          // --- DEPARTMENTS SECTION (No Graph, just a stat card) ---
-          Text(
-            "Departments",
+            "Content Management",
             style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -196,6 +145,32 @@ class AdminPanelScreen extends StatelessWidget {
             color: Colors.purple.shade400,
             screen: const AdminManageDepartmentsScreen(),
           ),
+          const SizedBox(height: 12),
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Events',
+            icon: Icons.event_available_outlined,
+            color: Colors.green.shade400,
+            screen: const AdminManageEventsScreen(),
+          ),
+          const SizedBox(height: 12),
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Lost & Found',
+            icon: Icons.find_in_page_outlined,
+            color: Colors.red.shade400,
+            screen: const AdminManageLostFoundScreen(),
+          ),
+          const SizedBox(height: 12),
+          // --- THIS IS THE NEW CARD YOU REQUESTED ---
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Card Backgrounds',
+            icon: Icons.image_outlined,
+            color: Colors.teal.shade400,
+            screen: const AdminManageCardImagesScreen(),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );

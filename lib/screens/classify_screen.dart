@@ -1,8 +1,7 @@
-// lib/screens/classify_screen.dart
-
-import 'package:flutter/material.dart'; // <<< --- THIS IS THE CRITICAL FIX ---
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // --- Screen Imports ---
 import 'departments_screen.dart';
@@ -25,10 +24,61 @@ import 'youtube_summarizer_screen.dart';
 
 // --- Widget Imports ---
 import '../widgets/reusable_bottom_app_bar.dart';
-import '../widgets/category_card.dart';
+import '../widgets/feature_card.dart'; // Make sure you have created this widget file
 
-class ClassifyScreen extends StatelessWidget {
+class ClassifyScreen extends StatefulWidget {
   const ClassifyScreen({super.key});
+
+  @override
+  State<ClassifyScreen> createState() => _ClassifyScreenState();
+}
+
+class _ClassifyScreenState extends State<ClassifyScreen> {
+  // This map will store the fetched image URLs, mapping a card's ID to its URL.
+  Map<String, String> _cardBackgrounds = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBackgroundImages();
+  }
+
+  // Fetches image URLs from Firestore when the screen loads.
+  Future<void> _fetchBackgroundImages() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('card_backgrounds').get();
+      final Map<String, String> loadedImages = {};
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        // Only add images that have a valid, non-empty URL
+        if (data.containsKey('imageUrl') &&
+            data['imageUrl'] != null &&
+            data['imageUrl'].isNotEmpty) {
+          loadedImages[doc.id] = data['imageUrl'];
+        }
+      }
+      // Check if the widget is still mounted before updating the state
+      if (mounted) {
+        setState(() {
+          _cardBackgrounds = loadedImages;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // If there's an error, stop loading so the UI can build without images.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        // Optionally, show an error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Couldn't load card images: $e")),
+        );
+      }
+    }
+  }
 
   /// A helper method to launch external URLs in the device's default browser.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
@@ -46,16 +96,16 @@ class ClassifyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color cardColor = Colors.grey.shade900;
-    const Color secondaryTextColor = Colors.white70;
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
-    final List<Map<String, dynamic>> categories = [
+    // This is your original hardcoded list of features.
+    // The 'id' MUST match the document ID in the 'card_backgrounds' collection.
+    final List<Map<String, dynamic>> features = [
       {
+        'id': 'department_notes',
         'label': 'Department Notes',
         'icon': Icons.school,
-        'color': Colors.blue.shade600,
         'action':
             () => Navigator.push(
               context,
@@ -65,9 +115,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'events',
         'label': 'Events',
         'icon': Icons.calendar_today,
-        'color': Colors.pink.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -75,9 +125,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'tech_news',
         'label': 'Tech News',
         'icon': Icons.newspaper_outlined,
-        'color': Colors.grey.shade600,
         'action':
             () => Navigator.push(
               context,
@@ -85,9 +135,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'games',
         'label': 'Games',
         'icon': Icons.gamepad_outlined,
-        'color': Colors.teal.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -101,9 +151,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'digital_id',
         'label': 'Digital ID',
         'icon': Icons.badge_outlined,
-        'color': Colors.green.shade500,
         'action':
             () => Navigator.push(
               context,
@@ -111,9 +161,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'connect_ai',
         'label': 'Connect AI',
         'icon': Icons.auto_awesome,
-        'color': Colors.purple.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -123,9 +173,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'code_playground',
         'label': 'Code Playground',
         'icon': Icons.code,
-        'color': Colors.indigo.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -135,9 +185,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'dev_community',
         'label': 'Dev Community',
         'icon': Icons.question_answer_outlined,
-        'color': Colors.orange.shade600,
         'action':
             () => Navigator.push(
               context,
@@ -147,9 +197,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'etlab',
         'label': 'RIT ETLab',
         'icon': Icons.computer_outlined,
-        'color': Colors.lightBlue.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -159,9 +209,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'lost_and_found',
         'label': 'Lost & Found',
         'icon': Icons.find_in_page_outlined,
-        'color': Colors.brown.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -171,9 +221,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'peer_rooms',
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
-        'color': Colors.cyan.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -181,9 +231,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'marketplace',
         'label': 'Marketplace',
         'icon': Icons.storefront_outlined,
-        'color': Colors.amber.shade700,
         'action':
             () => Navigator.push(
               context,
@@ -193,9 +243,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'quiz',
         'label': 'Programming Quiz',
         'icon': Icons.quiz_outlined,
-        'color': Colors.deepOrange.shade400,
         'action':
             () => Navigator.push(
               context,
@@ -205,9 +255,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'pdf_buddy',
         'label': 'PDF Study Buddy',
         'icon': Icons.picture_as_pdf_outlined,
-        'color': Colors.indigo.shade300,
         'action':
             () => Navigator.push(
               context,
@@ -215,9 +265,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'linkedin_analyzer',
         'label': 'LinkedIn Analyzer',
         'icon': Icons.analytics_outlined,
-        'color': Colors.blue.shade700,
         'action':
             () => Navigator.push(
               context,
@@ -227,9 +277,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'youtube_summarizer',
         'label': 'YouTube Summarizer',
         'icon': Icons.ondemand_video_outlined,
-        'color': Colors.red.shade700,
         'action':
             () => Navigator.push(
               context,
@@ -239,9 +289,9 @@ class ClassifyScreen extends StatelessWidget {
             ),
       },
       {
+        'id': 'nonote',
         'label': 'No-Note',
         'icon': Icons.note_alt_outlined,
-        'color': Colors.red.shade400,
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
     ];
@@ -269,7 +319,7 @@ class ClassifyScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Classify',
+                'Campus Connect',
                 style: GoogleFonts.poppins(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -278,32 +328,40 @@ class ClassifyScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Explore campus resources and categories',
+                'Explore tools and resources',
                 style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
               ),
               const SizedBox(height: 20),
               Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.only(top: 10, bottom: 20),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
-                    childAspectRatio: 1.0,
-                  ),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    return CategoryCard(
-                      label: category['label'],
-                      icon: category['icon'],
-                      color: category['color'],
-                      cardColor: cardColor,
-                      textColor: secondaryTextColor,
-                      onTap: category['action'],
-                    );
-                  },
-                ),
+                child:
+                    _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : GridView.builder(
+                          padding: const EdgeInsets.only(top: 10, bottom: 20),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount:
+                                    2, // Your original 2-column layout
+                                crossAxisSpacing: 20,
+                                mainAxisSpacing: 20,
+                                childAspectRatio: 1.0,
+                              ),
+                          itemCount: features.length,
+                          itemBuilder: (context, index) {
+                            final feature = features[index];
+                            final featureId = feature['id'];
+                            // Get the dynamic image URL from our state map.
+                            // It will be null if no URL is set in Firestore.
+                            final imageUrl = _cardBackgrounds[featureId];
+
+                            return FeatureCard(
+                              label: feature['label'],
+                              icon: feature['icon'],
+                              imageUrl: imageUrl, // Pass the dynamic image URL
+                              onTap: feature['action'],
+                            );
+                          },
+                        ),
               ),
             ],
           ),
