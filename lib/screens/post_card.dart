@@ -3,16 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart'; // <-- THIS IS THE FIX
+
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
+import 'post_card_placeholder.dart';
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
   final Function() onProfileTapped;
   final Function() onLikePressed;
-  final Function() onEditPressed; // Callback for editing
+  final Function() onEditPressed;
 
   const PostCard({
     super.key,
@@ -21,12 +24,55 @@ class PostCard extends StatelessWidget {
     required this.onDeletePressed,
     required this.onProfileTapped,
     required this.onLikePressed,
-    required this.onEditPressed, // Added to constructor
+    required this.onEditPressed,
   });
 
   @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  Map<String, dynamic>? _authorData;
+  bool _isLoadingAuthor = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAuthorData();
+  }
+
+  Future<void> _fetchAuthorData() async {
+    try {
+      final postData = widget.postSnapshot.data() as Map<String, dynamic>;
+      final authorId = postData['userId'];
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(authorId)
+              .get();
+
+      if (mounted) {
+        setState(() {
+          _authorData = userDoc.data();
+          _isLoadingAuthor = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAuthor = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final postData = postSnapshot.data() as Map<String, dynamic>;
+    if (_isLoadingAuthor) {
+      return const PostCardPlaceholder();
+    }
+
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
@@ -38,8 +84,12 @@ class PostCard extends StatelessWidget {
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    final String postAuthorId = postData['userId'];
-    final String heroTag = 'postImage-${postSnapshot.id}';
+    final String heroTag = 'postImage-${widget.postSnapshot.id}';
+
+    final List<dynamic> likesList = postData['likes'] ?? [];
+    final int commentCount = postData['comments'] ?? 0;
+    final bool isLiked = likesList.contains(currentUserId);
+    final int likeCount = likesList.length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -54,12 +104,12 @@ class PostCard extends StatelessWidget {
           children: [
             _buildPostHeader(
               context: context,
-              postAuthorId: postAuthorId,
+              authorData: _authorData,
               timestamp: timestamp,
               isAuthor: isAuthor,
-              onProfileTapped: onProfileTapped,
-              onDeletePressed: onDeletePressed,
-              onEditPressed: onEditPressed, // Pass callback to header
+              onProfileTapped: widget.onProfileTapped,
+              onDeletePressed: widget.onDeletePressed,
+              onEditPressed: widget.onEditPressed,
             ),
             if (caption.isNotEmpty)
               Padding(
@@ -84,30 +134,80 @@ class PostCard extends StatelessWidget {
               stream:
                   FirebaseFirestore.instance
                       .collection('posts')
-                      .doc(postSnapshot.id)
+                      .doc(widget.postSnapshot.id)
                       .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SizedBox(height: 24);
+                if (!snapshot.hasData) {
+                  return _buildActionButtons(
+                    context,
+                    isLiked: isLiked,
+                    likeCount: likeCount,
+                    commentCount: commentCount,
+                  );
                 }
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return const SizedBox.shrink();
-                }
-                final realTimePostData =
+                final realTimeData =
                     snapshot.data!.data() as Map<String, dynamic>;
-                final List<dynamic> likesList = realTimePostData['likes'] ?? [];
-                final int commentCount = realTimePostData['comments'] ?? 0;
-                final bool isLiked = likesList.contains(currentUserId);
-                final int likeCount = likesList.length;
+                final rtLikes = realTimeData['likes'] ?? [];
                 return _buildActionButtons(
                   context,
-                  isLiked: isLiked,
-                  likeCount: likeCount,
-                  commentCount: commentCount,
+                  isLiked: rtLikes.contains(currentUserId),
+                  likeCount: rtLikes.length,
+                  commentCount: realTimeData['comments'] ?? 0,
                 );
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageViewer(
+    BuildContext context,
+    String imageUrl,
+    String heroTag,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) =>
+                    FullScreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
+          ),
+        );
+      },
+      child: Hero(
+        tag: heroTag,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15.0),
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: 300,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Shimmer.fromColors(
+                baseColor: Colors.grey.shade800,
+                highlightColor: Colors.grey.shade700,
+                child: Container(
+                  height: 300,
+                  width: double.infinity,
+                  color: Colors.white,
+                ),
+              );
+            },
+            errorBuilder:
+                (context, error, stackTrace) => Container(
+                  height: 300,
+                  color: Colors.grey.shade800,
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.grey),
+                  ),
+                ),
+          ),
         ),
       ),
     );
@@ -140,12 +240,10 @@ class PostCard extends StatelessWidget {
               height: 300,
               loadingBuilder: (context, child, progress) {
                 if (progress == null) return child;
-                return Container(
-                  height: 300,
-                  color: Colors.grey.shade800,
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.yellow),
-                  ),
+                return Shimmer.fromColors(
+                  baseColor: Colors.grey.shade800,
+                  highlightColor: Colors.grey.shade700,
+                  child: Container(height: 300, color: Colors.white),
                 );
               },
               errorBuilder:
@@ -174,55 +272,14 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImageViewer(
-    BuildContext context,
-    String imageUrl,
-    String heroTag,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder:
-                (context) =>
-                    FullScreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
-          ),
-        );
-      },
-      child: Hero(
-        tag: heroTag,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(15.0),
-          child: Image.network(
-            imageUrl,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: 300,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Container(
-                height: 300,
-                color: Colors.grey.shade800,
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.yellow),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildPostHeader({
     required BuildContext context,
-    required String postAuthorId,
+    required Map<String, dynamic>? authorData,
     required DateTime? timestamp,
     required bool isAuthor,
     required VoidCallback onProfileTapped,
     required VoidCallback onDeletePressed,
-    required VoidCallback onEditPressed, // Receive the edit callback
+    required VoidCallback onEditPressed,
   }) {
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
@@ -232,121 +289,82 @@ class PostCard extends StatelessWidget {
             ? DateFormat('MMM d, h:mm a').format(timestamp)
             : '...';
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('users')
-              .doc(postAuthorId)
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return Row(
-            children: [
-              const CircleAvatar(radius: 20, backgroundColor: Colors.grey),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 16,
-                      width: 120,
-                      color: Colors.grey.shade700,
+    final userData = authorData ?? {};
+    final String name = userData['displayName'] ?? 'Unknown User';
+    final String username = userData['username'] ?? '';
+    final String userImage = userData['profilePhotoUrl'] ?? '';
+
+    return GestureDetector(
+      onTap: onProfileTapped,
+      child: Container(
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundImage:
+                  userImage.isNotEmpty ? NetworkImage(userImage) : null,
+              child: userImage.isEmpty ? const Icon(Icons.person) : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor,
                     ),
-                    const SizedBox(height: 4),
-                    Container(
-                      height: 12,
-                      width: 80,
-                      color: Colors.grey.shade700,
+                  ),
+                  if (username.isNotEmpty)
+                    Text(
+                      '@$username',
+                      style: GoogleFonts.poppins(
+                        color: secondaryTextColor,
+                        fontSize: 12,
+                      ),
                     ),
-                  ],
-                ),
+                ],
               ),
-            ],
-          );
-        }
-
-        final userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-        final String name = userData['displayName'] ?? 'Unknown User';
-        final String username = userData['username'] ?? '';
-        final String userImage = userData['profilePhotoUrl'] ?? '';
-
-        return GestureDetector(
-          onTap: onProfileTapped,
-          child: Container(
-            color: Colors.transparent,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage:
-                      userImage.isNotEmpty ? NetworkImage(userImage) : null,
-                  child: userImage.isEmpty ? const Icon(Icons.person) : null,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          color: primaryTextColor,
+            ),
+            Text(
+              formattedDate,
+              style: GoogleFonts.poppins(
+                color: secondaryTextColor,
+                fontSize: 12,
+              ),
+            ),
+            if (isAuthor)
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    onEditPressed();
+                  } else if (value == 'delete') {
+                    onDeletePressed();
+                  }
+                },
+                itemBuilder:
+                    (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Text('Edit Post'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          'Delete Post',
+                          style: TextStyle(color: Colors.red),
                         ),
                       ),
-                      if (username.isNotEmpty)
-                        Text(
-                          '@$username',
-                          style: GoogleFonts.poppins(
-                            color: secondaryTextColor,
-                            fontSize: 12,
-                          ),
-                        ),
                     ],
-                  ),
-                ),
-                Text(
-                  formattedDate,
-                  style: GoogleFonts.poppins(
-                    color: secondaryTextColor,
-                    fontSize: 12,
-                  ),
-                ),
-                if (isAuthor)
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        onEditPressed();
-                      } else if (value == 'delete') {
-                        onDeletePressed();
-                      }
-                    },
-                    itemBuilder:
-                        (BuildContext context) => <PopupMenuEntry<String>>[
-                          const PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Text('Edit Post'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Text(
-                              'Delete Post',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                    color: Colors.grey.shade800,
-                    icon: const Icon(
-                      Icons.more_horiz,
-                      color: secondaryTextColor,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+                color: Colors.grey.shade800,
+                icon: const Icon(Icons.more_horiz, color: secondaryTextColor),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -365,7 +383,7 @@ class PostCard extends StatelessWidget {
         Row(
           children: [
             GestureDetector(
-              onTap: onCommentPressed,
+              onTap: widget.onCommentPressed,
               child: Container(
                 color: Colors.transparent,
                 child: Row(
@@ -396,7 +414,7 @@ class PostCard extends StatelessWidget {
                 color: isLiked ? primaryAccentColor : secondaryTextColor,
               ),
               iconSize: 24,
-              onPressed: onLikePressed,
+              onPressed: widget.onLikePressed,
             ),
             if (likeCount > 0)
               Padding(

@@ -79,6 +79,7 @@ dependencies:
   flutter_tts: ^3.8.5 # For text-to-speech audio playback
   youtube_explode_dart: ^2.1.0
   transparent_image: ^2.0.1
+  shimmer: ^3.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
