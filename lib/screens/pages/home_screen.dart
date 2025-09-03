@@ -3,16 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// --- Screen Imports ---
-// Paths are updated for the new folder structure.
 import '../comments_screen.dart';
-import 'profile_screen.dart'; // Corrected: It's in the same 'pages' folder.
+import '../edit_post_screen.dart';
+import '../post_card.dart';
+import '../post_card_placeholder.dart'; // <-- IMPORT THE PLACEHOLDER
+import 'profile_screen.dart';
 import '../search_screen.dart';
 import '../chat_list_screen.dart';
-import '../post_card.dart';
-import '../edit_post_screen.dart';
-
-// NOTE: The unused 'create_post_screen.dart' import has been removed.
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,7 +20,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
-  // The _lastPressedAt variable and PopScope have been moved to MainScreen.
 
   Future<void> _refreshPosts() async {
     setState(() {});
@@ -70,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _deletePost(String postId) async {
+    // ... (delete logic is unchanged)
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
@@ -124,8 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     const Color primaryAccentColor = Colors.yellow;
     final Color cardBackgroundColor = Colors.grey.shade900;
 
-    // This widget now only returns its core content.
-    // The Scaffold, FAB, and BottomAppBar are all in MainScreen.
     return RefreshIndicator(
       onRefresh: _refreshPosts,
       color: primaryAccentColor,
@@ -144,15 +139,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
               builder: (context, snapshot) {
+                // --- THIS IS THE CRITICAL CHANGE ---
+                // If we are waiting for the list of posts, show a list of shimmer placeholders
+                // instead of a single rotating spinner.
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SliverFillRemaining(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: primaryAccentColor,
-                      ),
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => const PostCardPlaceholder(),
+                      childCount: 5, // Show 5 placeholders while loading
                     ),
                   );
                 }
+                // --- END OF CHANGE ---
+
                 if (snapshot.hasError) {
                   return SliverFillRemaining(
                     child: Center(
@@ -205,6 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
+    // ... (_buildTopBar logic is unchanged)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
