@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 // --- Screen Imports ---
+// No change needed here if you updated your barrel file.
 import 'pages/pages.dart';
 import 'create_post_screen.dart';
 
@@ -22,10 +23,15 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
+
+    // --- CHANGE 1: Update the list of pages ---
+    // We've added ExploreScreen as the second tab.
+    // Note how the indices for Classify and Profile have shifted.
     _pages = [
-      const HomeScreen(),
-      const ClassifyScreen(),
-      if (currentUser != null)
+      const HomeScreen(), // Index 0
+      const ExploreScreen(), // Index 1 (NEW)
+      const ClassifyScreen(), // Index 2 (was 1)
+      if (currentUser != null) // Index 3 (was 2)
         ProfileScreen(userId: currentUser.uid)
       else
         const Center(child: Text("Error: User not found.")),
@@ -89,6 +95,8 @@ class _MainScreenState extends State<MainScreen> {
     final Color inactiveColor = Colors.white70;
     final Color bgColor = Colors.grey.shade900;
 
+    // --- CHANGE 2 & 3: Restructure the BottomAppBar for 4 items ---
+    // The layout now has two items on the left and two on the right of the FAB.
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
       notchMargin: 10.0,
@@ -96,51 +104,48 @@ class _MainScreenState extends State<MainScreen> {
       child: SizedBox(
         height: 60,
         child: Row(
+          // Using spaceAround works well for distributing 4 items around the center notch.
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
-            // --- Home Button ---
+            // --- Home Button (Index 0) ---
             IconButton(
               tooltip: 'Home',
-              // FIX: Removed 'const' because 'activeColor' and 'inactiveColor' are runtime variables.
               icon: Icon(
                 _currentIndex == 0 ? Icons.home_filled : Icons.home_outlined,
                 color: _currentIndex == 0 ? activeColor : inactiveColor,
               ),
               onPressed: () => _onTabTapped(0),
             ),
-            // --- Classify Button ---
+            // --- Explore Button (Index 1 - NEW) ---
             IconButton(
-              tooltip: 'Classify',
-              // FIX: Removed 'const'
+              tooltip: 'Explore',
               icon: Icon(
-                _currentIndex == 1 ? Icons.apps : Icons.apps_outlined,
+                _currentIndex == 1 ? Icons.search : Icons.search_outlined,
                 color: _currentIndex == 1 ? activeColor : inactiveColor,
               ),
               onPressed: () => _onTabTapped(1),
             ),
-            const SizedBox(width: 40), // The space for the FAB
-            // --- Profile Button ---
+
+            // The empty space for the Floating Action Button remains in the middle.
+            const SizedBox(width: 40),
+
+            // --- Classify Button (Index 2 - Updated) ---
             IconButton(
-              tooltip: 'Profile',
-              // FIX: Removed 'const'
+              tooltip: 'Classify',
               icon: Icon(
-                _currentIndex == 2 ? Icons.person : Icons.person_outline,
+                _currentIndex == 2 ? Icons.apps : Icons.apps_outlined,
                 color: _currentIndex == 2 ? activeColor : inactiveColor,
               ),
               onPressed: () => _onTabTapped(2),
             ),
-            // --- Notifications Button ---
+            // --- Profile Button (Index 3 - Updated) ---
             IconButton(
-              tooltip: 'Notifications',
-              // FIX: Removed 'const' from the Icon widget. This was the specific error you reported.
-              icon: Icon(Icons.notifications_none, color: inactiveColor),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Notifications screen coming soon!'),
-                  ),
-                );
-              },
+              tooltip: 'Profile',
+              icon: Icon(
+                _currentIndex == 3 ? Icons.person : Icons.person_outline,
+                color: _currentIndex == 3 ? activeColor : inactiveColor,
+              ),
+              onPressed: () => _onTabTapped(3),
             ),
           ],
         ),

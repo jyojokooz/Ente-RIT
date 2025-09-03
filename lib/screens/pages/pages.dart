@@ -6,3 +6,4 @@
 export 'home_screen.dart';
 export 'classify_screen.dart';
 export 'profile_screen.dart';
+export 'explore_screen.dart';
