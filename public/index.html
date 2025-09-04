@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Profile</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap");
+
+      body {
+        font-family: "Poppins", sans-serif;
+        background-color: #121212;
+        color: #e0e0e0;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 100vh;
+      }
+
+      .card {
+        background-color: #1e1e1e;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+        padding: 30px;
+        box-sizing: border-box;
+        border: 1px solid #333;
+      }
+
+      #loader {
+        border: 4px solid #f3f3f330;
+        border-top: 4px solid #facc15;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 50px auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .profile-content {
+        display: none;
+      }
+
+      #profilePhoto {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 4px solid #facc15;
+        object-fit: cover;
+        background-color: #333;
+      }
+
+      #displayName {
+        font-size: 1.8em;
+        font-weight: 700;
+        margin-top: 15px;
+        margin-bottom: 5px;
+      }
+
+      #username {
+        font-size: 1em;
+        color: #aaa;
+        margin-bottom: 20px;
+      }
+
+      .info-section {
+        text-align: left;
+        margin-top: 25px;
+        border-top: 1px solid #333;
+        padding-top: 20px;
+      }
+
+      .info-item {
+        margin-bottom: 15px;
+      }
+      .info-item strong {
+        display: block;
+        color: #facc15;
+        font-size: 0.8em;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .info-item p {
+        margin: 0;
+        font-size: 1em;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+
+      #links {
+        color: #4dabf7;
+        text-decoration: none;
+      }
+      #links:hover {
+        text-decoration: underline;
+      }
+
+      #errorMessage {
+        color: #ff6b6b;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <!-- Loader will show initially -->
+      <div id="loader"></div>
+
+      <!-- This content will be shown after data is loaded -->
+      <div id="profileContent" class="profile-content">
+        <img id="profilePhoto" src="" alt="Profile Photo" />
+        <h1 id="displayName"></h1>
+        <p id="username"></p>
+
+        <div class="info-section">
+          <div class="info-item">
+            <strong>Department</strong>
+            <p id="department"></p>
+          </div>
+          <div class="info-item">
+            <strong>Bio</strong>
+            <p id="bio"></p>
+          </div>
+          <div class="info-item">
+            <strong>Links</strong>
+            <a
+              id="links"
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+            ></a>
+          </div>
+        </div>
+      </div>
+
+      <!-- This will be shown if user is not found -->
+      <div id="errorMessage" style="display: none"></div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <script>
+      // --- IMPORTANT: REPLACE WITH YOUR FIREBASE PROJECT CONFIG ---
+      const firebaseConfig = {
+        apiKey: "AIzaSyB_-wEKYzjhtRVphrndNPCAzZ-PNBlWwrY", // Your Web API Key
+        authDomain: "fir-auth-bfed9.firebaseapp.com",
+        projectId: "fir-auth-bfed9",
+        storageBucket: "fir-auth-bfed9.appspot.com",
+        messagingSenderId: "267885782991",
+        appId: "1:267885782991:web:794d123f36e4ff3ee514ba", // Find this in Project Settings -> Web App
+      };
+
+      // Initialize Firebase
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      // Function to get user ID from the URL path
+      function getUserIdFromUrl() {
+        const path = window.location.pathname; // e.g., "/profile/abcdef12345"
+        const parts = path.split("/");
+        if (parts.length === 3 && parts[1] === "profile") {
+          return parts[2]; // "abcdef12345"
+        }
+        return null;
+      }
+
+      // Function to fetch and display user data
+      async function loadUserProfile() {
+        const loader = document.getElementById("loader");
+        const profileContent = document.getElementById("profileContent");
+        const errorMessage = document.getElementById("errorMessage");
+
+        const userId = getUserIdFromUrl();
+
+        if (!userId) {
+          loader.style.display = "none";
+          errorMessage.textContent = "Invalid Profile URL.";
+          errorMessage.style.display = "block";
+          return;
+        }
+
+        try {
+          const userDocRef = db.collection("users").doc(userId);
+          const docSnap = await userDocRef.get();
+
+          if (docSnap.exists) {
+            const userData = docSnap.data();
+
+            // Populate the HTML elements with user data
+            document.getElementById("profilePhoto").src =
+              userData.profilePhotoUrl || "https://via.placeholder.com/150";
+            document.getElementById("displayName").textContent =
+              userData.displayName || "N/A";
+            document.getElementById("username").textContent =
+              `@${userData.username}` || "";
+            document.getElementById("department").textContent =
+              userData.department || "Not specified";
+            document.getElementById("bio").textContent =
+              userData.bio || "No bio provided.";
+
+            const linksElement = document.getElementById("links");
+            if (userData.links) {
+              linksElement.href = userData.links;
+              linksElement.textContent = userData.links;
+            } else {
+              linksElement.parentElement.style.display = "none"; // Hide if no link
+            }
+
+            // Show the profile content
+            profileContent.style.display = "block";
+          } else {
+            errorMessage.textContent = "User profile not found.";
+            errorMessage.style.display = "block";
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          errorMessage.textContent =
+            "Could not load profile. Please try again later.";
+          errorMessage.style.display = "block";
+        } finally {
+          // Hide the loader
+          loader.style.display = "none";
+        }
+      }
+
+      // Run the function when the page loads
+      window.onload = loadUserProfile;
+    </script>
+  </body>
+</html>

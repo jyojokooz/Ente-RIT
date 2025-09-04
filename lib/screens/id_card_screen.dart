@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart'; // For haptic feedback
 
 class IdCardScreen extends StatelessWidget {
   const IdCardScreen({super.key});
@@ -13,12 +14,23 @@ class IdCardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
+    // Set status bar color to match the app bar
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+      ),
+    );
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xff121212), // Dark background
       appBar: AppBar(
-        title: Text('Digital ID Card', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        elevation: 0,
+        title: Text(
+          'Digital ID Card',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: Colors.black,
       ),
       body: Center(
         child: FutureBuilder<DocumentSnapshot>(
@@ -29,19 +41,20 @@ class IdCardScreen extends StatelessWidget {
                   .get(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const CircularProgressIndicator(color: Colors.yellow);
+              return const CircularProgressIndicator(color: Color(0xfffacc15));
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
               return Text(
                 'Could not load user data.\nPlease complete your profile first.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(),
+                style: GoogleFonts.poppins(color: Colors.white70),
               );
             }
             final userData = snapshot.data!.data() as Map<String, dynamic>;
 
             return FlipCard(
-              front: _buildCardFront(userData),
+              onFlipDone: (isFront) => HapticFeedback.lightImpact(),
+              front: _buildCardFront(userData, context),
               back: _buildCardBack(userData),
             );
           },
@@ -50,193 +63,268 @@ class IdCardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCardFront(Map<String, dynamic> userData) {
-    final displayName = userData['displayName'] ?? 'No Name';
-    final department = userData['department'] ?? 'No Department';
-    final studentId = userData['studentId'] ?? 'N/A';
+  /// Builds the front side of the ID card.
+  Widget _buildCardFront(Map<String, dynamic> userData, BuildContext context) {
+    // --- Data Extraction with Fallbacks ---
+    final displayName = userData['displayName'] ?? 'Your Name';
+    final department = userData['department'] ?? 'Your Department';
+    final studentId = userData['studentId'] ?? '000000000';
     final profilePhotoUrl = userData['profilePhotoUrl'] ?? '';
     final joinedAt = (userData['joinedAt'] as Timestamp?)?.toDate();
+    final validThru =
+        (userData['validThru'] as Timestamp?)?.toDate() ??
+        DateTime.now().add(const Duration(days: 365 * 4));
 
+    // --- Formatted Data ---
     final formattedStudentId =
         studentId
             .replaceAllMapped(RegExp(r".{3}"), (match) => "${match.group(0)} ")
             .trim();
 
     return Container(
-      width: 320,
-      height: 500,
-      padding: const EdgeInsets.all(20.0),
+      width: 330,
+      height: 520,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade800, Colors.indigo.shade900],
+        borderRadius: BorderRadius.circular(25),
+        gradient: const LinearGradient(
+          colors: [Color(0xff1f1f1f), Color(0xff2d2d2d)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withAlpha(75),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: Colors.black.withAlpha(128), // <-- CORRECTED HERE
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Image.asset(
-            'assets/logo_placeholder.png',
-            height: 50,
-            errorBuilder:
-                (ctx, err, st) =>
-                    const Icon(Icons.school, color: Colors.white, size: 50),
-          ),
-          const SizedBox(height: 20),
-          CircleAvatar(
-            radius: 55,
-            backgroundColor: Colors.white,
-            child: CircleAvatar(
-              radius: 52,
-              backgroundImage:
-                  profilePhotoUrl.isNotEmpty
-                      ? NetworkImage(profilePhotoUrl)
-                      : null,
-              child:
-                  profilePhotoUrl.isEmpty
-                      ? const Icon(Icons.person, size: 50)
-                      : null,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- Header ---
+            Row(
+              children: [
+                Image.asset(
+                  'assets/logo_placeholder.png', // Replace with your logo
+                  height: 40,
+                  errorBuilder:
+                      (ctx, err, st) => const Icon(
+                        Icons.school,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'UNIVERSITY',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 15),
-          Text(
-            displayName,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            const SizedBox(height: 25),
+            // --- Profile Picture and Info ---
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 52,
+                  backgroundColor: const Color(0xfffacc15),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundImage:
+                        profilePhotoUrl.isNotEmpty
+                            ? NetworkImage(profilePhotoUrl)
+                            : null,
+                    child:
+                        profilePhotoUrl.isEmpty
+                            ? const Icon(
+                              Icons.person_outline,
+                              size: 60,
+                              color: Colors.grey,
+                            )
+                            : null,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xfffacc15),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          department,
+                          style: GoogleFonts.poppins(
+                            color: Colors.black,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            department,
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              color: Colors.yellow,
-              fontWeight: FontWeight.w500,
+            const Spacer(),
+            // --- ID and Dates ---
+            _buildInfoField('STUDENT ID', formattedStudentId),
+            const SizedBox(height: 15),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildInfoField(
+                  'MEMBER SINCE',
+                  joinedAt != null
+                      ? DateFormat('MM/yyyy').format(joinedAt)
+                      : 'N/A',
+                ),
+                _buildInfoField(
+                  'VALID THRU',
+                  DateFormat('MM/yy').format(validThru),
+                ),
+              ],
             ),
-          ),
-          const Spacer(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'STUDENT ID',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      color: Colors.white70,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  Text(
-                    formattedStudentId,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'MEMBER SINCE',
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      color: Colors.white70,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  Text(
-                    joinedAt != null
-                        ? DateFormat('MM/yyyy').format(joinedAt)
-                        : 'N/A',
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 10),
+          ],
+        ),
       ),
     );
   }
 
+  /// Builds the back side of the ID card.
   Widget _buildCardBack(Map<String, dynamic> userData) {
     final userUid = FirebaseAuth.instance.currentUser!.uid;
-    final studentId = userData['studentId'] ?? 'N/A';
+    final studentId = userData['studentId'] ?? 'NOT-SET';
+
+    // IMPORTANT: This URL should point to a web page you create.
+    // This page will display the user's public profile.
+    final qrData = 'https://fir-auth-bfed9.web.app/profile/$userUid';
 
     return Container(
-      width: 320,
-      height: 500,
+      width: 330,
+      height: 520,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.grey.shade800, Colors.grey.shade900],
+        borderRadius: BorderRadius.circular(25),
+        gradient: const LinearGradient(
+          colors: [Color(0xff2d2d2d), Color(0xff1f1f1f)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 30),
+          // --- Magnetic Stripe ---
           Container(height: 50, color: Colors.black),
-          const SizedBox(height: 30),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          const SizedBox(height: 40),
+          // --- QR Code ---
+          Center(
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 150.0,
+                gapless: false,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 25),
+          // --- Barcode ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40.0),
+            child: Container(
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: QrImageView(data: userUid, version: QrVersions.auto),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: Colors.white,
               child: BarcodeWidget(
                 barcode: Barcode.code128(),
                 data: studentId,
                 drawText: false,
                 color: Colors.black,
-                height: 60,
+                height: 50,
               ),
             ),
           ),
           const Spacer(),
+          // --- Disclaimer ---
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Text(
-              'This card is for official campus use only. If found, please return to the administration office.',
+              'This card is for official campus use only. If found, please return it to the administration office or scan the QR code for contact information.',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(fontSize: 10, color: Colors.white54),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// A helper widget to create styled info fields to reduce code duplication.
+  Widget _buildInfoField(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 10,
+            color: Colors.white.withAlpha(153), // <-- CORRECTED HERE
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: GoogleFonts.robotoMono(
+            fontSize: 16,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 }
