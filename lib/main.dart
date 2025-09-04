@@ -4,15 +4,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
-// --- Core Auth & Screens ---
+// --- Core App Entry Points ---
 import 'package:my_project/auth/auth_gate.dart';
-import 'package:my_project/screens/welcome_screen.dart';
-import 'package:my_project/auth/signup_screen.dart';
-import 'package:my_project/auth/login_screen.dart';
-import 'package:my_project/auth/forgot_password_screen.dart';
 import 'package:my_project/screens/main_screen.dart';
+import 'package:my_project/screens/splash_screen.dart';
 
 // --- Other Standalone Screens ---
+import 'package:my_project/auth/forgot_password_screen.dart';
 import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/screens/search_screen.dart';
 import 'package:my_project/screens/chat_list_screen.dart';
@@ -35,16 +33,19 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Campus Connect',
+      title: 'Kampus Konnect',
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: ColorScheme.dark(
           primary: Colors.yellow,
           secondary: Colors.yellow,
-          surface: Colors.grey.shade900,
+          // --- THIS IS THE FIX ---
+          // Change the surface color from dark grey to pure black.
+          surface: Colors.black,
           onPrimary: Colors.black,
           onSurface: Colors.white,
         ),
+        // We also explicitly set the scaffold background to black for consistency.
         scaffoldBackgroundColor: Colors.black,
         textTheme: GoogleFonts.poppinsTextTheme(
           ThemeData.dark().textTheme,
@@ -59,20 +60,13 @@ class MyApp extends StatelessWidget {
         ),
         bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey.shade900),
       ),
-      // AuthGate will decide the first screen to show when the app starts
-      home: const AuthGate(),
 
-      // These routes are used for manual navigation with Navigator.pushNamed
+      home: const SplashScreen(),
+
       routes: {
-        '/welcome': (context) => const WelcomeScreen(),
-        '/signup': (context) => const SignupScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
-
-        // --- THIS IS THE UPDATED LINE ---
-        // Changed '/main' to '/home' to match what your Login/Signup screens are calling.
+        '/auth-gate': (context) => const AuthGate(),
         '/home': (context) => const MainScreen(),
-
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/create-post': (context) => const CreatePostScreen(),
         '/search': (context) => const SearchScreen(),
         '/requests': (context) => const RequestsScreen(),

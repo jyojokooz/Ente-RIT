@@ -1,6 +1,4 @@
-// 'dart:async' import has been removed.
 import 'dart:math';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -32,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _navigateUser();
+        _navigate();
       }
     });
   }
@@ -74,14 +72,9 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
   }
 
-  void _navigateUser() {
+  void _navigate() {
     if (!mounted) return;
-
-    if (FirebaseAuth.instance.currentUser != null) {
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      Navigator.pushReplacementNamed(context, '/welcome');
-    }
+    Navigator.pushReplacementNamed(context, '/auth-gate');
   }
 
   @override
@@ -98,6 +91,7 @@ class _SplashScreenState extends State<SplashScreen>
         animation: _controller,
         builder: (context, child) {
           return Stack(
+            alignment: Alignment.center,
             children: [
               CustomPaint(
                 painter: _CircleRevealPainter(
@@ -145,7 +139,7 @@ class _SplashScreenState extends State<SplashScreen>
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       // --- FIX APPLIED HERE ---
-                      // Replaced deprecated withOpacity with withAlpha. (255 * 0.8 = 204)
+                      // Replaced deprecated .withOpacity(0.8) with .withAlpha(204)
                       color: kTextColor.withAlpha(204),
                       height: 1.5,
                     ),
