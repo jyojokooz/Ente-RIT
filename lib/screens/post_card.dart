@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:shimmer/shimmer.dart'; // <-- THIS IS THE FIX
+import 'package:shimmer/shimmer.dart';
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
@@ -45,6 +45,9 @@ class _PostCardState extends State<PostCard> {
     try {
       final postData = widget.postSnapshot.data() as Map<String, dynamic>;
       final authorId = postData['userId'];
+      if (authorId == null || authorId.isEmpty) {
+        throw Exception("Author ID is missing");
+      }
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
@@ -61,9 +64,22 @@ class _PostCardState extends State<PostCard> {
       if (mounted) {
         setState(() {
           _isLoadingAuthor = false;
+          _authorData = {'displayName': 'Unknown User', 'username': ''};
         });
       }
     }
+  }
+
+  String getOptimizedCloudinaryUrl(String originalUrl) {
+    if (!originalUrl.contains('res.cloudinary.com')) {
+      return originalUrl;
+    }
+    const transformations = 'w_600,q_auto,f_auto';
+    final parts = originalUrl.split('/upload/');
+    if (parts.length == 2) {
+      return '${parts[0]}/upload/$transformations/${parts[1]}';
+    }
+    return originalUrl;
   }
 
   @override
@@ -77,19 +93,15 @@ class _PostCardState extends State<PostCard> {
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
 
-    final String mediaUrl =
+    final String originalMediaUrl =
         postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
+    final String? originalThumbnailUrl = postData['postThumbnailUrl'];
+
     final String postType = postData['postType'] ?? 'image';
-    final String? thumbnailUrl = postData['postThumbnailUrl'];
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
     final String heroTag = 'postImage-${widget.postSnapshot.id}';
-
-    final List<dynamic> likesList = postData['likes'] ?? [];
-    final int commentCount = postData['comments'] ?? 0;
-    final bool isLiked = likesList.contains(currentUserId);
-    final int likeCount = likesList.length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -121,13 +133,17 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
               ),
-            if (mediaUrl.isNotEmpty)
+            if (originalMediaUrl.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child:
                     (postType == 'video')
-                        ? _buildVideoPlayer(context, mediaUrl, thumbnailUrl)
-                        : _buildImageViewer(context, mediaUrl, heroTag),
+                        ? _buildVideoPlayer(
+                          context,
+                          originalMediaUrl,
+                          originalThumbnailUrl,
+                        )
+                        : _buildImageViewer(context, originalMediaUrl, heroTag),
               ),
             const SizedBox(height: 12),
             StreamBuilder<DocumentSnapshot>(
@@ -138,11 +154,12 @@ class _PostCardState extends State<PostCard> {
                       .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
+                  final likesList = postData['likes'] ?? [];
                   return _buildActionButtons(
                     context,
-                    isLiked: isLiked,
-                    likeCount: likeCount,
-                    commentCount: commentCount,
+                    isLiked: likesList.contains(currentUserId),
+                    likeCount: likesList.length,
+                    commentCount: postData['comments'] ?? 0,
                   );
                 }
                 final realTimeData =
@@ -164,17 +181,20 @@ class _PostCardState extends State<PostCard> {
 
   Widget _buildImageViewer(
     BuildContext context,
-    String imageUrl,
+    String originalImageUrl,
     String heroTag,
   ) {
+    final String optimizedUrl = getOptimizedCloudinaryUrl(originalImageUrl);
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder:
-                (context) =>
-                    FullScreenImageViewer(imageUrl: imageUrl, heroTag: heroTag),
+                (context) => FullScreenImageViewer(
+                  imageUrl: originalImageUrl,
+                  heroTag: heroTag,
+                ),
           ),
         );
       },
@@ -183,12 +203,14 @@ class _PostCardState extends State<PostCard> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(15.0),
           child: Image.network(
-            imageUrl,
+            optimizedUrl,
             fit: BoxFit.cover,
             width: double.infinity,
             height: 300,
             loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
+              if (progress == null) {
+                return child;
+              }
               return Shimmer.fromColors(
                 baseColor: Colors.grey.shade800,
                 highlightColor: Colors.grey.shade700,
@@ -215,15 +237,20 @@ class _PostCardState extends State<PostCard> {
 
   Widget _buildVideoPlayer(
     BuildContext context,
-    String videoUrl,
-    String? thumbnailUrl,
+    String originalVideoUrl,
+    String? originalThumbnailUrl,
   ) {
+    final String optimizedThumbnailUrl =
+        originalThumbnailUrl != null
+            ? getOptimizedCloudinaryUrl(originalThumbnailUrl)
+            : 'https://via.placeholder.com/600x600/000000/FFFFFF/?text=Video';
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => FullScreenVideoPlayer(videoUrl: videoUrl),
+            builder:
+                (context) => FullScreenVideoPlayer(videoUrl: originalVideoUrl),
           ),
         );
       },
@@ -233,13 +260,14 @@ class _PostCardState extends State<PostCard> {
           ClipRRect(
             borderRadius: BorderRadius.circular(15.0),
             child: Image.network(
-              thumbnailUrl ??
-                  'https://via.placeholder.com/300/000000/FFFFFF/?text=Video',
+              optimizedThumbnailUrl,
               fit: BoxFit.cover,
               width: double.infinity,
               height: 300,
               loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
+                if (progress == null) {
+                  return child;
+                }
                 return Shimmer.fromColors(
                   baseColor: Colors.grey.shade800,
                   highlightColor: Colors.grey.shade700,
@@ -317,6 +345,8 @@ class _PostCardState extends State<PostCard> {
                       fontWeight: FontWeight.bold,
                       color: primaryTextColor,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (username.isNotEmpty)
                     Text(
@@ -339,6 +369,8 @@ class _PostCardState extends State<PostCard> {
             if (isAuthor)
               PopupMenuButton<String>(
                 onSelected: (value) {
+                  // --- THIS IS THE FIX ---
+                  // Wrapped the single-line statements in curly braces.
                   if (value == 'edit') {
                     onEditPressed();
                   } else if (value == 'delete') {
@@ -386,6 +418,7 @@ class _PostCardState extends State<PostCard> {
               onTap: widget.onCommentPressed,
               child: Container(
                 color: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
                 child: Row(
                   children: [
                     const Icon(
@@ -406,30 +439,39 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
             const SizedBox(width: 10),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.all(0),
-              icon: Icon(
-                isLiked ? Icons.favorite : Icons.favorite_border,
-                color: isLiked ? primaryAccentColor : secondaryTextColor,
-              ),
-              iconSize: 24,
-              onPressed: widget.onLikePressed,
-            ),
-            if (likeCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 2.0),
-                child: Text(
-                  likeCount.toString(),
-                  style: const TextStyle(color: secondaryTextColor),
+            GestureDetector(
+              onTap: widget.onLikePressed,
+              child: Container(
+                color: Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: isLiked ? primaryAccentColor : secondaryTextColor,
+                      size: 24,
+                    ),
+                    if (likeCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5.0),
+                        child: Text(
+                          likeCount.toString(),
+                          style: const TextStyle(color: secondaryTextColor),
+                        ),
+                      ),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
-        const Row(
-          children: [
-            Icon(Icons.send_outlined, size: 22, color: secondaryTextColor),
-          ],
+        IconButton(
+          onPressed: () {},
+          icon: const Icon(
+            Icons.send_outlined,
+            size: 22,
+            color: secondaryTextColor,
+          ),
         ),
       ],
     );
