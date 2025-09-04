@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:shimmer/shimmer.dart';
 
-// --- Screen Imports (Paths updated with '../' to go up one directory) ---
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+
 import '../admin_panel_screen.dart';
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
@@ -14,8 +18,6 @@ import '../post_detail_screen.dart';
 import '../requests_screen.dart';
 import '../chat_screen.dart';
 import '../driver_tracking_screen.dart';
-
-// NOTE: Unused imports for BottomAppBar, HomeScreen, and CreatePostScreen have been removed.
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -36,10 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String targetUserId;
   late final bool isCurrentUser;
-
   final ImagePicker _picker = ImagePicker();
-  File? _profileImageFile;
-  File? _coverImageFile;
 
   bool _isLoading = true;
   String _displayName = 'User';
@@ -53,7 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isAdmin = false;
   List<dynamic> _connections = [];
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
-
   ProfileTab _selectedTab = ProfileTab.all;
 
   final cloudinary = CloudinaryPublic(
@@ -70,9 +68,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadAllData();
   }
 
+  Future<File?> _compressImage(File file) async {
+    final tempDir = await getTemporaryDirectory();
+    final targetPath = p.join(
+      tempDir.path,
+      '${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+
+    final XFile? result = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      targetPath,
+      minWidth: 1080,
+      minHeight: 1080,
+      quality: 85,
+    );
+    return result == null ? null : File(result.path);
+  }
+
   Future<void> _loadAllData() async {
+    if (mounted && !_isLoading) {
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       final targetUserDocFuture =
           FirebaseFirestore.instance
@@ -92,6 +111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   .collection('users')
                   .doc(_currentUser.uid)
                   .get();
+
       final results = await Future.wait([
         targetUserDocFuture,
         postsQueryFuture,
@@ -102,6 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
       final currentUserSnapshot =
           results[2] as DocumentSnapshot<Map<String, dynamic>>;
+
       if (mounted) {
         if (targetUserSnapshot.exists) {
           final data = targetUserSnapshot.data()!;
@@ -130,7 +151,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -146,6 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final List<dynamic> sentRequests = currentUserData['sentRequests'] ?? [];
     final List<dynamic> receivedRequests =
         currentUserData['receivedRequests'] ?? [];
+
     if (connections.contains(targetUserId)) {
       _connectionStatus = ConnectionStatus.connected;
     } else if (sentRequests.contains(targetUserId)) {
@@ -156,6 +180,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _connectionStatus = ConnectionStatus.none;
     }
     setState(() {});
+  }
+
+  Future<void> _uploadImage(File imageFile, String imageType) async {
+    if (!isCurrentUser) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.showSnackBar(
+      SnackBar(content: Text('Compressing $imageType image...')),
+    );
+
+    final File? compressedImage = await _compressImage(imageFile);
+    if (compressedImage == null) {
+      scaffoldMessenger.hideCurrentSnackBar();
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Image compression failed.')),
+      );
+      return;
+    }
+    scaffoldMessenger.hideCurrentSnackBar();
+    scaffoldMessenger.showSnackBar(
+      SnackBar(content: Text('Uploading $imageType image...')),
+    );
+
+    try {
+      CloudinaryResponse response = await cloudinary.uploadFile(
+        CloudinaryFile.fromFile(
+          compressedImage.path,
+          folder: 'users/${_currentUser.uid}',
+          resourceType: CloudinaryResourceType.Image,
+        ),
+      );
+      final downloadUrl = response.secureUrl;
+      final fieldToUpdate =
+          imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser.uid)
+          .set({fieldToUpdate: downloadUrl}, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          if (imageType == 'profile') {
+            _profilePhotoUrl = downloadUrl;
+          } else {
+            _coverPhotoUrl = downloadUrl;
+          }
+        });
+        scaffoldMessenger.hideCurrentSnackBar();
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Image uploaded successfully!')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      scaffoldMessenger.hideCurrentSnackBar();
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Upload failed: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _pickProfileImage() async {
+    if (!isCurrentUser) return;
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      await _uploadImage(File(pickedFile.path), 'profile');
+    }
+  }
+
+  Future<void> _pickCoverImage() async {
+    if (!isCurrentUser) return;
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      await _uploadImage(File(pickedFile.path), 'cover');
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to log out: ${e.toString()}')),
+      );
+    }
   }
 
   void _viewConnections() {
@@ -242,175 +355,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadAllData();
   }
 
-  Future<void> _uploadImage(File imageFile, String imageType) async {
-    if (!isCurrentUser) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Uploading $imageType image...')));
-    try {
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          imageFile.path,
-          folder: 'users/${_currentUser.uid}',
-          resourceType: CloudinaryResourceType.Image,
-        ),
-      );
-      final downloadUrl = response.secureUrl;
-      final fieldToUpdate =
-          imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser.uid)
-          .set({fieldToUpdate: downloadUrl}, SetOptions(merge: true));
-      if (mounted) {
-        setState(() {
-          if (imageType == 'profile') {
-            _profilePhotoUrl = downloadUrl;
-            _profileImageFile = null;
-          } else {
-            _coverPhotoUrl = downloadUrl;
-            _coverImageFile = null;
-          }
-        });
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image uploaded successfully!')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: ${e.toString()}')));
-    }
-  }
-
-  Future<void> _pickProfileImage() async {
-    if (!isCurrentUser) return;
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final imageFile = File(pickedFile.path);
-      setState(() => _profileImageFile = imageFile);
-      await _uploadImage(imageFile, 'profile');
-    }
-  }
-
-  Future<void> _pickCoverImage() async {
-    if (!isCurrentUser) return;
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final imageFile = File(pickedFile.path);
-      setState(() => _coverImageFile = imageFile);
-      await _uploadImage(imageFile, 'cover');
-    }
-  }
-
-  Future<void> _logout() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to log out: ${e.toString()}')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final Color cardBackgroundColor = Colors.grey.shade900;
+    if (_isLoading) {
+      return const ProfileScreenPlaceholder();
+    }
 
-    // This widget now only returns its core content. The Scaffold is in MainScreen.
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator(color: Colors.yellow))
-        : RefreshIndicator(
-          onRefresh: _loadAllData,
-          color: Colors.yellow,
-          backgroundColor: cardBackgroundColor,
-          child: CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                expandedHeight: 240,
-                pinned: true,
-                // The back button is now conditional:
-                leading:
-                    isCurrentUser
-                        ? null // No back button when viewing your own profile from tabs.
-                        : Padding(
-                          // Back button appears when viewing someone else's profile.
-                          padding: const EdgeInsets.all(8.0),
-                          child: CircleAvatar(
-                            backgroundColor: Colors.black.withAlpha(128),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white,
-                              ),
-                              onPressed: () => Navigator.of(context).pop(),
+    final Color cardBackgroundColor = Colors.grey.shade900;
+    return RefreshIndicator(
+      onRefresh: _loadAllData,
+      color: Colors.yellow,
+      backgroundColor: cardBackgroundColor,
+      child: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            expandedHeight: 240,
+            pinned: true,
+            leading:
+                isCurrentUser
+                    ? null
+                    : Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black.withAlpha(128),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                    ),
+            actions:
+                isCurrentUser
+                    ? [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black.withAlpha(128),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.group_add_outlined,
+                              color: Colors.white,
                             ),
+                            onPressed:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const RequestsScreen(),
+                                  ),
+                                ),
                           ),
                         ),
-                actions:
-                    isCurrentUser
-                        ? [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: CircleAvatar(
-                              backgroundColor: Colors.black.withAlpha(128),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.group_add_outlined,
-                                  color: Colors.white,
-                                ),
-                                onPressed:
-                                    () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder:
-                                            (context) => const RequestsScreen(),
-                                      ),
-                                    ),
-                              ),
-                            ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: 8,
+                          bottom: 8,
+                          right: 8,
+                        ),
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black.withAlpha(128),
+                          child: IconButton(
+                            icon: const Icon(Icons.logout, color: Colors.white),
+                            onPressed: _logout,
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 8,
-                              bottom: 8,
-                              right: 8,
-                            ),
-                            child: CircleAvatar(
-                              backgroundColor: Colors.black.withAlpha(128),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.logout,
-                                  color: Colors.white,
-                                ),
-                                onPressed: _logout,
-                              ),
-                            ),
-                          ),
-                        ]
-                        : null,
-                flexibleSpace: FlexibleSpaceBar(
-                  background: GestureDetector(
-                    onTap: _pickCoverImage,
-                    child: _buildHeaderImage(),
-                  ),
-                ),
+                        ),
+                      ),
+                    ]
+                    : null,
+            flexibleSpace: FlexibleSpaceBar(
+              background: GestureDetector(
+                onTap: _pickCoverImage,
+                child: _buildHeaderImage(),
               ),
-              SliverToBoxAdapter(
-                child: _buildProfileHeaderAndInfo(cardBackgroundColor),
-              ),
-              _buildPhotoGallery(),
-            ],
+            ),
           ),
-        );
+          SliverToBoxAdapter(
+            child: _buildProfileHeaderAndInfo(cardBackgroundColor),
+          ),
+          _buildPhotoGallery(),
+        ],
+      ),
+    );
   }
 
   Widget _buildProfileHeaderAndInfo(Color cardColor) {
@@ -605,25 +636,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
-
     switch (_connectionStatus) {
       case ConnectionStatus.connected:
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => ChatScreen(
-                        receiverId: targetUserId,
-                        receiverName: _displayName,
-                        receiverImageUrl: _profilePhotoUrl ?? '',
-                      ),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => ChatScreen(
+                          receiverId: targetUserId,
+                          receiverName: _displayName,
+                          receiverImageUrl: _profilePhotoUrl ?? '',
+                        ),
+                  ),
                 ),
-              );
-            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.grey.shade700,
             ),
@@ -666,9 +695,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildHeaderImage() {
     ImageProvider imageProvider;
-    if (isCurrentUser && _coverImageFile != null) {
-      imageProvider = FileImage(_coverImageFile!);
-    } else if (_coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty) {
+    if (_coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty) {
       imageProvider = NetworkImage(_coverPhotoUrl!);
     } else {
       imageProvider = const NetworkImage(
@@ -686,9 +713,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildProfilePicture() {
     final cardColor = Colors.grey.shade900;
     ImageProvider imageProvider;
-    if (isCurrentUser && _profileImageFile != null) {
-      imageProvider = FileImage(_profileImageFile!);
-    } else if (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty) {
+    if (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty) {
       imageProvider = NetworkImage(_profilePhotoUrl!);
     } else {
       imageProvider = const NetworkImage('https://i.pravatar.cc/150?img=31');
@@ -707,50 +732,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String label,
     Color textColor,
     Color secondaryColor,
-  ) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            color: textColor,
-          ),
+  ) => Column(
+    children: [
+      Text(
+        value,
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: textColor,
         ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.poppins(color: secondaryColor, fontSize: 14),
-        ),
-      ],
-    );
-  }
+      ),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        style: GoogleFonts.poppins(color: secondaryColor, fontSize: 14),
+      ),
+    ],
+  );
 
   Widget _buildTabs(
     Color activeColor,
     Color activeTextColor,
     Color inactiveTextColor,
-  ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildTabItem('All', ProfileTab.all, activeColor, inactiveTextColor),
-        _buildTabItem(
-          'Photos',
-          ProfileTab.photos,
-          activeColor,
-          inactiveTextColor,
-        ),
-        _buildTabItem(
-          'Videos',
-          ProfileTab.videos,
-          activeColor,
-          inactiveTextColor,
-        ),
-      ],
-    );
-  }
+  ) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceAround,
+    children: [
+      _buildTabItem('All', ProfileTab.all, activeColor, inactiveTextColor),
+      _buildTabItem(
+        'Photos',
+        ProfileTab.photos,
+        activeColor,
+        inactiveTextColor,
+      ),
+      _buildTabItem(
+        'Videos',
+        ProfileTab.videos,
+        activeColor,
+        inactiveTextColor,
+      ),
+    ],
+  );
 
   Widget _buildTabItem(
     String title,
@@ -760,11 +781,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) {
     final bool isActive = _selectedTab == tab;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = tab;
-        });
-      },
+      onTap: () => setState(() => _selectedTab = tab),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -777,6 +794,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 4),
+          // --- THIS IS THE FIX ---
+          // Using a "collection if" without curly braces.
           if (isActive) Container(width: 25, height: 3, color: activeColor),
         ],
       ),
@@ -785,7 +804,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildPhotoGallery() {
     final cardColor = Colors.grey.shade900;
-
     final List<DocumentSnapshot> filteredPosts;
     switch (_selectedTab) {
       case ProfileTab.photos:
@@ -807,7 +825,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         filteredPosts = _userPosts;
         break;
     }
-
     if (filteredPosts.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -822,7 +839,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
-
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       sliver: SliverGrid(
@@ -835,13 +851,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
           final postSnapshot = filteredPosts[index];
           final postData = postSnapshot.data() as Map<String, dynamic>;
-
           final postType = postData['postType'];
           final String? mediaUrl =
               postType == 'video'
                   ? postData['postThumbnailUrl']
                   : postData['postMediaUrl'] ?? postData['postImageUrl'];
-
           if (mediaUrl == null || mediaUrl.isEmpty) {
             return Container(
               color: cardColor,
@@ -851,7 +865,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
           }
-
           return GestureDetector(
             onTap:
                 () => Navigator.push(
@@ -905,6 +918,127 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           );
         }, childCount: filteredPosts.length),
+      ),
+    );
+  }
+}
+
+class ProfileScreenPlaceholder extends StatelessWidget {
+  const ProfileScreenPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBackgroundColor = Colors.grey.shade900;
+    final shimmerBaseColor = Colors.grey.shade800;
+    final shimmerHighlightColor = Colors.grey.shade700;
+
+    return Shimmer.fromColors(
+      baseColor: shimmerBaseColor,
+      highlightColor: shimmerHighlightColor,
+      child: CustomScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        slivers: [
+          SliverAppBar(
+            backgroundColor: Colors.transparent,
+            expandedHeight: 240,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(color: shimmerBaseColor),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 60),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                    padding: const EdgeInsets.only(
+                      top: 70,
+                      left: 20,
+                      right: 20,
+                      bottom: 20,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cardBackgroundColor,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildPlaceholderContainer(width: 50, height: 30),
+                            const SizedBox(width: 40),
+                            _buildPlaceholderContainer(width: 50, height: 30),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _buildPlaceholderContainer(width: 150, height: 22),
+                        const SizedBox(height: 4),
+                        _buildPlaceholderContainer(width: 100, height: 16),
+                        const SizedBox(height: 12),
+                        _buildPlaceholderContainer(
+                          width: double.infinity,
+                          height: 14,
+                        ),
+                        const SizedBox(height: 4),
+                        _buildPlaceholderContainer(width: 200, height: 14),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: cardBackgroundColor, width: 5),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 45,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8.0,
+                mainAxisSpacing: 8.0,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15.0),
+                  ),
+                ),
+                childCount: 9,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderContainer({
+    required double width,
+    required double height,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }
