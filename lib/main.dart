@@ -46,31 +46,33 @@ class MyApp extends StatelessWidget {
           onSurface: Colors.white,
         ),
         scaffoldBackgroundColor: Colors.black,
-
-        // --- THIS IS THE FIX ---
-        // We take the Google Fonts text theme and then .apply() a global rule to it.
-        // This rule tells all text styles in the theme to have NO underline decoration.
         textTheme: GoogleFonts.poppinsTextTheme(
           ThemeData.dark().textTheme,
         ).apply(
-          bodyColor: Colors.white, // You can set default colors here too
+          bodyColor: Colors.white,
           displayColor: Colors.white,
-          decoration: TextDecoration.none, // This removes the underlines
+          decoration: TextDecoration.none,
         ),
-
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.grey.shade900,
           elevation: 0,
         ),
         bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey.shade900),
       ),
+      // AuthGate will decide the first screen to show when the app starts
       home: const AuthGate(),
+
+      // These routes are used for manual navigation with Navigator.pushNamed
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/signup': (context) => const SignupScreen(),
         '/login': (context) => const LoginScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/main': (context) => const MainScreen(),
+
+        // --- THIS IS THE UPDATED LINE ---
+        // Changed '/main' to '/home' to match what your Login/Signup screens are calling.
+        '/home': (context) => const MainScreen(),
+
         '/create-post': (context) => const CreatePostScreen(),
         '/search': (context) => const SearchScreen(),
         '/requests': (context) => const RequestsScreen(),

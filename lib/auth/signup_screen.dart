@@ -53,10 +53,14 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _signupWithGoogle() async {
     final GoogleSignIn googleSignIn = GoogleSignIn();
     try {
+      setState(() => isLoading = true);
+      // It's good practice to sign out first to allow account switching
       await googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) return;
-      setState(() => isLoading = true);
+      if (googleUser == null) {
+        if (mounted) setState(() => isLoading = false);
+        return; // User cancelled the sign-in
+      }
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -140,8 +144,12 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 30),
                   TextFormField(
+                    // Set the style for the user's input text
+                    style: GoogleFonts.poppins(color: Colors.black),
                     decoration: InputDecoration(
-                      hintText: 'Email Address', // Changed hint for clarity
+                      // Use labelText for a floating label effect
+                      labelText: 'Email Address',
+                      labelStyle: TextStyle(color: Colors.grey[700]),
                       prefixIcon: const Icon(
                         Icons.person_outline,
                         color: Colors.grey,
@@ -165,8 +173,12 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 15),
                   TextFormField(
+                    // Set the style for the user's input text
+                    style: GoogleFonts.poppins(color: Colors.black),
                     decoration: InputDecoration(
-                      hintText: 'Password',
+                      // Use labelText for a floating label effect
+                      labelText: 'Password',
+                      labelStyle: TextStyle(color: Colors.grey[700]),
                       prefixIcon: const Icon(
                         Icons.lock_outline,
                         color: Colors.grey,

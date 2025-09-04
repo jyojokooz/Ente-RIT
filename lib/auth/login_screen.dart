@@ -171,8 +171,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 40),
                   TextFormField(
+                    // Set the style for the user's input text
+                    style: GoogleFonts.poppins(color: Colors.black),
                     decoration: InputDecoration(
-                      hintText: 'johnsondoe@nomail.com',
+                      // Use labelText for a floating label effect
+                      labelText: 'Email',
+                      labelStyle: TextStyle(color: Colors.grey[700]),
                       prefixIcon: const Icon(
                         Icons.person_outline,
                         color: Colors.grey,
@@ -194,8 +198,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 15),
                   TextFormField(
+                    // Set the style for the user's input text
+                    style: GoogleFonts.poppins(color: Colors.black),
                     decoration: InputDecoration(
-                      hintText: 'Password',
+                      // Use labelText for a floating label effect
+                      labelText: 'Password',
+                      labelStyle: TextStyle(color: Colors.grey[700]),
                       prefixIcon: const Icon(
                         Icons.lock_outline,
                         color: Colors.grey,
