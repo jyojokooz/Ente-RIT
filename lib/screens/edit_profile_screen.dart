@@ -12,14 +12,22 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+
+  // Existing Controllers
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _bioController = TextEditingController();
-  final _linksController = TextEditingController();
+
+  // --- ADDED: Controllers for new features ---
+  final _statusController = TextEditingController();
+  final _linkedinController = TextEditingController();
+  final _githubController = TextEditingController();
+  final _portfolioController = TextEditingController();
+  // -------------------------------------------
 
   final user = FirebaseAuth.instance.currentUser!;
   bool _isLoading = true;
-  String _initialUsername = ''; // <-- ADDED: To store the username on load
+  String _initialUsername = '';
 
   List<String> _departmentOptions = [];
   String? _selectedDepartment;
@@ -70,10 +78,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           final data = docSnapshot.data()!;
           _nameController.text = data['displayName'] ?? user.displayName ?? '';
           _usernameController.text = data['username'] ?? '';
-          _initialUsername =
-              data['username'] ?? ''; // <-- ADDED: Store the username
+          _initialUsername = data['username'] ?? '';
           _bioController.text = data['bio'] ?? '';
-          _linksController.text = data['links'] ?? '';
+
+          // --- ADDED: Load data for new fields ---
+          _statusController.text = data['status'] ?? '';
+          _linkedinController.text = data['linkedinUrl'] ?? '';
+          _githubController.text = data['githubUrl'] ?? '';
+          _portfolioController.text = data['portfolioUrl'] ?? '';
+          // ----------------------------------------
+
           final currentDept = data['department'];
           if (currentDept != null && _departmentOptions.contains(currentDept)) {
             _selectedDepartment = currentDept;
@@ -98,7 +112,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _usernameController.dispose();
     _bioController.dispose();
-    _linksController.dispose();
+
+    // --- ADDED: Dispose new controllers ---
+    _statusController.dispose();
+    _linkedinController.dispose();
+    _githubController.dispose();
+    _portfolioController.dispose();
+    // ------------------------------------
+
     super.dispose();
   }
 
@@ -112,19 +133,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final newUsername = _usernameController.text.trim();
     final newDisplayName = _nameController.text.trim();
 
-    // --- START: USERNAME UNIQUENESS CHECK ---
-    // Only query the database if the username has actually been changed.
+    // Username uniqueness check (no changes needed here, it's perfect)
     if (newUsername.toLowerCase() != _initialUsername.toLowerCase()) {
       final usersRef = FirebaseFirestore.instance.collection('users');
-      // Query for the new username (case-insensitive)
       final querySnapshot =
           await usersRef
               .where('searchableUsername', isEqualTo: newUsername.toLowerCase())
               .get();
-
-      // If any documents are found, the username is already taken.
       if (querySnapshot.docs.isNotEmpty) {
-        // Show a "pop-up" error message and stop the function
         scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text(
@@ -133,10 +149,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             backgroundColor: Colors.red,
           ),
         );
-        return; // Stop the function here
+        return;
       }
     }
-    // --- END: USERNAME UNIQUENESS CHECK ---
 
     scaffoldMessenger.showSnackBar(
       const SnackBar(content: Text('Saving profile...')),
@@ -166,12 +181,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'displayName': newDisplayName,
         'username': newUsername,
         'searchableDisplayName': newDisplayName.toLowerCase(),
-        'searchableUsername':
-            newUsername.toLowerCase(), // <-- Make sure this is saved
+        'searchableUsername': newUsername.toLowerCase(),
         'bio': _bioController.text.trim(),
-        'links': _linksController.text.trim(),
         'department': _selectedDepartment,
         'email': user.email,
+
+        // --- ADDED: Save data from new fields ---
+        'status': _statusController.text.trim(),
+        'linkedinUrl': _linkedinController.text.trim(),
+        'githubUrl': _githubController.text.trim(),
+        'portfolioUrl': _portfolioController.text.trim(),
+        // ---------------------------------------
       };
       await userDocRef.set(userData, SetOptions(merge: true));
 
@@ -245,11 +265,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               child: Text(department),
                             );
                           }).toList(),
-                      onChanged: (newValue) {
-                        setState(() {
-                          _selectedDepartment = newValue;
-                        });
-                      },
+                      onChanged:
+                          (newValue) =>
+                              setState(() => _selectedDepartment = newValue),
                       validator:
                           (value) =>
                               value == null
@@ -263,10 +281,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       maxLines: 3,
                     ),
                     const SizedBox(height: 16),
+
+                    // --- ADDED: UI for new fields ---
                     TextFormField(
-                      controller: _linksController,
-                      decoration: const InputDecoration(labelText: 'Links'),
+                      controller: _statusController,
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        helperText:
+                            'A short status for your profile (e.g., Available to study)',
+                      ),
+                      maxLength: 100,
                     ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Social & Professional Links',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(fontSize: 18),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _linkedinController,
+                      decoration: const InputDecoration(
+                        labelText: 'LinkedIn Profile URL',
+                        prefixIcon: Icon(Icons.link),
+                      ),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _githubController,
+                      decoration: const InputDecoration(
+                        labelText: 'GitHub Profile URL',
+                        prefixIcon: Icon(Icons.code),
+                      ),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _portfolioController,
+                      decoration: const InputDecoration(
+                        labelText: 'Portfolio/Website URL',
+                        prefixIcon: Icon(Icons.public),
+                      ),
+                      keyboardType: TextInputType.url,
+                    ),
+
+                    // -----------------------------------
                     const SizedBox(height: 24),
                     TextFormField(
                       initialValue: user.email ?? 'No email found',

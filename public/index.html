@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>User Profile</title>
+
+    <!-- ADDED: Font Awesome for social media icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css"
+    />
+
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap");
 
@@ -22,7 +29,7 @@
       .card {
         background-color: #1e1e1e;
         border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 10px B30px rgba(0, 0, 0, 0.5);
         width: 100%;
         max-width: 400px;
         text-align: center;
@@ -76,6 +83,20 @@
         margin-bottom: 20px;
       }
 
+      /* --- ADDED: Style for the User Status --- */
+      #status {
+        font-size: 1.1em;
+        color: #e0e0e0;
+        margin-top: 0;
+        margin-bottom: 25px;
+        padding: 10px;
+        background-color: rgba(250, 204, 21, 0.1); /* Faint yellow background */
+        border-left: 3px solid #facc15;
+        font-style: italic;
+        text-align: left;
+      }
+      /* ------------------------------------ */
+
       .info-section {
         text-align: left;
         margin-top: 25px;
@@ -100,13 +121,26 @@
         word-wrap: break-word;
       }
 
-      #links {
-        color: #4dabf7;
+      /* --- ADDED: Styles for the Social Links --- */
+      .social-links {
+        margin-top: 25px;
+        padding-top: 20px;
+        border-top: 1px solid #333;
+        display: flex;
+        justify-content: center;
+        gap: 25px; /* Space between icons */
+      }
+      .social-links a {
+        color: #aaa;
+        font-size: 24px;
         text-decoration: none;
+        transition: color 0.3s ease, transform 0.3s ease;
       }
-      #links:hover {
-        text-decoration: underline;
+      .social-links a:hover {
+        color: #facc15; /* Highlight color on hover */
+        transform: scale(1.1);
       }
+      /* -------------------------------------- */
 
       #errorMessage {
         color: #ff6b6b;
@@ -121,9 +155,16 @@
 
       <!-- This content will be shown after data is loaded -->
       <div id="profileContent" class="profile-content">
-        <img id="profilePhoto" src="" alt="Profile Photo" />
+        <img
+          id="profilePhoto"
+          src="https://via.placeholder.com/150"
+          alt="Profile Photo"
+        />
         <h1 id="displayName"></h1>
         <p id="username"></p>
+
+        <!-- ADDED: Container for the User Status -->
+        <p id="status" style="display: none"></p>
 
         <div class="info-section">
           <div class="info-item">
@@ -134,15 +175,41 @@
             <strong>Bio</strong>
             <p id="bio"></p>
           </div>
-          <div class="info-item">
-            <strong>Links</strong>
-            <a
-              id="links"
-              href="#"
-              target="_blank"
-              rel="noopener noreferrer"
-            ></a>
-          </div>
+        </div>
+
+        <!-- ADDED: Container for the Social Links -->
+        <div
+          id="socialLinksContainer"
+          class="social-links"
+          style="display: none"
+        >
+          <a
+            id="linkedinLink"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="LinkedIn"
+            style="display: none"
+            ><i class="fab fa-linkedin"></i
+          ></a>
+          <a
+            id="githubLink"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="GitHub"
+            style="display: none"
+            ><i class="fab fa-github"></i
+          ></a>
+          <a
+            id="portfolioLink"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Portfolio/Website"
+            style="display: none"
+            ><i class="fas fa-globe"></i
+          ></a>
         </div>
       </div>
 
@@ -157,12 +224,12 @@
     <script>
       // --- IMPORTANT: REPLACE WITH YOUR FIREBASE PROJECT CONFIG ---
       const firebaseConfig = {
-        apiKey: "AIzaSyB_-wEKYzjhtRVphrndNPCAzZ-PNBlWwrY", // Your Web API Key
+        apiKey: "AIzaSyB_-wEKYzjhtRVphrndNPCAzZ-PNBlWwrY",
         authDomain: "fir-auth-bfed9.firebaseapp.com",
         projectId: "fir-auth-bfed9",
         storageBucket: "fir-auth-bfed9.appspot.com",
         messagingSenderId: "267885782991",
-        appId: "1:267885782991:web:794d123f36e4ff3ee514ba", // Find this in Project Settings -> Web App
+        appId: "1:267885782991:web:794d123f36e4ff3ee514ba", // Make sure this is your Web App ID
       };
 
       // Initialize Firebase
@@ -171,10 +238,10 @@
 
       // Function to get user ID from the URL path
       function getUserIdFromUrl() {
-        const path = window.location.pathname; // e.g., "/profile/abcdef12345"
+        const path = window.location.pathname;
         const parts = path.split("/");
         if (parts.length === 3 && parts[1] === "profile") {
-          return parts[2]; // "abcdef12345"
+          return parts[2];
         }
         return null;
       }
@@ -206,20 +273,51 @@
               userData.profilePhotoUrl || "https://via.placeholder.com/150";
             document.getElementById("displayName").textContent =
               userData.displayName || "N/A";
-            document.getElementById("username").textContent =
-              `@${userData.username}` || "";
+            document.getElementById("username").textContent = `@${
+              userData.username || ""
+            }`;
             document.getElementById("department").textContent =
               userData.department || "Not specified";
             document.getElementById("bio").textContent =
               userData.bio || "No bio provided.";
 
-            const linksElement = document.getElementById("links");
-            if (userData.links) {
-              linksElement.href = userData.links;
-              linksElement.textContent = userData.links;
-            } else {
-              linksElement.parentElement.style.display = "none"; // Hide if no link
+            // --- ADDED: Logic to display User Status ---
+            const statusElement = document.getElementById("status");
+            if (userData.status && userData.status.trim() !== "") {
+              statusElement.textContent = `"${userData.status.trim()}"`;
+              statusElement.style.display = "block";
             }
+            // ------------------------------------------
+
+            // --- ADDED: Logic to display Social Links ---
+            const socialContainer = document.getElementById(
+              "socialLinksContainer"
+            );
+            const linkedinLink = document.getElementById("linkedinLink");
+            const githubLink = document.getElementById("githubLink");
+            const portfolioLink = document.getElementById("portfolioLink");
+            let hasSocialLinks = false;
+
+            if (userData.linkedinUrl) {
+              linkedinLink.href = userData.linkedinUrl;
+              linkedinLink.style.display = "inline-block";
+              hasSocialLinks = true;
+            }
+            if (userData.githubUrl) {
+              githubLink.href = userData.githubUrl;
+              githubLink.style.display = "inline-block";
+              hasSocialLinks = true;
+            }
+            if (userData.portfolioUrl) {
+              portfolioLink.href = userData.portfolioUrl;
+              portfolioLink.style.display = "inline-block";
+              hasSocialLinks = true;
+            }
+
+            if (hasSocialLinks) {
+              socialContainer.style.display = "flex"; // Use flex to activate the centering and gap styles
+            }
+            // ------------------------------------------
 
             // Show the profile content
             profileContent.style.display = "block";
