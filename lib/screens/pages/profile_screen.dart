@@ -512,6 +512,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 22,
                 color: Colors.white,
+                decoration: TextDecoration.none,
               ),
             ),
             if (_role == 'driver')
@@ -523,7 +524,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         Text(
           '@$_username',
-          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+          style: GoogleFonts.poppins(
+            color: Colors.white70,
+            fontSize: 16,
+            decoration: TextDecoration.none,
+          ),
         ),
         if (_department.isNotEmpty)
           Padding(
@@ -542,6 +547,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: GoogleFonts.poppins(
                     color: Colors.white70,
                     fontSize: 14,
+                    decoration: TextDecoration.none,
                   ),
                 ),
               ],
@@ -554,6 +560,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: GoogleFonts.poppins(
             color: _bio.isEmpty ? Colors.grey : Colors.white70,
             fontSize: 14,
+            decoration: TextDecoration.none,
           ),
         ),
         const SizedBox(height: 20),
@@ -620,7 +627,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
+            child: TextButton(
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -630,7 +637,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
                 _loadAllData();
               },
-              child: const Text('Edit Profile'),
+              child: Text(
+                'Edit Profile',
+                style: GoogleFonts.poppins(
+                  color: Colors.yellow,
+                  fontSize: 16,
+                  decoration: TextDecoration.none,
+                ),
+              ),
             ),
           ),
         ],
@@ -687,7 +701,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               foregroundColor: Colors.black,
             ),
             icon: const Icon(Icons.person_add_alt_1_outlined),
-            label: const Text('Connect'),
+            label: Text(
+              'Connect',
+              style: GoogleFonts.poppins(decoration: TextDecoration.none),
+            ),
           ),
         );
     }
@@ -740,12 +757,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           fontWeight: FontWeight.bold,
           fontSize: 18,
           color: textColor,
+          decoration: TextDecoration.none,
         ),
       ),
       const SizedBox(height: 2),
       Text(
         label,
-        style: GoogleFonts.poppins(color: secondaryColor, fontSize: 14),
+        style: GoogleFonts.poppins(
+          color: secondaryColor,
+          fontSize: 14,
+          decoration: TextDecoration.none,
+        ),
       ),
     ],
   );
@@ -791,11 +813,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 16,
               color: isActive ? activeColor : inactiveTextColor,
+              decoration: TextDecoration.none,
             ),
           ),
           const SizedBox(height: 4),
-          // --- THIS IS THE FIX ---
-          // Using a "collection if" without curly braces.
           if (isActive) Container(width: 25, height: 3, color: activeColor),
         ],
       ),
