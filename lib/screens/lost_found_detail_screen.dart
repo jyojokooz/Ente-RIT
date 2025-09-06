@@ -1,19 +1,64 @@
-// lib/screens/lost_found_detail_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import 'private_chat_screen.dart';
-import 'item_chats_list_screen.dart';
+// --- FIX: Import the correct, working chat screens ---
+import 'chat_screen.dart';
+import 'chat_list_screen.dart';
 
 class LostFoundDetailScreen extends StatelessWidget {
   final QueryDocumentSnapshot itemDoc;
   const LostFoundDetailScreen({super.key, required this.itemDoc});
 
-  // --- LOGIC METHODS (UNCHANGED) ---
+  // --- FIX: COMPLETELY REWRITTEN CHAT NAVIGATION LOGIC ---
+  Future<void> _startOrNavigateToChat(BuildContext context) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      // Show a message if the user is not logged in
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You must be logged in to contact the poster.'),
+        ),
+      );
+      return;
+    }
+
+    final data = itemDoc.data() as Map<String, dynamic>;
+    final posterId = data['userId'];
+    final posterName = data['userName'] ?? 'User';
+
+    // Fetch the poster's custom profile photo URL from their user document
+    String posterPhotoUrl = '';
+    try {
+      final posterDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(posterId)
+              .get();
+      if (posterDoc.exists) {
+        posterPhotoUrl = posterDoc.data()?['profilePhotoUrl'] ?? '';
+      }
+    } catch (e) {
+      // Could not fetch photo, will use a fallback in ChatScreen
+    }
+
+    // Navigate to the main ChatScreen with all the required data
+    if (context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => ChatScreen(
+                receiverId: posterId,
+                receiverName: posterName,
+                receiverImageUrl: posterPhotoUrl,
+              ),
+        ),
+      );
+    }
+  }
 
   Future<void> _markAsResolved(BuildContext context) async {
     try {
@@ -25,7 +70,10 @@ class LostFoundDetailScreen extends StatelessWidget {
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Item marked as resolved!')),
+          const SnackBar(
+            content: Text('Item marked as resolved!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -34,53 +82,6 @@ class LostFoundDetailScreen extends StatelessWidget {
           context,
         ).showSnackBar(SnackBar(content: Text('Error updating item: $e')));
       }
-    }
-  }
-
-  Future<void> _startOrNavigateToChat(BuildContext context) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
-
-    final data = itemDoc.data() as Map<String, dynamic>;
-    final posterId = data['userId'];
-    final posterName = data['userName'];
-    final itemId = itemDoc.id;
-    final itemTitle = data['title'];
-
-    final currentUserDoc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
-    final currentUserName = currentUserDoc.data()?['name'] ?? 'User';
-
-    List<String> userIds = [currentUser.uid, posterId];
-    userIds.sort();
-    final chatId = '${userIds[0]}_${userIds[1]}_$itemId';
-
-    final chatDoc = FirebaseFirestore.instance.collection('chats').doc(chatId);
-    final chatSnapshot = await chatDoc.get();
-
-    if (!chatSnapshot.exists) {
-      await chatDoc.set({
-        'users': [currentUser.uid, posterId],
-        'userNames': {currentUser.uid: currentUserName, posterId: posterName},
-        'itemId': itemId,
-        'itemTitle': itemTitle,
-        'lastMessage': 'Chat created about "$itemTitle"',
-        'lastMessageTimestamp': Timestamp.now(),
-      });
-    }
-
-    if (context.mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) =>
-                  PrivateChatScreen(chatId: chatId, otherUserName: posterName),
-        ),
-      );
     }
   }
 
@@ -120,7 +121,17 @@ class LostFoundDetailScreen extends StatelessWidget {
               ),
               background:
                   (imageUrl != null && imageUrl.isNotEmpty)
-                      ? Image.network(imageUrl, fit: BoxFit.cover)
+                      ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                            size: 50,
+                          ); // Fallback icon
+                        },
+                      )
                       : Container(color: Colors.grey.shade800),
             ),
           ),
@@ -147,9 +158,6 @@ class LostFoundDetailScreen extends StatelessWidget {
                     Text(data['location'] ?? 'N/A', style: contentTextStyle),
                   ),
                   const SizedBox(height: 24),
-
-                  // --- THE FIX IS HERE ---
-                  // Now the "Posted By" section ONLY shows the user's name.
                   _buildDetailSection(
                     Icons.person_outline,
                     'Posted By',
@@ -158,8 +166,6 @@ class LostFoundDetailScreen extends StatelessWidget {
                       style: contentTextStyle,
                     ),
                   ),
-
-                  // --- END OF FIX ---
                   const SizedBox(height: 24),
                   _buildDetailSection(
                     Icons.calendar_today_outlined,
@@ -172,12 +178,13 @@ class LostFoundDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: _buildActionButtons(context, isMyPost, data),
+      bottomNavigationBar: _buildActionButtons(context, isMyPost),
     );
   }
 
   Widget _buildStatusChip(String status) {
-    final statusColor = status == 'lost' ? Colors.orange : Colors.lightBlue;
+    final statusColor =
+        status == 'lost' ? Colors.orange.shade800 : Colors.blue.shade800;
     return Chip(
       label: Text(
         status.toUpperCase(),
@@ -222,33 +229,29 @@ class LostFoundDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(
-    BuildContext context,
-    bool isMyPost,
-    Map<String, dynamic> data,
-  ) {
+  Widget _buildActionButtons(BuildContext context, bool isMyPost) {
     return Container(
       padding: const EdgeInsets.all(16).copyWith(bottom: 24),
-      color: Colors.black,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        border: Border(top: BorderSide(color: Colors.grey.shade800, width: 1)),
+      ),
       child:
           isMyPost
               ? Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
+                      // --- FIX: This button now goes to the main chat list ---
                       onPressed:
                           () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (c) => ItemChatsListScreen(
-                                    itemId: itemDoc.id,
-                                    itemTitle: data['title'] ?? 'Item',
-                                  ),
+                              builder: (c) => const ChatListScreen(),
                             ),
                           ),
-                      icon: const Icon(Icons.inbox_outlined),
-                      label: const Text('View Inquiries'),
+                      icon: const Icon(Icons.message_outlined),
+                      label: const Text('View Messages'),
                       style: ElevatedButton.styleFrom(
                         foregroundColor: Colors.black,
                         backgroundColor: Colors.yellow,
