@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+// --- NEW: Imports needed to fetch user data ---
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/marketplace_service.dart';
 import 'chat_list_screen.dart';
 import 'create_listing_screen.dart';
@@ -17,6 +20,10 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final MarketplaceService _marketplaceService = MarketplaceService();
   String? _selectedCategory;
 
+  // --- NEW: State variables for user's profile photo ---
+  String? _currentUserProfilePhotoUrl;
+  bool _isLoadingProfilePhoto = true;
+
   final List<Map<String, dynamic>> categories = [
     {'name': 'All', 'icon': Icons.grid_view_rounded},
     {'name': 'Textbooks', 'icon': Icons.menu_book_outlined},
@@ -26,13 +33,52 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     {'name': 'Gaming', 'icon': Icons.sports_esports_outlined},
   ];
 
-  // --- NEW: Refresh handler ---
-  // This method will be called when the user pulls down to refresh.
+  // --- NEW: Fetch user data when the screen initializes ---
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _isLoadingProfilePhoto = false);
+      return;
+    }
+
+    try {
+      final doc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+      if (doc.exists &&
+          doc.data() != null &&
+          doc.data()!['profilePhotoUrl'] != null) {
+        if (mounted) {
+          setState(() {
+            _currentUserProfilePhotoUrl = doc.data()!['profilePhotoUrl'];
+            _isLoadingProfilePhoto = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() => _isLoadingProfilePhoto = false);
+        }
+      }
+    } catch (e) {
+      // Handle potential errors
+      if (mounted) {
+        setState(() => _isLoadingProfilePhoto = false);
+      }
+    }
+  }
+
   Future<void> _handleRefresh() async {
-    // Calling setState() is enough to trigger a rebuild of the widget tree.
-    // This will cause the StreamBuilder and all NetworkImages to reload.
+    // Also refresh the user profile on pull-to-refresh
+    _loadUserProfile();
     setState(() {});
-    // We add a small delay to make the refresh indicator visible for a moment for better UX.
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
@@ -65,7 +111,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               );
             },
           ),
-          const SizedBox(width: 10),
+          // --- UPDATED: AppBar action to show the user's photo ---
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+            child: _buildProfileAvatar(),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -80,15 +130,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         tooltip: 'Sell Item',
         child: const Icon(Icons.add),
       ),
-      // --- WRAP with RefreshIndicator ---
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
-        color: Colors.black, // Color of the icon
-        backgroundColor:
-            Colors.amber.shade700, // Background color of the circle
+        color: Colors.black,
+        backgroundColor: Colors.amber.shade700,
         child: SingleChildScrollView(
-          // Important: Add this physics property to ensure scrolling always works
-          // even when the content is smaller than the screen, allowing refresh.
           physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -115,6 +161,39 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  // --- NEW: Helper widget to build the profile avatar with loading/fallback ---
+  Widget _buildProfileAvatar() {
+    if (_isLoadingProfilePhoto) {
+      return const CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.grey,
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+
+    if (_currentUserProfilePhotoUrl != null &&
+        _currentUserProfilePhotoUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 18,
+        backgroundImage: NetworkImage(_currentUserProfilePhotoUrl!),
+        backgroundColor: Colors.grey.shade800,
+      );
+    }
+
+    // Fallback icon if no photo is available
+    return const CircleAvatar(
+      radius: 18,
+      backgroundColor: Colors.grey,
+      child: Icon(Icons.person, size: 22, color: Colors.white),
+    );
+  }
+
+  // ... (rest of the file remains exactly the same)
+
   Widget _buildPromoBanner() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -124,7 +203,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         borderRadius: BorderRadius.circular(16),
         image: DecorationImage(
           image: const NetworkImage(
-            'https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80',
+            'https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG9otby1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80',
           ),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
