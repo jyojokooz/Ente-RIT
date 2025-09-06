@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/marketplace_service.dart';
+import 'chat_list_screen.dart';
 import 'create_listing_screen.dart';
-import 'product_detail_screen.dart'; // <-- IMPORT DETAIL SCREEN
+import 'product_detail_screen.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -14,83 +16,256 @@ class MarketplaceScreen extends StatefulWidget {
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final MarketplaceService _marketplaceService = MarketplaceService();
 
+  // --- NEW: State variable to track the selected category ---
+  // `null` will represent the "All" category.
+  String? _selectedCategory;
+
+  // --- UPDATED: Added an "All" category at the beginning ---
+  final List<Map<String, dynamic>> categories = [
+    {'name': 'All', 'icon': Icons.grid_view_rounded},
+    {'name': 'Textbooks', 'icon': Icons.menu_book_outlined},
+    {'name': 'Electronics', 'icon': Icons.laptop_chromebook_outlined},
+    {'name': 'Lab & Gear', 'icon': Icons.science_outlined},
+    {'name': 'Dorm Supplies', 'icon': Icons.lightbulb_outline},
+    {'name': 'Gaming', 'icon': Icons.sports_esports_outlined},
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(
-          "Student Marketplace",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         backgroundColor: Colors.grey.shade900,
+        elevation: 0,
+        title: Text(
+          "Student Market",
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: Colors.amber.shade600,
+              size: 28,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChatListScreen()),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const CreateListingScreen()),
           );
         },
-        label: Text(
-          'Sell Item',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        icon: const Icon(Icons.add_shopping_cart),
         backgroundColor: Colors.amber.shade700,
         foregroundColor: Colors.black,
+        tooltip: 'Sell Item',
+        child: const Icon(Icons.add),
       ),
-      body: StreamBuilder<List<Product>>(
-        stream: _marketplaceService.getProductsStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
-              ),
-            );
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Text(
-                "No items for sale yet.\nBe the first to list something!",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 18),
-              ),
-            );
-          }
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              _buildSearchBar(),
+              const SizedBox(height: 24),
+              _buildSectionHeader("Categories"),
+              const SizedBox(height: 12),
+              _buildCategoryList(),
+              const SizedBox(height: 24),
+              _buildSectionHeader("Listings"), // Renamed for clarity
+              const SizedBox(height: 12),
+              _buildProductGrid(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-          final products = snapshot.data!;
-          return GridView.builder(
-            padding: const EdgeInsets.all(12.0),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.7,
-            ),
-            itemCount: products.length,
-            itemBuilder: (context, index) {
-              final product = products[index];
-              // --- MODIFICATION: WRAP CARD IN GESTUREDETECTOR ---
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProductDetailScreen(product: product),
-                    ),
-                  );
-                },
-                child: ProductCard(product: product),
-              );
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: GoogleFonts.poppins(
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        fontSize: 20,
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return TextField(
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'Search for anything...',
+        hintStyle: TextStyle(color: Colors.grey.shade500),
+        prefixIcon: Icon(Icons.search, color: Colors.grey.shade500),
+        filled: true,
+        fillColor: Colors.grey.shade800,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  Widget _buildCategoryList() {
+    return SizedBox(
+      height: 90,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 16),
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final categoryName = category['name'];
+
+          // --- NEW: Logic to determine if a category is selected ---
+          final bool isSelected =
+              (_selectedCategory == null && categoryName == 'All') ||
+              (_selectedCategory == categoryName);
+
+          return GestureDetector(
+            // --- NEW: onTap to update the state ---
+            onTap: () {
+              setState(() {
+                if (categoryName == 'All') {
+                  _selectedCategory = null; // Clear the filter
+                } else {
+                  _selectedCategory = categoryName;
+                }
+              });
             },
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(16),
+                  // --- NEW: Visual feedback for selected category ---
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected
+                            ? Colors.amber.shade700
+                            : Colors.grey.shade800,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    category['icon'],
+                    color: isSelected ? Colors.black : Colors.amber.shade600,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  categoryName,
+                  style: TextStyle(
+                    color: isSelected ? Colors.amber.shade600 : Colors.white70,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildProductGrid() {
+    return StreamBuilder<List<Product>>(
+      stream: _marketplaceService.getProductsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.amber),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState(
+            "No items for sale yet.\nBe the first to list something!",
+          );
+        }
+
+        final allProducts = snapshot.data!;
+
+        // --- NEW: Filtering logic happens here ---
+        final filteredProducts =
+            _selectedCategory == null
+                ? allProducts // If no category is selected, show all
+                : allProducts
+                    .where((product) => product.category == _selectedCategory)
+                    .toList();
+
+        // --- NEW: Show message if filter results are empty ---
+        if (filteredProducts.isEmpty) {
+          return _buildEmptyState("No items found in this category.");
+        }
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 80.0),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.75,
+          ),
+          itemCount: filteredProducts.length, // Use the filtered list
+          itemBuilder: (context, index) {
+            final product = filteredProducts[index]; // Use the filtered list
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProductDetailScreen(product: product),
+                  ),
+                );
+              },
+              child: ProductCard(product: product),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- NEW: Helper widget for empty states ---
+  Widget _buildEmptyState(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 18),
+        ),
       ),
     );
   }
@@ -106,10 +281,11 @@ class ProductCard extends StatelessWidget {
       locale: 'en_US',
       symbol: '\$',
     );
-    return Card(
-      color: Colors.grey.shade900,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade900,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -117,7 +293,11 @@ class ProductCard extends StatelessWidget {
             flex: 5,
             child: Container(
               width: double.infinity,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
                 image: DecorationImage(
                   image: NetworkImage(product.imageUrl),
                   fit: BoxFit.cover,
@@ -128,7 +308,7 @@ class ProductCard extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(10.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -136,9 +316,9 @@ class ProductCard extends StatelessWidget {
                   Text(
                     product.title,
                     style: const TextStyle(
-                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Colors.white,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -146,29 +326,10 @@ class ProductCard extends StatelessWidget {
                   Text(
                     currencyFormatter.format(product.price),
                     style: TextStyle(
-                      color: Colors.amber.shade600,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
+                      color: Colors.amber.shade600,
                     ),
-                  ),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundImage: NetworkImage(product.sellerPhotoUrl),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          product.sellerName,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
