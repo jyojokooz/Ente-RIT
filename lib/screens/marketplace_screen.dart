@@ -15,12 +15,8 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final MarketplaceService _marketplaceService = MarketplaceService();
-
-  // --- NEW: State variable to track the selected category ---
-  // `null` will represent the "All" category.
   String? _selectedCategory;
 
-  // --- UPDATED: Added an "All" category at the beginning ---
   final List<Map<String, dynamic>> categories = [
     {'name': 'All', 'icon': Icons.grid_view_rounded},
     {'name': 'Textbooks', 'icon': Icons.menu_book_outlined},
@@ -29,6 +25,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     {'name': 'Dorm Supplies', 'icon': Icons.lightbulb_outline},
     {'name': 'Gaming', 'icon': Icons.sports_esports_outlined},
   ];
+
+  // --- NEW: Refresh handler ---
+  // This method will be called when the user pulls down to refresh.
+  Future<void> _handleRefresh() async {
+    // Calling setState() is enough to trigger a rebuild of the widget tree.
+    // This will cause the StreamBuilder and all NetworkImages to reload.
+    setState(() {});
+    // We add a small delay to make the refresh indicator visible for a moment for better UX.
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,25 +80,77 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         tooltip: 'Sell Item',
         child: const Icon(Icons.add),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-              _buildSearchBar(),
-              const SizedBox(height: 24),
-              _buildSectionHeader("Categories"),
-              const SizedBox(height: 12),
-              _buildCategoryList(),
-              const SizedBox(height: 24),
-              _buildSectionHeader("Listings"), // Renamed for clarity
-              const SizedBox(height: 12),
-              _buildProductGrid(),
-            ],
+      // --- WRAP with RefreshIndicator ---
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: Colors.black, // Color of the icon
+        backgroundColor:
+            Colors.amber.shade700, // Background color of the circle
+        child: SingleChildScrollView(
+          // Important: Add this physics property to ensure scrolling always works
+          // even when the content is smaller than the screen, allowing refresh.
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                _buildSearchBar(),
+                const SizedBox(height: 24),
+                _buildPromoBanner(),
+                const SizedBox(height: 24),
+                _buildSectionHeader("Categories"),
+                const SizedBox(height: 12),
+                _buildCategoryList(),
+                const SizedBox(height: 24),
+                _buildSectionHeader("Listings"),
+                const SizedBox(height: 12),
+                _buildProductGrid(),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPromoBanner() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      height: 140,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(16),
+        image: DecorationImage(
+          image: const NetworkImage(
+            'https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80',
+          ),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            const Color.fromRGBO(0, 0, 0, 0.5),
+            BlendMode.darken,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "Find Your Next Deal",
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Exclusive offers from students, for students.",
+            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 14),
+          ),
+        ],
       ),
     );
   }
@@ -136,18 +194,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         itemBuilder: (context, index) {
           final category = categories[index];
           final categoryName = category['name'];
-
-          // --- NEW: Logic to determine if a category is selected ---
           final bool isSelected =
               (_selectedCategory == null && categoryName == 'All') ||
               (_selectedCategory == categoryName);
 
           return GestureDetector(
-            // --- NEW: onTap to update the state ---
             onTap: () {
               setState(() {
                 if (categoryName == 'All') {
-                  _selectedCategory = null; // Clear the filter
+                  _selectedCategory = null;
                 } else {
                   _selectedCategory = categoryName;
                 }
@@ -158,7 +213,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.all(16),
-                  // --- NEW: Visual feedback for selected category ---
                   decoration: BoxDecoration(
                     color:
                         isSelected
@@ -198,12 +252,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           );
         }
         if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error: ${snapshot.error}',
-              style: const TextStyle(color: Colors.red),
-            ),
-          );
+          return _buildEmptyState("Something went wrong. Pull to refresh.");
         }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return _buildEmptyState(
@@ -212,16 +261,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         }
 
         final allProducts = snapshot.data!;
-
-        // --- NEW: Filtering logic happens here ---
         final filteredProducts =
             _selectedCategory == null
-                ? allProducts // If no category is selected, show all
+                ? allProducts
                 : allProducts
                     .where((product) => product.category == _selectedCategory)
                     .toList();
 
-        // --- NEW: Show message if filter results are empty ---
         if (filteredProducts.isEmpty) {
           return _buildEmptyState("No items found in this category.");
         }
@@ -236,9 +282,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             mainAxisSpacing: 16,
             childAspectRatio: 0.75,
           ),
-          itemCount: filteredProducts.length, // Use the filtered list
+          itemCount: filteredProducts.length,
           itemBuilder: (context, index) {
-            final product = filteredProducts[index]; // Use the filtered list
+            final product = filteredProducts[index];
             return GestureDetector(
               onTap: () {
                 Navigator.push(
@@ -256,7 +302,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  // --- NEW: Helper widget for empty states ---
   Widget _buildEmptyState(String message) {
     return Center(
       child: Padding(
