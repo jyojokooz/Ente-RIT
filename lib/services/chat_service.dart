@@ -1,26 +1,30 @@
-import 'dart:async'; // <-- FIX: Changed period to colon
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // A data model class for chat messages, now with helper methods for Firestore.
 class ChatMessage {
   final String text;
   final String sender;
+  final String senderId; // <-- NEW FIELD
   final DateTime timestamp;
   final String senderProfilePicUrl;
 
   ChatMessage({
     required this.text,
     required this.sender,
+    required this.senderId, // <-- NEW FIELD
     required this.timestamp,
     required this.senderProfilePicUrl,
   });
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
+    // Use senderId for the avatar seed as it's guaranteed to be unique
     final defaultAvatar =
-        'https://api.dicebear.com/7.x/pixel-art/png?seed=${map['sender'] ?? 'default'}';
+        'https://api.dicebear.com/7.x/pixel-art/png?seed=${map['senderId'] ?? 'default'}';
     return ChatMessage(
       text: map['text'] ?? '',
       sender: map['sender'] ?? 'Unknown',
+      senderId: map['senderId'] ?? '', // <-- NEW FIELD
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       senderProfilePicUrl: map['senderProfilePicUrl'] ?? defaultAvatar,
     );
@@ -30,6 +34,7 @@ class ChatMessage {
     return {
       'text': text,
       'sender': sender,
+      'senderId': senderId, // <-- NEW FIELD
       'timestamp': Timestamp.fromDate(timestamp),
       'senderProfilePicUrl': senderProfilePicUrl,
     };
@@ -45,10 +50,7 @@ class Room {
 
   factory Room.fromSnapshot(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    return Room(
-      name: doc.id,
-      hostId: data['hostId'] ?? '',
-    );
+    return Room(name: doc.id, hostId: data['hostId'] ?? '');
   }
 }
 
@@ -127,9 +129,9 @@ class ChatService {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => ChatMessage.fromMap(doc.data()))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => ChatMessage.fromMap(doc.data()))
+              .toList();
+        });
   }
 }

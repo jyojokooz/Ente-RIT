@@ -46,9 +46,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _roomExistenceSubscription?.cancel();
+    _textController.dispose();
+    _scrollController.dispose();
+    if (widget.isHost) {
+      _chatService.deleteRoom(widget.roomName, widget.userId);
+    }
+    super.dispose();
+  }
+
   void _showRoomClosedDialog() {
     if (!mounted) return;
-    if (ModalRoute.of(context)?.isCurrent != true) {
+    if (ModalRoute.of(context)?.isCurrent == true) {
       Navigator.of(context).pop();
     }
     showDialog(
@@ -92,7 +103,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             style: GoogleFonts.poppins(color: Colors.white),
           ),
           content: const Text(
-            'Are you sure you want to permanently delete this room?',
+            'Are you sure you want to permanently delete this room for everyone?',
             style: TextStyle(color: Colors.white70),
           ),
           actions: <Widget>[
@@ -109,7 +120,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 style: TextStyle(color: Colors.red.shade400),
               ),
               onPressed: () async {
-                await _chatService.deleteRoom(widget.roomName, widget.userId);
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                 if (mounted) Navigator.of(context).pop();
               },
@@ -126,6 +136,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       final message = ChatMessage(
         text: text,
         sender: widget.userName,
+        senderId: widget.userId, // <-- CRUCIAL FIX: Pass the user's ID
         timestamp: DateTime.now(),
         senderProfilePicUrl: widget.userProfilePicUrl,
       );
@@ -146,17 +157,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         );
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _roomExistenceSubscription?.cancel();
-    _textController.dispose();
-    _scrollController.dispose();
-    if (widget.isHost) {
-      _chatService.deleteRoom(widget.roomName, widget.userId);
-    }
-    super.dispose();
   }
 
   @override
@@ -192,7 +192,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               stream: _chatService.getMessageStream(widget.roomName),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.cyan),
+                  );
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return Center(
@@ -221,7 +223,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    final isSentByMe = message.sender == widget.userName;
+                    final isSentByMe =
+                        message.senderId == widget.userId; // Check by ID now
                     return _buildMessageBubble(message, isSentByMe);
                   },
                 );
@@ -238,16 +241,18 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final alignment =
         isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final color = isSentByMe ? Colors.cyan.shade600 : Colors.grey.shade800;
+
     final avatar = CircleAvatar(
       backgroundImage: NetworkImage(message.senderProfilePicUrl),
       radius: 20,
     );
+
     final messageBody = Column(
       crossAxisAlignment: alignment,
       children: [
         if (!isSentByMe)
           Padding(
-            padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+            padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
             child: Text(
               message.sender,
               style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
@@ -269,6 +274,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ),
       ],
     );
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 5.0),
       child: Row(
@@ -277,7 +283,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isSentByMe) ...[avatar, const SizedBox(width: 8)],
-          messageBody,
+          Flexible(child: messageBody),
           if (isSentByMe) ...[const SizedBox(width: 8), avatar],
         ],
       ),
@@ -295,10 +301,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               child: TextField(
                 controller: _textController,
                 style: const TextStyle(color: Colors.white),
+                textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   hintText: 'Message as ${widget.userName}...',
                   hintStyle: TextStyle(color: Colors.grey.shade500),
-                  // THIS IS THE CORRECTED LINE
                   border: InputBorder.none,
                   filled: true,
                   fillColor: Colors.grey.shade800,
