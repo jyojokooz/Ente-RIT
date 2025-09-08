@@ -232,9 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       scaffoldMessenger.hideCurrentSnackBar();
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('Upload failed: ${e.toString()}')),
@@ -301,6 +299,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- CORRECTED CONNECTION LOGIC ---
+
   Future<void> _sendConnectionRequest() async {
     final currentUserRef = FirebaseFirestore.instance
         .collection('users')
@@ -308,12 +308,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final targetUserRef = FirebaseFirestore.instance
         .collection('users')
         .doc(targetUserId);
-    await currentUserRef.update({
+    final batch = FirebaseFirestore.instance.batch();
+
+    batch.update(currentUserRef, {
       'sentRequests': FieldValue.arrayUnion([targetUserId]),
     });
-    await targetUserRef.update({
+    batch.update(targetUserRef, {
       'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
     });
+
+    await batch.commit();
     _loadAllData();
   }
 
@@ -325,6 +329,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .collection('users')
         .doc(targetUserId);
     final batch = FirebaseFirestore.instance.batch();
+
     batch.update(currentUserRef, {
       'connections': FieldValue.arrayUnion([targetUserId]),
     });
@@ -337,6 +342,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     batch.update(targetUserRef, {
       'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
+
     await batch.commit();
     _loadAllData();
   }
@@ -349,12 +355,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .collection('users')
         .doc(targetUserId);
     final batch = FirebaseFirestore.instance.batch();
+
     batch.update(currentUserRef, {
       'sentRequests': FieldValue.arrayRemove([targetUserId]),
     });
     batch.update(targetUserRef, {
       'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
+
+    await batch.commit();
+    _loadAllData();
+  }
+
+  Future<void> _removeConnection() async {
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final targetUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUserId);
+    final batch = FirebaseFirestore.instance.batch();
+
+    batch.update(currentUserRef, {
+      'connections': FieldValue.arrayRemove([targetUserId]),
+    });
+    batch.update(targetUserRef, {
+      'connections': FieldValue.arrayRemove([_currentUser.uid]),
+    });
+
     await batch.commit();
     _loadAllData();
   }
@@ -656,27 +684,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     switch (_connectionStatus) {
       case ConnectionStatus.connected:
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => ChatScreen(
-                          receiverId: targetUserId,
-                          receiverName: _displayName,
-                          receiverImageUrl: _profilePhotoUrl ?? '',
-                        ),
-                  ),
+        return Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => ChatScreen(
+                              receiverId: targetUserId,
+                              receiverName: _displayName,
+                              receiverImageUrl: _profilePhotoUrl ?? '',
+                            ),
+                      ),
+                    ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade700,
                 ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.shade700,
+                icon: const Icon(Icons.message_outlined),
+                label: const Text('Message'),
+              ),
             ),
-            icon: const Icon(Icons.message_outlined),
-            label: const Text('Message'),
-          ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: _removeConnection,
+              child: const Text('Unconnect'),
+            ),
+          ],
         );
       case ConnectionStatus.sent:
         return SizedBox(
