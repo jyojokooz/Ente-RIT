@@ -27,20 +27,6 @@ class ChatMessage {
   });
 }
 
-abstract class ChatListItem {}
-
-class MessageItem extends ChatListItem {
-  // --- THIS IS THE FIX ---
-  // The constructor and the field declaration are now separate, correct statements.
-  MessageItem(this.message);
-  final ChatMessage message;
-}
-
-class DateSeparatorItem extends ChatListItem {
-  DateSeparatorItem(this.date);
-  final DateTime date;
-}
-
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -65,10 +51,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final String pusherAppKey = dotenv.env['PUSHER_APP_KEY'] ?? '';
   final String pusherAppCluster = dotenv.env['PUSHER_APP_CLUSTER'] ?? '';
 
-  final List<ChatListItem> _chatItems = [];
+  // --- FIX: Simplified data model. The list now only holds ChatMessage objects. ---
+  final List<ChatMessage> _chatMessages = [];
   bool _isLoadingHistory = true;
   String _currentUserImageUrl = '';
-  final uuid = Uuid();
+  final uuid = const Uuid();
 
   @override
   void initState() {
@@ -116,9 +103,8 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }).toList();
 
-    for (var message in historyMessages) {
-      _addMessageToList(message, isFromHistory: true);
-    }
+    // --- FIX: Add all historical messages directly to the list. ---
+    _chatMessages.addAll(historyMessages);
 
     if (mounted) {
       setState(() {
@@ -136,49 +122,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await pusher.connect();
     } catch (e) {
       // Handle Pusher connection error
-    }
-  }
-
-  void _addMessageToList(ChatMessage message, {bool isFromHistory = false}) {
-    final location = tz.getLocation('Asia/Kolkata');
-    DateTime? adjacentMessageDate;
-
-    if (!isFromHistory && _chatItems.isNotEmpty) {
-      final firstItem = _chatItems.first;
-      if (firstItem is MessageItem) {
-        adjacentMessageDate = firstItem.message.timestamp;
-      }
-    } else if (isFromHistory && _chatItems.isNotEmpty) {
-      final lastItem = _chatItems.last;
-      if (lastItem is MessageItem) {
-        adjacentMessageDate = lastItem.message.timestamp;
-      }
-    }
-
-    bool needsDateSeparator = true;
-    if (adjacentMessageDate != null) {
-      final adjacentLocalDate = tz.TZDateTime.from(
-        adjacentMessageDate,
-        location,
-      );
-      final newLocalDate = tz.TZDateTime.from(message.timestamp, location);
-      if (adjacentLocalDate.day == newLocalDate.day &&
-          adjacentLocalDate.month == newLocalDate.month &&
-          adjacentLocalDate.year == newLocalDate.year) {
-        needsDateSeparator = false;
-      }
-    }
-
-    if (isFromHistory) {
-      if (needsDateSeparator) {
-        _chatItems.add(DateSeparatorItem(message.timestamp));
-      }
-      _chatItems.add(MessageItem(message));
-    } else {
-      if (needsDateSeparator) {
-        _chatItems.insert(0, DateSeparatorItem(message.timestamp));
-      }
-      _chatItems.insert(0, MessageItem(message));
+      debugPrint("Pusher Error: $e");
     }
   }
 
@@ -205,7 +149,8 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         if (mounted) {
           setState(() {
-            _addMessageToList(newMessage);
+            // --- FIX: Add new messages to the start of the list for the reversed view. ---
+            _chatMessages.insert(0, newMessage);
           });
         }
       }
@@ -214,9 +159,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) {
-      return;
-    }
+    if (text.isEmpty) return;
 
     final messageId = uuid.v4();
     final message = ChatMessage(
@@ -229,7 +172,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
 
     setState(() {
-      _addMessageToList(message);
+      _chatMessages.insert(0, message);
     });
 
     await DatabaseHelper.instance.insertMessage({
@@ -260,9 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     if (mounted) {
       setState(() {
-        _chatItems.removeWhere(
-          (item) => item is MessageItem && item.message.id == messageId,
-        );
+        _chatMessages.removeWhere((msg) => msg.id == messageId);
       });
     }
   }
@@ -271,56 +212,55 @@ class _ChatScreenState extends State<ChatScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(8.0),
-            child: Wrap(
-              children: <Widget>[
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
+      builder:
+          (context) => SafeArea(
+            child: Container(
+              margin: const EdgeInsets.all(8.0),
+              child: Wrap(
+                children: <Widget>[
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade900,
+                      borderRadius: BorderRadius.circular(15),
                     ),
-                    title: const Text(
-                      'Delete for me',
-                      style: TextStyle(color: Colors.red),
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                      title: const Text(
+                        'Delete for me',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _deleteMessageForMe(messageId);
+                      },
                     ),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      _deleteMessageForMe(messageId);
-                    },
                   ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: ListTile(
-                    title: const Center(
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: ListTile(
+                      title: const Center(
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
+                      onTap: () => Navigator.of(context).pop(),
                     ),
-                    onTap: () => Navigator.of(context).pop(),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
-      },
     );
   }
 
@@ -343,6 +283,13 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return DateFormat('MMMM d, y').format(istTime);
     }
+  }
+
+  bool _isSameDay(DateTime d1, DateTime d2) {
+    final location = tz.getLocation('Asia/Kolkata');
+    final dt1 = tz.TZDateTime.from(d1, location);
+    final dt2 = tz.TZDateTime.from(d2, location);
+    return dt1.year == dt2.year && dt1.month == dt2.month && dt1.day == dt2.day;
   }
 
   @override
@@ -381,7 +328,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           (context, index) =>
                               ChatMessagePlaceholder(isMe: index.isEven),
                     )
-                    : _chatItems.isEmpty
+                    : _chatMessages.isEmpty
                     ? Center(
                       child: Text(
                         'Say hello!',
@@ -390,43 +337,46 @@ class _ChatScreenState extends State<ChatScreen> {
                     )
                     : ListView.builder(
                       reverse: true,
-                      padding: const EdgeInsets.all(12.0),
-                      itemCount: _chatItems.length,
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      itemCount: _chatMessages.length,
                       itemBuilder: (context, index) {
-                        final currentItem = _chatItems[index];
-                        if (currentItem is DateSeparatorItem) {
-                          return _buildDateSeparator(currentItem.date);
-                        }
-                        if (currentItem is MessageItem) {
-                          final message = currentItem.message;
-                          final isMe = message.senderId == _currentUser.uid;
-                          bool showAvatarAndTimestamp = false;
-                          if (index == 0) {
-                            showAvatarAndTimestamp = true;
-                          } else {
-                            final previousItem = _chatItems[index - 1];
-                            if (previousItem is MessageItem) {
-                              showAvatarAndTimestamp =
-                                  message.senderId !=
-                                  previousItem.message.senderId;
-                            } else {
-                              showAvatarAndTimestamp = true;
-                            }
-                          }
-                          return GestureDetector(
-                            onLongPress: () {
-                              if (isMe) {
-                                _showDeleteDialog(message.id);
-                              }
-                            },
-                            child: _buildMessageBubble(
-                              message: message,
-                              isMe: isMe,
-                              showAvatarAndTimestamp: showAvatarAndTimestamp,
+                        final message = _chatMessages[index];
+                        final isMe = message.senderId == _currentUser.uid;
+
+                        // --- FIX: Logic for showing avatars and timestamps correctly in a reversed list ---
+                        // Show avatar only on the last message of a consecutive block.
+                        // In a reversed list, the "last" message is the one with the lowest index (e.g., index 0).
+                        final isLastInBlock =
+                            (index == 0) ||
+                            (_chatMessages[index - 1].senderId !=
+                                message.senderId);
+
+                        // --- FIX: Logic for showing date separators correctly in a reversed list ---
+                        // Show date separator if it's the oldest message or if the day changed.
+                        // In a reversed list, the "next" message (older) is at index + 1.
+                        final bool showDateSeparator =
+                            (index == _chatMessages.length - 1) ||
+                            !_isSameDay(
+                              message.timestamp,
+                              _chatMessages[index + 1].timestamp,
+                            );
+
+                        return Column(
+                          children: [
+                            if (showDateSeparator)
+                              _buildDateSeparator(message.timestamp),
+                            GestureDetector(
+                              onLongPress: () {
+                                if (isMe) _showDeleteDialog(message.id);
+                              },
+                              child: _buildMessageBubble(
+                                message: message,
+                                isMe: isMe,
+                                isLastInBlock: isLastInBlock,
+                              ),
                             ),
-                          );
-                        }
-                        return const SizedBox.shrink();
+                          ],
+                        );
                       },
                     ),
           ),
@@ -456,71 +406,89 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessageBubble({
     required ChatMessage message,
     required bool isMe,
-    required bool showAvatarAndTimestamp,
+    required bool isLastInBlock,
   }) {
     final location = tz.getLocation('Asia/Kolkata');
     final istTime = tz.TZDateTime.from(message.timestamp, location);
     final formattedTime = DateFormat('HH:mm').format(istTime);
-    final messageBubble = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isMe ? Colors.yellow : Colors.grey.shade800,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        message.text,
-        style: GoogleFonts.poppins(color: isMe ? Colors.black : Colors.white),
-      ),
-    );
-    final timestampText = Text(
-      formattedTime,
-      style: const TextStyle(color: Colors.white54, fontSize: 10),
-    );
-    final avatar = CircleAvatar(
-      radius: 16,
-      backgroundImage:
-          message.senderImageUrl.isNotEmpty
-              ? NetworkImage(message.senderImageUrl)
-              : null,
-      child:
-          message.senderImageUrl.isEmpty
-              ? const Icon(Icons.person, size: 16)
-              : null,
-    );
-    final spacer = const SizedBox(width: 40);
 
-    if (!isMe) {
-      return Padding(
-        padding: EdgeInsets.only(bottom: showAvatarAndTimestamp ? 8.0 : 2.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (showAvatarAndTimestamp) avatar else spacer,
-            const SizedBox(width: 8),
-            Flexible(child: messageBubble),
-            if (showAvatarAndTimestamp) ...[
-              const SizedBox(width: 8),
-              timestampText,
-            ],
-          ],
-        ),
-      );
-    } else {
-      return Padding(
-        padding: EdgeInsets.only(bottom: showAvatarAndTimestamp ? 8.0 : 2.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (showAvatarAndTimestamp) ...[
-              timestampText,
-              const SizedBox(width: 8),
-            ],
-            Flexible(child: messageBubble),
-          ],
-        ),
-      );
-    }
+    // --- UI REFRESH: Tailed corners for a more modern chat look ---
+    final bubbleRadius = Radius.circular(20);
+    final bubbleBorderRadius =
+        isMe
+            ? BorderRadius.only(
+              topLeft: bubbleRadius,
+              bottomLeft: bubbleRadius,
+              bottomRight: isLastInBlock ? Radius.zero : bubbleRadius,
+              topRight: bubbleRadius,
+            )
+            : BorderRadius.only(
+              topRight: bubbleRadius,
+              bottomRight: bubbleRadius,
+              bottomLeft: isLastInBlock ? Radius.zero : bubbleRadius,
+              topLeft: bubbleRadius,
+            );
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: isLastInBlock ? 10.0 : 2.0,
+        left: isMe ? 48.0 : 0,
+        right: isMe ? 0 : 48.0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          // Show avatar for the other user
+          if (!isMe && isLastInBlock)
+            CircleAvatar(
+              radius: 16,
+              backgroundImage:
+                  message.senderImageUrl.isNotEmpty
+                      ? NetworkImage(message.senderImageUrl)
+                      : null,
+              child:
+                  message.senderImageUrl.isEmpty
+                      ? const Icon(Icons.person, size: 16)
+                      : null,
+            )
+          else if (!isMe)
+            const SizedBox(width: 32), // Spacer to align messages
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment:
+                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    // --- UI REFRESH: New colors ---
+                    color: isMe ? Colors.blue : Colors.grey.shade800,
+                    borderRadius: bubbleBorderRadius,
+                  ),
+                  child: Text(
+                    message.text,
+                    style: GoogleFonts.poppins(color: Colors.white),
+                  ),
+                ),
+                if (isLastInBlock) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    formattedTime,
+                    style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMessageInputField() {
@@ -553,7 +521,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.send, color: Colors.yellow),
+              icon: const Icon(Icons.send, color: Colors.blue), // UI Refresh
               onPressed: _sendMessage,
             ),
           ],
