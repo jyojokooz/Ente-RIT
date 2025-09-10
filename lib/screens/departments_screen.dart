@@ -68,7 +68,7 @@ class DepartmentsScreen extends StatelessWidget {
                         builder:
                             (context) => const WebViewScreen(
                               title: 'MCA Department',
-                              url: 'https://techworldthink.github.io/MCA/',
+                              url: 'https://mca-rit.vercel.app/',
                             ),
                       ),
                     );

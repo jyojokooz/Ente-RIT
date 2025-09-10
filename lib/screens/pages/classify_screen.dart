@@ -198,7 +198,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       },
       {
         'id': 'dev_community',
-        'label': 'Dev Community',
+        'label': 'stack overflow',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade700,
         'action':
