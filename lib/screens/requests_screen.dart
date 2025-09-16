@@ -14,6 +14,7 @@ class RequestsScreen extends StatefulWidget {
 class _RequestsScreenState extends State<RequestsScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
+  // --- THIS FUNCTION IS NOW UPDATED ---
   Future<void> _acceptRequest(String requestFromId) async {
     final currentUserRef = FirebaseFirestore.instance
         .collection('users')
@@ -24,6 +25,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
     final batch = FirebaseFirestore.instance.batch();
 
+    // Update connection arrays
     batch.update(currentUserRef, {
       'connections': FieldValue.arrayUnion([requestFromId]),
     });
@@ -31,6 +33,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
       'connections': FieldValue.arrayUnion([_currentUser.uid]),
     });
 
+    // Remove from request arrays
     batch.update(currentUserRef, {
       'receivedRequests': FieldValue.arrayRemove([requestFromId]),
     });
@@ -38,7 +41,22 @@ class _RequestsScreenState extends State<RequestsScreen> {
       'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
 
+    // Commit the changes to the database
     await batch.commit();
+
+    // --- NEW: LOGIC TO CREATE NOTIFICATION ---
+    // After successfully accepting, notify the user who sent the request.
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'userId': requestFromId, // The ID of the user to be notified
+      'title': 'Connection Accepted',
+      'body':
+          '${_currentUser.displayName ?? 'Someone'} accepted your connection request.',
+      'type': 'follow', // Reuse the 'follow' icon
+      'relatedDocId':
+          _currentUser.uid, // Link back to the current user's profile
+      'isRead': false,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> _declineRequest(String requestFromId) async {

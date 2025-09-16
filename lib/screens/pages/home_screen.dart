@@ -6,10 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../comments_screen.dart';
 import '../edit_post_screen.dart';
 import '../post_card.dart';
-import '../post_card_placeholder.dart'; // <-- IMPORT THE PLACEHOLDER
+import '../post_card_placeholder.dart';
 import 'profile_screen.dart';
-import '../search_screen.dart';
 import '../chat_list_screen.dart';
+import '../notifications_screen.dart'; // <-- IMPORT THE NEW SCREEN
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,7 +37,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _toggleLike(String postId, List<dynamic> currentLikes) async {
+  // --- MODIFIED to accept postAuthorId to create notifications ---
+  Future<void> _toggleLike(
+    String postId,
+    List<dynamic> currentLikes,
+    String postAuthorId,
+  ) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
     final isLiked = currentLikes.contains(user.uid);
     if (isLiked) {
@@ -48,6 +53,20 @@ class _HomeScreenState extends State<HomeScreen> {
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
+
+      // --- NEW: LOGIC TO CREATE NOTIFICATION ---
+      // Only create a notification if someone else likes the post (not the author themselves)
+      if (postAuthorId != user.uid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': postAuthorId, // The ID of the user to be notified
+          'title': 'New Like',
+          'body': '${user.displayName ?? 'Someone'} liked your post.',
+          'type': 'like', // Helps in displaying the right icon
+          'relatedDocId': postId, // To navigate to the post later if needed
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
     }
   }
 
@@ -139,19 +158,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
               builder: (context, snapshot) {
-                // --- THIS IS THE CRITICAL CHANGE ---
-                // If we are waiting for the list of posts, show a list of shimmer placeholders
-                // instead of a single rotating spinner.
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => const PostCardPlaceholder(),
-                      childCount: 5, // Show 5 placeholders while loading
+                      childCount: 5,
                     ),
                   );
                 }
-                // --- END OF CHANGE ---
-
                 if (snapshot.hasError) {
                   return SliverFillRemaining(
                     child: Center(
@@ -188,8 +202,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       onCommentPressed: () => _onCommentTapped(postSnapshot.id),
                       onDeletePressed: () => _deletePost(postSnapshot.id),
                       onProfileTapped: () => _onProfileTapped(postAuthorId),
+                      // Pass the author ID to the like function
                       onLikePressed:
-                          () => _toggleLike(postSnapshot.id, currentLikes),
+                          () => _toggleLike(
+                            postSnapshot.id,
+                            currentLikes,
+                            postAuthorId,
+                          ),
                       onEditPressed:
                           () => _editPost(postSnapshot.id, currentCaption),
                     );
@@ -203,18 +222,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- MODIFIED to show Notification button instead of Search ---
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
-    // ... (_buildTopBar logic is unchanged)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // This is the new Notification Button
           GestureDetector(
             onTap:
                 () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SearchScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationsScreen(),
+                  ),
                 ),
             child: Container(
               padding: const EdgeInsets.all(4),
@@ -222,7 +244,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
                 color: iconBgColor,
               ),
-              child: Icon(Icons.search, color: textColor, size: 28),
+              child: Icon(
+                Icons.notifications_outlined,
+                color: textColor,
+                size: 28,
+              ),
             ),
           ),
           Text(

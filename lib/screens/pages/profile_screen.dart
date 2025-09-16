@@ -299,8 +299,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- CORRECTED CONNECTION LOGIC ---
-
   Future<void> _sendConnectionRequest() async {
     final currentUserRef = FirebaseFirestore.instance
         .collection('users')
@@ -927,15 +925,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }
           return GestureDetector(
+            // --- THIS IS THE FIX ---
+            // Changed from passing the whole snapshot to passing only the ID.
             onTap:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder:
-                        (context) =>
-                            PostDetailScreen(postSnapshot: postSnapshot),
+                        (context) => PostDetailScreen(postId: postSnapshot.id),
                   ),
                 ),
+            // --- END OF FIX ---
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15.0),
               child: Stack(

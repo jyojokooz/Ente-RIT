@@ -22,7 +22,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
     super.dispose();
   }
 
-  // --- START: THE DEFINITIVE _postComment METHOD ---
+  // --- START: THE UPDATED _postComment METHOD ---
   Future<void> _postComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
@@ -36,6 +36,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
         .collection('posts')
         .doc(widget.postId);
     final commentCollectionRef = postRef.collection('comments');
+    final notificationsCollectionRef = FirebaseFirestore.instance.collection(
+      'notifications',
+    );
     final userDoc =
         await FirebaseFirestore.instance
             .collection('users')
@@ -57,27 +60,41 @@ class _CommentsScreenState extends State<CommentsScreen> {
     // Clear the input field immediately for better UX
     _commentController.clear();
 
-    // THIS TRANSACTION IS THE FIX. IT GUARANTEES THE 'comments' FIELD IS CREATED AND UPDATED.
+    // Use a transaction to ensure atomicity of all operations.
     await FirebaseFirestore.instance
         .runTransaction((transaction) async {
-          // Step 1: Read the post document inside the transaction.
+          // Step 1: Read the post document.
           final postSnapshot = await transaction.get(postRef);
 
           if (!postSnapshot.exists) {
             throw Exception("Post does not exist!");
           }
+          final postData = postSnapshot.data() as Map<String, dynamic>;
+          final postAuthorId = postData['userId'];
 
-          // Step 2: Safely get the current comment count. If the 'comments' field doesn't exist, default to 0.
-          final currentCommentCount =
-              (postSnapshot.data() as Map<String, dynamic>)['comments'] ?? 0;
-
-          // Step 3: Update the post document with the new count (current count + 1).
-          // This will CREATE the field if it's missing or UPDATE it if it exists.
+          // Step 2: Safely update the comment count.
+          final currentCommentCount = postData['comments'] ?? 0;
           transaction.update(postRef, {'comments': currentCommentCount + 1});
 
-          // Step 4: Add the new comment document to the subcollection.
+          // Step 3: Add the new comment document.
           final newCommentDocRef = commentCollectionRef.doc();
           transaction.set(newCommentDocRef, newCommentData);
+
+          // --- NEW: LOGIC TO CREATE NOTIFICATION ---
+          // Only create a notification if the commenter is not the post author.
+          if (postAuthorId != null && postAuthorId != _currentUser.uid) {
+            final newNotificationDocRef = notificationsCollectionRef.doc();
+            transaction.set(newNotificationDocRef, {
+              'userId': postAuthorId, // The ID of the user to be notified
+              'title': 'New Comment',
+              'body':
+                  '${userData['displayName'] ?? 'Someone'} commented: "$text"',
+              'type': 'comment', // Helps in displaying the right icon
+              'relatedDocId': widget.postId, // To navigate to the post
+              'isRead': false,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+          }
         })
         .catchError((error) {
           // Handle any errors during the transaction
@@ -88,7 +105,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
           }
         });
   }
-  // --- END: DEFINITIVE METHOD ---
+  // --- END: UPDATED METHOD ---
 
   Future<void> _deleteComment(String commentId) async {
     final postRef = FirebaseFirestore.instance
@@ -123,7 +140,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
     );
 
     if (didRequestDelete == true) {
-      // Using a transaction for deletion is also safer.
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         transaction.delete(commentRef);
         transaction.update(postRef, {'comments': FieldValue.increment(-1)});
@@ -133,7 +149,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The rest of your build method is correct and does not need changes.
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
