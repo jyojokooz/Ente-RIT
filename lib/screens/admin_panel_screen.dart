@@ -10,7 +10,10 @@ import 'admin/admin_manage_posts_screen.dart';
 import 'admin/admin_manage_departments_screen.dart';
 import 'admin/admin_manage_events_screen.dart';
 import 'admin/admin_manage_lostfound_screen.dart';
-import 'admin/admin_manage_card_images_screen.dart'; // The new screen for card images
+import 'admin/admin_manage_card_images_screen.dart';
+// --- THESE ARE THE NEW IMPORTS ---
+import 'admin/admin_manage_cafeteria_menu_screen.dart';
+import 'admin/admin_view_cafeteria_orders_screen.dart';
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -71,6 +74,14 @@ class AdminPanelScreen extends StatelessWidget {
                 title: 'Total L&F Items',
                 icon: Icons.find_in_page_outlined,
                 color: Colors.red,
+              ),
+              // --- THIS IS THE NEW STAT CARD ---
+              _StatCard(
+                collection:
+                    'cafeteria_orders', // Assumes a new collection for orders
+                title: 'Total Orders',
+                icon: Icons.receipt_long_outlined,
+                color: Colors.brown,
               ),
             ],
           ),
@@ -162,13 +173,39 @@ class AdminPanelScreen extends StatelessWidget {
             screen: const AdminManageLostFoundScreen(),
           ),
           const SizedBox(height: 12),
-          // --- THIS IS THE NEW CARD YOU REQUESTED ---
           _buildManagementCard(
             context: context,
             label: 'Manage Card Backgrounds',
             icon: Icons.image_outlined,
             color: Colors.teal.shade400,
             screen: const AdminManageCardImagesScreen(),
+          ),
+          const SizedBox(height: 32),
+
+          // --- THIS IS THE NEW CAFETERIA MANAGEMENT SECTION ---
+          Text(
+            "Cafeteria Management",
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Menu Items',
+            icon: Icons.restaurant_menu_outlined,
+            color: Colors.orange.shade600,
+            screen: const AdminManageCafeteriaMenuScreen(),
+          ),
+          const SizedBox(height: 12),
+          _buildManagementCard(
+            context: context,
+            label: 'View Food Orders',
+            icon: Icons.receipt_long_outlined,
+            color: Colors.blueGrey.shade400,
+            screen: const AdminViewCafeteriaOrdersScreen(),
           ),
           const SizedBox(height: 32),
         ],

@@ -20,6 +20,8 @@ import '../quiz_categories_screen.dart';
 import '../pdf_buddy_screen.dart';
 import '../linkedin_analyzer_screen.dart';
 import '../youtube_summarizer_screen.dart';
+// --- THIS IS THE NEW IMPORT ---
+import '../cafeteria_screen.dart';
 
 // --- Widget Imports (Path updated to go up two directories) ---
 import '../../widgets/feature_card.dart';
@@ -139,6 +141,18 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
               MaterialPageRoute(
                 builder: (context) => const MarketplaceScreen(),
               ),
+            ),
+      },
+      // --- THIS IS THE NEW CARD FOR THE CAFETERIA ---
+      {
+        'id': 'cafeteria',
+        'label': 'Cafeteria',
+        'icon': Icons.restaurant_menu_outlined,
+        'color': const Color(0xFFD98E04), // A warm orange/brown color
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CafeteriaScreen()),
             ),
       },
       {
