@@ -3,13 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// --- Screen Imports (Corrected Paths) ---
+// Go up one level from 'pages' to 'screens' to find these files.
 import '../comments_screen.dart';
 import '../edit_post_screen.dart';
+import '../notifications_screen.dart';
+import '../chat_list_screen.dart';
+import 'profile_screen.dart'; // This one is in the same 'pages' folder
+
+// --- Widget Imports (Corrected Paths) ---
+// Go up two levels from 'pages' to 'lib', then into 'widgets'.
 import '../post_card.dart';
 import '../post_card_placeholder.dart';
-import 'profile_screen.dart';
-import '../chat_list_screen.dart';
-import '../notifications_screen.dart'; // <-- IMPORT THE NEW SCREEN
+import '../../widgets/notification_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- MODIFIED to accept postAuthorId to create notifications ---
+  /// Handles liking/unliking a post and creates a notification on like.
   Future<void> _toggleLike(
     String postId,
     List<dynamic> currentLikes,
@@ -45,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
     final isLiked = currentLikes.contains(user.uid);
+
     if (isLiked) {
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
@@ -54,16 +61,15 @@ class _HomeScreenState extends State<HomeScreen> {
         'likes': FieldValue.arrayUnion([user.uid]),
       });
 
-      // --- NEW: LOGIC TO CREATE NOTIFICATION ---
-      // Only create a notification if someone else likes the post (not the author themselves)
       if (postAuthorId != user.uid) {
         await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId, // The ID of the user to be notified
+          'userId': postAuthorId,
           'title': 'New Like',
           'body': '${user.displayName ?? 'Someone'} liked your post.',
-          'type': 'like', // Helps in displaying the right icon
-          'relatedDocId': postId, // To navigate to the post later if needed
+          'type': 'like',
+          'relatedDocId': postId,
           'isRead': false,
+          'isDelivered': false,
           'timestamp': FieldValue.serverTimestamp(),
         });
       }
@@ -85,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _deletePost(String postId) async {
-    // ... (delete logic is unchanged)
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
@@ -119,12 +124,14 @@ class _HomeScreenState extends State<HomeScreen> {
             .collection('posts')
             .doc(postId)
             .delete();
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Post deleted successfully.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Post deleted successfully.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } catch (e) {
         if (scaffoldMessenger.mounted) {
           scaffoldMessenger.showSnackBar(
@@ -202,7 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       onCommentPressed: () => _onCommentTapped(postSnapshot.id),
                       onDeletePressed: () => _deletePost(postSnapshot.id),
                       onProfileTapped: () => _onProfileTapped(postAuthorId),
-                      // Pass the author ID to the like function
                       onLikePressed:
                           () => _toggleLike(
                             postSnapshot.id,
@@ -222,32 +228,33 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- MODIFIED to show Notification button instead of Search ---
+  /// Builds the top bar with the notification button and chat button.
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // This is the new Notification Button
-          GestureDetector(
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const NotificationsScreen(),
+          NotificationBadge(
+            child: GestureDetector(
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsScreen(),
+                    ),
                   ),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: iconBgColor,
                 ),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: iconBgColor,
-              ),
-              child: Icon(
-                Icons.notifications_outlined,
-                color: textColor,
-                size: 28,
+                child: Icon(
+                  Icons.notifications_outlined,
+                  color: textColor,
+                  size: 28,
+                ),
               ),
             ),
           ),

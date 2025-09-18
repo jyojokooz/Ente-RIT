@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 // --- Screen Imports ---
-// No change needed here if you updated your barrel file.
 import 'pages/pages.dart';
 import 'create_post_screen.dart';
+
+// --- Widget Imports ---
+import '../widgets/notification_badge.dart'; // Import the badge widget
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -24,20 +26,19 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    // --- CHANGE 1: Update the list of pages ---
-    // We've added ExploreScreen as the second tab.
-    // Note how the indices for Classify and Profile have shifted.
+    // This list defines the pages that correspond to the bottom navigation bar items.
     _pages = [
       const HomeScreen(), // Index 0
-      const ExploreScreen(), // Index 1 (NEW)
-      const ClassifyScreen(), // Index 2 (was 1)
-      if (currentUser != null) // Index 3 (was 2)
+      const ExploreScreen(), // Index 1
+      const ClassifyScreen(), // Index 2
+      if (currentUser != null) // Index 3
         ProfileScreen(userId: currentUser.uid)
       else
         const Center(child: Text("Error: User not found.")),
     ];
   }
 
+  // Updates the state to show the selected page when a tab is tapped.
   void _onTabTapped(int index) {
     setState(() {
       _currentIndex = index;
@@ -49,6 +50,7 @@ class _MainScreenState extends State<MainScreen> {
     const Color primaryAccentColor = Colors.yellow;
     const Color buttonTextColor = Colors.black;
 
+    // PopScope handles the device's back button to prevent accidental exits.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
@@ -57,6 +59,7 @@ class _MainScreenState extends State<MainScreen> {
         final isFirstPress =
             _lastPressedAt == null ||
             now.difference(_lastPressedAt!) > const Duration(seconds: 2);
+
         if (isFirstPress) {
           _lastPressedAt = now;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -66,11 +69,13 @@ class _MainScreenState extends State<MainScreen> {
             ),
           );
         } else {
-          SystemNavigator.pop();
+          SystemNavigator.pop(); // Exits the app if back is pressed again quickly.
         }
       },
       child: Scaffold(
         backgroundColor: Colors.black,
+        // IndexedStack efficiently shows only the currently active page.
+        // The notification listener is now managed by the AuthGate.
         body: IndexedStack(index: _currentIndex, children: _pages),
         floatingActionButton: FloatingActionButton(
           onPressed:
@@ -90,13 +95,12 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  /// Builds the custom BottomAppBar with a centered notch and notification badge.
   Widget _buildBottomAppBar() {
     const Color activeColor = Colors.yellow;
     final Color inactiveColor = Colors.white70;
     final Color bgColor = Colors.grey.shade900;
 
-    // --- CHANGE 2 & 3: Restructure the BottomAppBar for 4 items ---
-    // The layout now has two items on the left and two on the right of the FAB.
     return BottomAppBar(
       shape: const CircularNotchedRectangle(),
       notchMargin: 10.0,
@@ -104,7 +108,6 @@ class _MainScreenState extends State<MainScreen> {
       child: SizedBox(
         height: 60,
         child: Row(
-          // Using spaceAround works well for distributing 4 items around the center notch.
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             // --- Home Button (Index 0) ---
@@ -116,7 +119,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
               onPressed: () => _onTabTapped(0),
             ),
-            // --- Explore Button (Index 1 - NEW) ---
+            // --- Explore Button (Index 1) ---
             IconButton(
               tooltip: 'Explore',
               icon: Icon(
@@ -126,10 +129,10 @@ class _MainScreenState extends State<MainScreen> {
               onPressed: () => _onTabTapped(1),
             ),
 
-            // The empty space for the Floating Action Button remains in the middle.
+            // The empty space for the Floating Action Button.
             const SizedBox(width: 40),
 
-            // --- Classify Button (Index 2 - Updated) ---
+            // --- Classify Button (Index 2) ---
             IconButton(
               tooltip: 'Classify',
               icon: Icon(
@@ -138,14 +141,16 @@ class _MainScreenState extends State<MainScreen> {
               ),
               onPressed: () => _onTabTapped(2),
             ),
-            // --- Profile Button (Index 3 - Updated) ---
-            IconButton(
-              tooltip: 'Profile',
-              icon: Icon(
-                _currentIndex == 3 ? Icons.person : Icons.person_outline,
-                color: _currentIndex == 3 ? activeColor : inactiveColor,
+            // --- Profile Button (Index 3) with Notification Badge ---
+            NotificationBadge(
+              child: IconButton(
+                tooltip: 'Profile',
+                icon: Icon(
+                  _currentIndex == 3 ? Icons.person : Icons.person_outline,
+                  color: _currentIndex == 3 ? activeColor : inactiveColor,
+                ),
+                onPressed: () => _onTabTapped(3),
               ),
-              onPressed: () => _onTabTapped(3),
             ),
           ],
         ),
