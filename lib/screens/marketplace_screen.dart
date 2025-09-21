@@ -5,12 +5,13 @@ import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// --- SERVICE AND SCREEN IMPORTS ---
 import '../services/marketplace_service.dart';
-import 'chat_list_screen.dart'; // Already imported, now will be a main page
+import 'chat_list_screen.dart';
 import 'create_listing_screen.dart';
 import 'product_detail_screen.dart';
 import 'marketplace_my_ads_screen.dart';
-import 'marketplace_profile_screen.dart';
+import 'marketplace_profile_screen.dart'; // Using the new dedicated profile screen
 
 /// The main host screen with the Bottom Navigation Bar for the marketplace.
 class MarketplaceScreen extends StatefulWidget {
@@ -21,14 +22,19 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   int _currentIndex = 0;
+  late final List<Widget> _pages;
 
-  // --- CHANGE 1: ADD ChatListScreen to the list of pages ---
-  final List<Widget> _pages = [
-    const MarketplaceHome(), // Index 0
-    const ChatListScreen(), // Index 1 (NEW)
-    const MarketplaceMyAdsScreen(), // Index 2 (was 1)
-    const MarketplaceProfileScreen(), // Index 3 (was 2)
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // The list of pages is now defined here.
+    _pages = [
+      const MarketplaceHome(), // Index 0
+      const ChatListScreen(), // Index 1
+      const MarketplaceMyAdsScreen(), // Index 2
+      const MarketplaceProfileScreen(), // Index 3 (Using the new dedicated screen)
+    ];
+  }
 
   void _onTabTapped(int index) {
     setState(() {
@@ -66,10 +72,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         child: SizedBox(
           height: 60,
           child: Row(
-            // Use spaceBetween for a perfectly balanced 2x2 layout
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              // --- CHANGE 2: RESTRUCTURE THE ROW FOR FOUR ITEMS ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
@@ -134,13 +138,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 /// The home page widget containing the main product listings.
 class MarketplaceHome extends StatefulWidget {
   const MarketplaceHome({super.key});
-
   @override
   State<MarketplaceHome> createState() => _MarketplaceHomeState();
 }
 
 class _MarketplaceHomeState extends State<MarketplaceHome> {
-  // ... (State variables and methods like _loadUserProfile, _handleRefresh, etc. are unchanged)
   final MarketplaceService _marketplaceService = MarketplaceService();
   String? _selectedCategory;
   String? _currentUserProfilePhotoUrl;
@@ -209,10 +211,9 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
             color: Colors.black,
           ),
         ),
-        // --- CHANGE 3: REMOVE THE REDUNDANT CHAT ICON FROM APPBAR ---
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 16.0), // Simplified padding
+            padding: const EdgeInsets.only(right: 16.0),
             child: _buildProfileAvatar(),
           ),
         ],
@@ -248,7 +249,6 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
     );
   }
 
-  // All the _build... methods below are unchanged and remain here.
   Widget _buildProfileAvatar() {
     if (_isLoadingProfilePhoto) {
       return CircleAvatar(radius: 18, backgroundColor: Colors.grey.shade300);
@@ -275,12 +275,12 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.circular(16),
-        image: DecorationImage(
-          image: const NetworkImage(
+        image: const DecorationImage(
+          image: NetworkImage(
             'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1170',
           ),
           fit: BoxFit.cover,
-          colorFilter: const ColorFilter.mode(
+          colorFilter: ColorFilter.mode(
             Color.fromRGBO(0, 0, 0, 0.5),
             BlendMode.darken,
           ),
@@ -381,6 +381,7 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
                               ? Colors.transparent
                               : Colors.grey.shade300,
                     ),
+                    // ignore: deprecated_member_use
                     boxShadow:
                         isSelected
                             ? [
