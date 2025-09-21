@@ -7,11 +7,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // --- SERVICE AND SCREEN IMPORTS ---
 import '../services/marketplace_service.dart';
-import 'chat_list_screen.dart';
 import 'create_listing_screen.dart';
 import 'product_detail_screen.dart';
 import 'marketplace_my_ads_screen.dart';
-import 'marketplace_profile_screen.dart'; // Using the new dedicated profile screen
+import 'marketplace_profile_screen.dart';
+import 'marketplace_chat_list_screen.dart'; // Using the new dedicated chat list screen
 
 /// The main host screen with the Bottom Navigation Bar for the marketplace.
 class MarketplaceScreen extends StatefulWidget {
@@ -22,19 +22,14 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   int _currentIndex = 0;
-  late final List<Widget> _pages;
 
-  @override
-  void initState() {
-    super.initState();
-    // The list of pages is now defined here.
-    _pages = [
-      const MarketplaceHome(), // Index 0
-      const ChatListScreen(), // Index 1
-      const MarketplaceMyAdsScreen(), // Index 2
-      const MarketplaceProfileScreen(), // Index 3 (Using the new dedicated screen)
-    ];
-  }
+  // The list of pages is now defined here with the dedicated chat list.
+  final List<Widget> _pages = [
+    const MarketplaceHome(),
+    const MarketplaceChatListScreen(),
+    const MarketplaceMyAdsScreen(),
+    const MarketplaceProfileScreen(),
+  ];
 
   void _onTabTapped(int index) {
     setState(() {
@@ -204,6 +199,7 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
         systemOverlayStyle: SystemUiOverlayStyle.dark,
         backgroundColor: Colors.white,
         elevation: 1,
+        automaticallyImplyLeading: false, // No back button on a main tab
         title: Text(
           "Student Market",
           style: GoogleFonts.poppins(
@@ -381,7 +377,6 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
                               ? Colors.transparent
                               : Colors.grey.shade300,
                     ),
-                    // ignore: deprecated_member_use
                     boxShadow:
                         isSelected
                             ? [

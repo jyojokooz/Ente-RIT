@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/marketplace_service.dart';
-import 'chat_screen.dart';
+import 'marketplace_chat_screen.dart'; // Import the new marketplace chat screen
 
 class ProductDetailScreen extends StatefulWidget {
   final Product product;
@@ -15,7 +15,7 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final MarketplaceService _marketplaceService = MarketplaceService();
-  bool _isProcessing = false; // Used for both deleting and marking as sold
+  bool _isProcessing = false;
 
   /// Marks the product as sold in Firestore.
   Future<void> _markAsSold() async {
@@ -299,11 +299,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                     ),
                     onPressed: () {
+                      // --- THIS IS THE UPDATED NAVIGATION LOGIC ---
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder:
-                              (context) => ChatScreen(
+                              (context) => MarketplaceChatScreen(
                                 receiverId: widget.product.sellerId,
                                 receiverName: widget.product.sellerName,
                                 receiverImageUrl: widget.product.sellerPhotoUrl,
