@@ -44,11 +44,27 @@ class Product {
 }
 
 class MarketplaceService {
+  // --- THIS IS THE FIX ---
+  // Ensure the collection name is "products" (plural), exactly as it is in your database.
   final CollectionReference _productsCollection = FirebaseFirestore.instance
       .collection('products');
+  // --- END OF FIX ---
 
+  /// Fetches a stream of ALL products.
   Stream<List<Product>> getProductsStream() {
     return _productsCollection
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) => Product.fromSnapshot(doc)).toList(),
+        );
+  }
+
+  /// Fetches a stream of products listed by a specific seller.
+  Stream<List<Product>> getProductsForUserStream(String userId) {
+    return _productsCollection
+        .where('sellerId', isEqualTo: userId)
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map(
@@ -61,10 +77,7 @@ class MarketplaceService {
     await _productsCollection.add(productData);
   }
 
-  // --- NEW: FUNCTION TO DELETE A PRODUCT ---
   Future<void> deleteProduct(String productId) async {
     await _productsCollection.doc(productId).delete();
-    // In a production app, you would also add logic here to delete
-    // the associated image from Cloudinary using its API.
   }
 }

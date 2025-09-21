@@ -18,9 +18,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool _isDeleting = false;
 
   Future<void> _deleteListing() async {
-    setState(() {
-      _isDeleting = true;
-    });
+    setState(() => _isDeleting = true);
     try {
       await _marketplaceService.deleteProduct(widget.product.id);
       if (mounted) {
@@ -43,9 +41,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isDeleting = false;
-        });
+        setState(() => _isDeleting = false);
       }
     }
   }
@@ -55,20 +51,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
-            backgroundColor: Colors.grey.shade800,
-            title: const Text(
+            backgroundColor: Colors.white,
+            title: Text(
               'Delete Listing?',
-              style: TextStyle(color: Colors.white),
+              style: GoogleFonts.poppins(color: Colors.black),
             ),
-            content: const Text(
+            content: Text(
               'This action cannot be undone.',
-              style: TextStyle(color: Colors.white70),
+              style: GoogleFonts.poppins(color: Colors.grey.shade700),
             ),
             actions: [
               TextButton(
-                child: const Text(
+                child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(color: Colors.grey.shade700),
                 ),
                 onPressed: () => Navigator.of(dialogContext).pop(),
               ),
@@ -90,162 +86,142 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final NumberFormat currencyFormatter = NumberFormat.currency(
-      locale: 'en_US',
-      symbol: '\$',
+      locale: 'en_IN',
+      symbol: '₹',
     );
     final currentUser = FirebaseAuth.instance.currentUser;
     final isSeller = currentUser?.uid == widget.product.sellerId;
 
+    // --- NEW VIBRANT COLOR PALETTE ---
+    const Color primaryRed = Color(0xFFE53935);
+    const Color primaryGreen = Color(0xFF43A047);
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.grey.shade900,
-        elevation: 0,
-        actions: [
-          if (isSeller)
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              onPressed: _showDeleteConfirmationDialog,
-              tooltip: 'Delete Listing',
-            ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: ElevatedButton.icon(
-          onPressed:
-              isSeller
-                  ? null
-                  : () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => ChatScreen(
-                              receiverId: widget.product.sellerId,
-                              receiverName: widget.product.sellerName,
-                              receiverImageUrl: widget.product.sellerPhotoUrl,
-                            ),
-                      ),
-                    );
-                  },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.amber.shade700,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: Colors.grey.shade700,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          icon: Icon(
-            isSeller ? Icons.person_outline : Icons.chat_bubble_outline,
-          ),
-          label: Text(
-            isSeller ? "This is Your Listing" : "Contact Seller",
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade900,
-                      borderRadius: BorderRadius.circular(16),
+          CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 350.0,
+                pinned: true,
+                backgroundColor: Colors.white,
+                elevation: 1,
+                iconTheme: const IconThemeData(color: Colors.black),
+                actions: [
+                  if (isSeller)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: primaryRed),
+                      onPressed: _showDeleteConfirmationDialog,
+                      tooltip: 'Delete Listing',
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        widget.product.imageUrl,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    widget.product.title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    currencyFormatter.format(widget.product.price),
-                    style: GoogleFonts.poppins(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.amber.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Description",
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.product.description,
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      fontSize: 16,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.grey),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      radius: 25,
-                      backgroundImage: NetworkImage(
-                        widget.product.sellerPhotoUrl,
-                      ),
-                    ),
-                    title: Text(
-                      "Sold by ${widget.product.sellerName}",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    subtitle: Text(
-                      "Category: ${widget.product.category}",
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
                 ],
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Hero(
+                    tag:
+                        'product_image_${widget.product.id}', // For smooth transitions
+                    child: Image.network(
+                      widget.product.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder:
+                          (context, error, stackTrace) =>
+                              const Icon(Icons.error, color: Colors.grey),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.product.category.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.product.title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        currencyFormatter.format(widget.product.price),
+                        style: GoogleFonts.poppins(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                          color: primaryGreen,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Divider(color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(
+                        "Description",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.product.description,
+                        style: GoogleFonts.poppins(
+                          color: Colors.black54,
+                          fontSize: 16,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Divider(color: Colors.grey),
+                      const SizedBox(height: 16),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          radius: 25,
+                          backgroundImage: NetworkImage(
+                            widget.product.sellerPhotoUrl,
+                          ),
+                        ),
+                        title: Text(
+                          "Sold by ${widget.product.sellerName}",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "Posted on ${DateFormat.yMMMd().format(widget.product.timestamp.toDate())}",
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                      const SizedBox(height: 100), // Extra space for bottom bar
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           if (_isDeleting)
-            // --- FIX: Replaced deprecated 'withOpacity' ---
             Container(
-              color: const Color.fromRGBO(0, 0, 0, 0.7),
+              color: Colors.black.withAlpha(
+                180,
+              ), // Use withAlpha for modern opacity
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Colors.amber),
+                    CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 16),
                     Text(
                       "Deleting listing...",
@@ -256,6 +232,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton.icon(
+            onPressed:
+                isSeller
+                    ? null
+                    : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => ChatScreen(
+                                receiverId: widget.product.sellerId,
+                                receiverName: widget.product.sellerName,
+                                receiverImageUrl: widget.product.sellerPhotoUrl,
+                              ),
+                        ),
+                      );
+                    },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryRed,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade400,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: Icon(
+              isSeller ? Icons.person_outline : Icons.chat_bubble_outline,
+            ),
+            label: Text(
+              isSeller ? "This is Your Listing" : "Contact Seller",
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
