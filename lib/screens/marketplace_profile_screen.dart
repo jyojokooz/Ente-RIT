@@ -3,9 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Import screens we need to navigate to
+// --- Screen Imports ---
 import 'edit_profile_screen.dart';
 import 'marketplace_my_ads_screen.dart';
+import 'marketplace_sold_history_screen.dart'; // Import the new screen
 
 class MarketplaceProfileScreen extends StatefulWidget {
   const MarketplaceProfileScreen({super.key});
@@ -32,41 +33,47 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
     _loadUserData();
   }
 
+  /// Fetches user profile data and marketplace stats in parallel.
   Future<void> _loadUserData() async {
-    setState(() => _isLoading = true);
-
+    // No need to set loading to true if we are just refreshing
+    if (_isLoading == false) {
+       await Future.delayed(const Duration(milliseconds: 300)); // Smooth refresh feel
+    } else {
+       setState(() => _isLoading = true);
+    }
+    
     try {
-      final userDocFuture =
-          FirebaseFirestore.instance
-              .collection('users')
-              .doc(_currentUser.uid)
-              .get();
+      final userDocFuture = FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).get();
       // Use .count() for an efficient way to get the number of documents
-      final productCountFuture =
-          FirebaseFirestore.instance
-              .collection('products')
-              .where('sellerId', isEqualTo: _currentUser.uid)
-              .count()
-              .get();
-
+      final productCountFuture = FirebaseFirestore.instance
+          .collection('products')
+          .where('sellerId', isEqualTo: _currentUser.uid)
+          .where('isSold', isEqualTo: false) // Only count ACTIVE listings
+          .count()
+          .get();
+      
       final responses = await Future.wait([userDocFuture, productCountFuture]);
-
+      
       final userDoc = responses[0] as DocumentSnapshot<Map<String, dynamic>>;
       final productCountSnapshot = responses[1] as AggregateQuerySnapshot;
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        _displayName = data['displayName'] ?? 'No Name';
-        _username = data['username'] ?? 'username';
-        _profilePhotoUrl = data['profilePhotoUrl'] ?? '';
-        _connectionCount = (data['connections'] as List? ?? []).length;
-        _listingCount = productCountSnapshot.count ?? 0;
+        if(mounted) {
+          setState(() {
+            _displayName = data['displayName'] ?? 'No Name';
+            _username = data['username'] ?? 'username';
+            _profilePhotoUrl = data['profilePhotoUrl'] ?? '';
+            _connectionCount = (data['connections'] as List? ?? []).length;
+            _listingCount = productCountSnapshot.count ?? 0;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load profile: $e')),
+        );
       }
     } finally {
       if (mounted) {
@@ -78,11 +85,7 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/auth-gate',
-        (route) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, '/auth-gate', (route) => false);
     }
   }
 
@@ -91,16 +94,10 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: Text(
-          'My Profile',
-          style: GoogleFonts.poppins(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        automaticallyImplyLeading: false, // This screen is a main tab, no back button
+        title: Text('My Profile', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.black54),
@@ -109,26 +106,23 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
           ),
         ],
       ),
-      body:
-          _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Colors.red),
-              )
-              : RefreshIndicator(
-                onRefresh: _loadUserData,
-                color: Colors.white,
-                backgroundColor: Colors.red,
-                child: ListView(
-                  padding: const EdgeInsets.all(16.0),
-                  children: [
-                    _buildProfileHeader(),
-                    const SizedBox(height: 24),
-                    _buildStatsSection(),
-                    const SizedBox(height: 24),
-                    _buildActionButtons(),
-                  ],
-                ),
-              ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.red))
+          : RefreshIndicator(
+            onRefresh: _loadUserData,
+            color: Colors.white,
+            backgroundColor: Colors.red,
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                _buildProfileHeader(),
+                const SizedBox(height: 24),
+                _buildStatsSection(),
+                const SizedBox(height: 24),
+                _buildActionButtons(),
+              ],
+            ),
+          ),
     );
   }
 
@@ -138,23 +132,13 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
         CircleAvatar(
           radius: 50,
           backgroundColor: Colors.grey.shade300,
-          backgroundImage:
-              _profilePhotoUrl.isNotEmpty
-                  ? NetworkImage(_profilePhotoUrl)
-                  : null,
-          child:
-              _profilePhotoUrl.isEmpty
-                  ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                  : null,
+          backgroundImage: _profilePhotoUrl.isNotEmpty ? NetworkImage(_profilePhotoUrl) : null,
+          child: _profilePhotoUrl.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
         ),
         const SizedBox(height: 16),
         Text(
           _displayName,
-          style: GoogleFonts.poppins(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
+          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
         ),
         Text(
           '@$_username',
@@ -171,26 +155,14 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
+          BoxShadow(color: Colors.grey.shade200, blurRadius: 10, spreadRadius: 1)
+        ]
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatColumn(
-            'Listings',
-            _listingCount.toString(),
-            Colors.yellow.shade800,
-          ),
-          _buildStatColumn(
-            'Connections',
-            _connectionCount.toString(),
-            Colors.green.shade700,
-          ),
+          _buildStatColumn('Active Listings', _listingCount.toString(), Colors.yellow.shade800),
+          _buildStatColumn('Connections', _connectionCount.toString(), Colors.green.shade700),
         ],
       ),
     );
@@ -201,11 +173,7 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
       children: [
         Text(
           value,
-          style: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: color),
         ),
         Text(
           label,
@@ -217,16 +185,12 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
 
   Widget _buildActionButtons() {
     return Container(
-      decoration: BoxDecoration(
+       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
+          BoxShadow(color: Colors.grey.shade200, blurRadius: 10, spreadRadius: 1)
+        ]
       ),
       child: Column(
         children: [
@@ -234,24 +198,24 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
             icon: Icons.edit_outlined,
             label: 'Edit Profile',
             onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-              );
-              _loadUserData();
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+              _loadUserData(); // Reload data after returning from edit screen
             },
           ),
-          const Divider(height: 1),
+          const Divider(height: 1, indent: 16, endIndent: 16),
           _buildActionButton(
             icon: Icons.inventory_2_outlined,
-            label: 'View My Listings',
+            label: 'View My Active Listings',
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const MarketplaceMyAdsScreen(),
-                ),
-              );
+               Navigator.push(context, MaterialPageRoute(builder: (_) => const MarketplaceMyAdsScreen()));
+            },
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          _buildActionButton(
+            icon: Icons.history_toggle_off_outlined,
+            label: 'View Sold History',
+            onTap: () {
+               Navigator.push(context, MaterialPageRoute(builder: (_) => const MarketplaceSoldHistoryScreen()));
             },
           ),
         ],
@@ -259,23 +223,16 @@ class _MarketplaceProfileScreenState extends State<MarketplaceProfileScreen> {
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildActionButton({required IconData icon, required String label, required VoidCallback onTap}) {
     return ListTile(
       leading: Icon(icon, color: Colors.grey.shade700),
-      // --- THIS IS THE FIX ---
-      // We explicitly set the text color to a dark shade to make it visible.
       title: Text(
         label,
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.w500,
-          color: Colors.black87, // This makes the text readable
+          color: Colors.black87,
         ),
       ),
-      // --- END OF FIX ---
       trailing: const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
     );

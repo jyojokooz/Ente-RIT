@@ -15,10 +15,41 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final MarketplaceService _marketplaceService = MarketplaceService();
-  bool _isDeleting = false;
+  bool _isProcessing = false; // Used for both deleting and marking as sold
 
+  /// Marks the product as sold in Firestore.
+  Future<void> _markAsSold() async {
+    setState(() => _isProcessing = true);
+    try {
+      await _marketplaceService.markAsSold(widget.product.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Marked as Sold!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  /// Deletes the product listing from Firestore.
   Future<void> _deleteListing() async {
-    setState(() => _isDeleting = true);
+    setState(() => _isProcessing = true);
     try {
       await _marketplaceService.deleteProduct(widget.product.id);
       if (mounted) {
@@ -41,11 +72,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isDeleting = false);
+        setState(() => _isProcessing = false);
       }
     }
   }
 
+  /// Shows a confirmation dialog before deleting the listing.
   void _showDeleteConfirmationDialog() {
     showDialog(
       context: context,
@@ -91,8 +123,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
     final currentUser = FirebaseAuth.instance.currentUser;
     final isSeller = currentUser?.uid == widget.product.sellerId;
-
-    // --- NEW VIBRANT COLOR PALETTE ---
     const Color primaryRed = Color(0xFFE53935);
     const Color primaryGreen = Color(0xFF43A047);
 
@@ -118,8 +148,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: Hero(
-                    tag:
-                        'product_image_${widget.product.id}', // For smooth transitions
+                    tag: 'product_image_${widget.product.id}',
                     child: Image.network(
                       widget.product.imageUrl,
                       fit: BoxFit.cover,
@@ -212,11 +241,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ],
           ),
-          if (_isDeleting)
+          if (_isProcessing)
             Container(
-              color: Colors.black.withAlpha(
-                180,
-              ), // Use withAlpha for modern opacity
+              color: Colors.black.withAlpha(180),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -224,7 +251,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 16),
                     Text(
-                      "Deleting listing...",
+                      "Processing...",
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ],
@@ -236,11 +263,42 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            onPressed:
-                isSeller
-                    ? null
-                    : () {
+          child:
+              isSeller
+                  ? (widget.product.isSold
+                      ? _buildDisabledButton(
+                        "Item Already Sold",
+                        Icons.check_circle,
+                      )
+                      : ElevatedButton.icon(
+                        icon: const Icon(Icons.sell_outlined),
+                        label: Text(
+                          "Mark as Sold",
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onPressed: _isProcessing ? null : _markAsSold,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ))
+                  : ElevatedButton.icon(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: Text(
+                      "Contact Seller",
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -253,27 +311,34 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       );
                     },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryRed,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade400,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: Icon(
-              isSeller ? Icons.person_outline : Icons.chat_bubble_outline,
-            ),
-            label: Text(
-              isSeller ? "This is Your Listing" : "Contact Seller",
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryRed,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
         ),
+      ),
+    );
+  }
+
+  /// Helper widget for creating visually consistent disabled buttons.
+  Widget _buildDisabledButton(String text, IconData icon) {
+    return ElevatedButton.icon(
+      onPressed: null,
+      icon: Icon(icon),
+      label: Text(
+        text,
+        style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      style: ElevatedButton.styleFrom(
+        disabledBackgroundColor: Colors.grey.shade400,
+        disabledForegroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
