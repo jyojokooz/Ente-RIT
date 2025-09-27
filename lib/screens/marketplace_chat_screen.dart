@@ -23,7 +23,6 @@ class MarketplaceChatScreen extends StatefulWidget {
 }
 
 class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
-  // ... (initState, dispose, and other methods are unchanged) ...
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _chatService = MarketplaceChatService();
@@ -67,6 +66,43 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
     }
   }
 
+  // --- NEW: Method to show attachment options ---
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.black54),
+                title: Text('Camera', style: GoogleFonts.poppins()),
+                onTap: () {
+                  Navigator.of(context).pop();
+
+                  debugPrint('Camera selected');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.black54),
+                title: Text('Gallery', style: GoogleFonts.poppins()),
+                onTap: () {
+                  Navigator.of(context).pop();
+
+                  debugPrint('Gallery selected');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,7 +135,6 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
       body: Column(
         children: [
           Expanded(
-            // --- CHANGE: The StreamBuilder now expects MarketplaceMessage objects ---
             child: StreamBuilder<QuerySnapshot<MarketplaceMessage>>(
               stream: _chatService.getMessages(_chatRoomId),
               builder: (context, snapshot) {
@@ -127,9 +162,7 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
                   padding: const EdgeInsets.all(16.0),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    // --- SIMPLIFIED: .data() now directly gives a MarketplaceMessage object! ---
                     final currentMessage = messages[index].data();
-
                     final prevMessage =
                         (index < messages.length - 1)
                             ? messages[index + 1].data()
@@ -171,8 +204,6 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
     );
   }
 
-  // The _buildMessageInputField, _MessageBubble, and _DateDivider widgets remain unchanged.
-  // ... (paste the rest of your UI code here) ...
   Widget _buildMessageInputField() {
     final bool canSend = _messageController.text.trim().isNotEmpty;
     return Container(
@@ -225,9 +256,8 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
                       : IconButton(
                         key: const ValueKey('attach_button'),
                         icon: const Icon(Icons.attach_file, color: Colors.grey),
-                        onPressed: () {
-                          // TODO: Implement attachment logic here
-                        },
+                        // --- CHANGED: Calls the new method to show options ---
+                        onPressed: _showAttachmentOptions,
                       ),
             ),
           ],
@@ -280,7 +310,8 @@ class _MessageBubble extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              // --- FIXED: Replaced withOpacity with withAlpha ---
+              color: Colors.black.withAlpha(13), // ~5% opacity
               blurRadius: 5,
               offset: const Offset(0, 2),
             ),
@@ -301,10 +332,11 @@ class _MessageBubble extends StatelessWidget {
               DateFormat('h:mm a').format(timestamp),
               style: GoogleFonts.poppins(
                 fontSize: 10,
+                // --- FIXED: Replaced withOpacity with withAlpha ---
                 color:
                     isMe
-                        ? Colors.white.withOpacity(0.7)
-                        : Colors.black.withOpacity(0.4),
+                        ? Colors.white.withAlpha(179) // ~70% opacity
+                        : Colors.black.withAlpha(102), // ~40% opacity
               ),
             ),
           ],
@@ -342,7 +374,8 @@ class _DateDivider extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.grey.shade300.withOpacity(0.8),
+            // --- FIXED: Replaced withOpacity with withAlpha ---
+            color: Colors.grey.shade300.withAlpha(204), // ~80% opacity
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(

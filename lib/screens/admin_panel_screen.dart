@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart'; // <-- 1. MISSING IMPORT ADDED
+import 'package:intl/intl.dart'; // <-- 2. MISSING IMPORT ADDED
 
-// Import all the dedicated management screens from the 'admin' subfolder
+// --- Management Screen Imports (Corrected Paths) ---
 import 'admin/admin_manage_users_screen.dart';
 import 'admin/admin_manage_posts_screen.dart';
 import 'admin/admin_manage_departments_screen.dart';
 import 'admin/admin_manage_events_screen.dart';
 import 'admin/admin_manage_lostfound_screen.dart';
 import 'admin/admin_manage_card_images_screen.dart';
-// --- THESE ARE THE NEW IMPORTS ---
 import 'admin/admin_manage_cafeteria_menu_screen.dart';
-import 'admin/admin_view_cafeteria_orders_screen.dart';
+import 'cafeteria_admin_screen.dart'; // <-- 3. PATH CORRECTED
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -75,10 +74,8 @@ class AdminPanelScreen extends StatelessWidget {
                 icon: Icons.find_in_page_outlined,
                 color: Colors.red,
               ),
-              // --- THIS IS THE NEW STAT CARD ---
               _StatCard(
-                collection:
-                    'cafeteria_orders', // Assumes a new collection for orders
+                collection: 'cafeteria_orders',
                 title: 'Total Orders',
                 icon: Icons.receipt_long_outlined,
                 color: Colors.brown,
@@ -182,7 +179,7 @@ class AdminPanelScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // --- THIS IS THE NEW CAFETERIA MANAGEMENT SECTION ---
+          // --- CAFETERIA MANAGEMENT SECTION ---
           Text(
             "Cafeteria Management",
             style: GoogleFonts.poppins(
@@ -194,18 +191,18 @@ class AdminPanelScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _buildManagementCard(
             context: context,
-            label: 'Manage Menu Items',
-            icon: Icons.restaurant_menu_outlined,
+            label: 'Manage Food Orders',
+            icon: Icons.receipt_long_outlined,
             color: Colors.orange.shade600,
-            screen: const AdminManageCafeteriaMenuScreen(),
+            screen: const CafeteriaAdminScreen(),
           ),
           const SizedBox(height: 12),
           _buildManagementCard(
             context: context,
-            label: 'View Food Orders',
-            icon: Icons.receipt_long_outlined,
+            label: 'Manage Menu Items',
+            icon: Icons.restaurant_menu_outlined,
             color: Colors.blueGrey.shade400,
-            screen: const AdminViewCafeteriaOrdersScreen(),
+            screen: const AdminManageCafeteriaMenuScreen(),
           ),
           const SizedBox(height: 32),
         ],
