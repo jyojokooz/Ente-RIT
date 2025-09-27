@@ -11,8 +11,12 @@ class MyOrdersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text("Please log in to see your orders.")),
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('My Orders', style: GoogleFonts.poppins()),
+          backgroundColor: Colors.grey.shade900,
+        ),
+        body: const Center(child: Text("Please log in to see your orders.")),
       );
     }
 
@@ -32,9 +36,17 @@ class MyOrdersScreen extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Something went wrong: ${snapshot.error}'),
+            );
+          }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text('You have not placed any orders yet.'),
+            return Center(
+              child: Text(
+                'You have not placed any orders yet.',
+                style: GoogleFonts.poppins(color: Colors.white70),
+              ),
             );
           }
 
@@ -62,18 +74,28 @@ class MyOrdersScreen extends StatelessWidget {
                           fontSize: 16,
                         ),
                       ),
+                      const SizedBox(height: 4),
                       Text(
                         'Status: ${order['orderStatus']}',
                         style: TextStyle(
                           color: _getStatusColor(order['orderStatus']),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       const Divider(height: 20),
+
+                      // --- THIS IS THE FIX ---
+                      // The unnecessary .toList() has been removed from the end of the .map() call.
                       ...(order['items'] as List).map((item) {
-                        return Text(
-                          '${item['itemName']} (x${item['quantity']})',
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: Text(
+                            '• ${item['itemName']} (x${item['quantity']})',
+                          ),
                         );
-                      }).toList(),
+                      }),
+
+                      // --- END OF FIX ---
                       const Divider(height: 20),
                       Align(
                         alignment: Alignment.centerRight,
@@ -82,6 +104,7 @@ class MyOrdersScreen extends StatelessWidget {
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.bold,
                             color: Colors.yellow,
+                            fontSize: 16,
                           ),
                         ),
                       ),

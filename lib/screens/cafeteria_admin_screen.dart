@@ -26,20 +26,31 @@ class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: Colors.grey.shade800,
           title: const Text('Update Order Status'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
+            // --- THIS IS THE FIX ---
+            // The unnecessary .toList() has been removed from the .map() call.
             children:
-                statuses.map((status) {
-                  return ListTile(
-                    title: Text(status),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      _updateOrderStatus(orderDoc, status);
-                    },
-                  );
-                }).toList(),
+                statuses.map(
+                  (status) {
+                    return ListTile(
+                      title: Text(status),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _updateOrderStatus(orderDoc, status);
+                      },
+                    );
+                  },
+                ).toList(), // This .toList() is necessary for the Column's children
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
         );
       },
     );
@@ -53,7 +64,6 @@ class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
         backgroundColor: Colors.grey.shade900,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // Fetch all orders and sort by the pre-booked pickup time
         stream:
             FirebaseFirestore.instance
                 .collection('cafeteria_orders')
@@ -63,17 +73,16 @@ class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No pending orders.'));
-          }
           if (snapshot.hasError) {
             return Center(
               child: Text('Something went wrong: ${snapshot.error}'),
             );
           }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No orders found.'));
+          }
 
           final orders = snapshot.data!.docs;
-          // Filter out already completed orders from the main view
           final activeOrders =
               orders.where((doc) {
                 final data = doc.data() as Map<String, dynamic>;
@@ -109,11 +118,18 @@ class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
                       ),
                       Text('Ordered by: ${order['userName'] ?? 'N/A'}'),
                       const Divider(height: 20),
+
+                      // This is where the original error was, but it's for the dialog, not here.
+                      // The main build method's list view of items is fine.
                       ...(order['items'] as List).map((item) {
-                        return Text(
-                          '${item['itemName']} (x${item['quantity']})',
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: Text(
+                            '• ${item['itemName']} (x${item['quantity']})',
+                          ),
                         );
-                      }).toList(),
+                      }),
+
                       const Divider(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,

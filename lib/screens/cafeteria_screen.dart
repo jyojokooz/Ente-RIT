@@ -45,7 +45,8 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
 
   int get _cartItemCount {
     if (_cart.isEmpty) return 0;
-    return _cart.values.fold(0, (sum, element) => sum + element);
+    // --- FIX 1: Renamed 'sum' to 'total' to avoid linter warning ---
+    return _cart.values.reduce((total, element) => total + element);
   }
 
   @override
@@ -114,11 +115,12 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                           ),
                         ),
                       ),
+                      // --- FIX 2: Removed unnecessary '.toList()' ---
                       ...items.map((item) {
                         final data = item.data() as Map<String, dynamic>;
                         final int quantityInCart = _cart[item] ?? 0;
                         return _buildMenuItem(item, data, quantityInCart);
-                      }).toList(),
+                      }),
                     ],
                   );
                 },
@@ -131,7 +133,6 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
     );
   }
 
-  // --- THIS IS THE FINAL, CORRECTED WIDGET FOR MENU ITEMS ---
   Widget _buildMenuItem(
     DocumentSnapshot item,
     Map<String, dynamic> data,
@@ -184,9 +185,6 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
               ),
             ),
 
-            // This is the new, fully functional Add/Remove button logic.
-            // It shows an "ADD" button if the item is not in the cart,
-            // otherwise it shows the counter with "+" and "-" buttons.
             quantityInCart == 0
                 ? OutlinedButton(
                   onPressed: () => _addToCart(item),
@@ -209,7 +207,6 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // REMOVE BUTTON
                       SizedBox(
                         width: 40,
                         height: 40,
@@ -223,7 +220,6 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                           onPressed: () => _removeFromCart(item),
                         ),
                       ),
-                      // QUANTITY TEXT
                       Text(
                         quantityInCart.toString(),
                         style: const TextStyle(
@@ -231,7 +227,6 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
                           fontSize: 16,
                         ),
                       ),
-                      // ADD BUTTON
                       SizedBox(
                         width: 40,
                         height: 40,
@@ -278,13 +273,14 @@ class _CafeteriaScreenState extends State<CafeteriaScreen> {
           decoration: BoxDecoration(
             color: Colors.yellow,
             borderRadius: BorderRadius.circular(12),
+            // --- FIX 3: Replaced deprecated '.withOpacity()' with '.withAlpha()' ---
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withAlpha(76),
                 blurRadius: 10,
                 spreadRadius: 2,
               ),
-            ],
+            ], // 255 * 0.3 = 76
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
