@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fl_chart/fl_chart.dart'; // <-- 1. MISSING IMPORT ADDED
-import 'package:intl/intl.dart'; // <-- 2. MISSING IMPORT ADDED
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
-// --- Management Screen Imports (Corrected Paths) ---
+// --- Combined & Corrected Management Screen Imports ---
 import 'admin/admin_manage_users_screen.dart';
 import 'admin/admin_manage_posts_screen.dart';
 import 'admin/admin_manage_departments_screen.dart';
@@ -12,7 +12,8 @@ import 'admin/admin_manage_events_screen.dart';
 import 'admin/admin_manage_lostfound_screen.dart';
 import 'admin/admin_manage_card_images_screen.dart';
 import 'admin/admin_manage_cafeteria_menu_screen.dart';
-import 'cafeteria_admin_screen.dart'; // <-- 3. PATH CORRECTED
+import 'admin/admin_manage_buses_screen.dart'; // From your feature branch
+import 'cafeteria_admin_screen.dart'; // From your main branch
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -79,6 +80,12 @@ class AdminPanelScreen extends StatelessWidget {
                 title: 'Total Orders',
                 icon: Icons.receipt_long_outlined,
                 color: Colors.brown,
+              ),
+              _StatCard(
+                collection: 'bus_routes',
+                title: 'Bus Routes',
+                icon: Icons.directions_bus_outlined,
+                color: Colors.indigo,
               ),
             ],
           ),
@@ -203,6 +210,25 @@ class AdminPanelScreen extends StatelessWidget {
             icon: Icons.restaurant_menu_outlined,
             color: Colors.blueGrey.shade400,
             screen: const AdminManageCafeteriaMenuScreen(),
+          ),
+          const SizedBox(height: 32),
+
+          // --- TRANSPORTATION MANAGEMENT SECTION ---
+          Text(
+            "Transportation Management",
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Bus Routes & Drivers',
+            icon: Icons.directions_bus_outlined,
+            color: Colors.indigo.shade400,
+            screen: const AdminManageBusesScreen(),
           ),
           const SizedBox(height: 32),
         ],

@@ -10,8 +10,12 @@ class AdminManageUsersScreen extends StatefulWidget {
 }
 
 class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
+  /// Toggles a user's role between 'user' and 'driver'.
   Future<void> _toggleUserRole(String userId, String currentRole) async {
+    // Determine the new role based on the current role.
     final newRole = currentRole == 'driver' ? 'user' : 'driver';
+
+    // Show a confirmation dialog to prevent accidental changes.
     final bool confirmChange =
         await showDialog<bool>(
           context: context,
@@ -37,9 +41,10 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                 ],
               ),
         ) ??
-        false;
+        false; // Default to false if the dialog is dismissed.
 
     if (confirmChange) {
+      // If confirmed, update the user's document in Firestore.
       await FirebaseFirestore.instance.collection('users').doc(userId).update({
         'role': newRole,
       });
@@ -55,19 +60,37 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
         backgroundColor: Colors.grey.shade900,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        stream:
+            FirebaseFirestore.instance
+                .collection('users')
+                .orderBy('displayName')
+                .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Something went wrong: ${snapshot.error}'),
+            );
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No users found.'));
+          }
+
           final users = snapshot.data!.docs;
+
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: users.length,
             itemBuilder: (context, index) {
-              final userData = users[index].data() as Map<String, dynamic>;
+              final userDoc = users[index];
+              final userData = userDoc.data() as Map<String, dynamic>;
               final bool isAdmin = userData['isAdmin'] ?? false;
               final String role = userData['role'] ?? 'user';
+              final profilePhotoUrl = userData['profilePhotoUrl'] ?? '';
+              final bool hasImage = profilePhotoUrl.isNotEmpty;
+
               return Card(
                 color: Colors.grey.shade900,
                 margin: const EdgeInsets.only(bottom: 16),
@@ -80,15 +103,15 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                     children: [
                       CircleAvatar(
                         radius: 25,
+                        backgroundColor: Colors.grey.shade700,
                         backgroundImage:
-                            userData['profilePhotoUrl'] != null &&
-                                    userData['profilePhotoUrl'].isNotEmpty
-                                ? NetworkImage(userData['profilePhotoUrl'])
-                                : null,
+                            hasImage ? NetworkImage(profilePhotoUrl) : null,
                         child:
-                            userData['profilePhotoUrl'] == null ||
-                                    userData['profilePhotoUrl'].isEmpty
-                                ? const Icon(Icons.person)
+                            !hasImage
+                                ? const Icon(
+                                  Icons.person,
+                                  color: Colors.white60,
+                                )
                                 : null,
                       ),
                       const SizedBox(width: 16),
@@ -100,11 +123,12 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                               userData['displayName'] ?? 'No Name',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
                             Text(
                               userData['email'] ?? 'No Email',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
                               ),
@@ -112,21 +136,26 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                           ],
                         ),
                       ),
+                      // Display chips for special roles
                       if (isAdmin)
                         const Chip(
                           label: Text('Admin'),
                           backgroundColor: Colors.yellow,
+                          labelStyle: TextStyle(color: Colors.black),
                         ),
+
                       if (role == 'driver')
                         const Chip(
                           label: Text('Driver'),
                           backgroundColor: Colors.cyan,
                         ),
+
+                      // Show role management menu for non-admins
                       if (!isAdmin)
                         PopupMenuButton<String>(
                           onSelected: (value) {
                             if (value == 'toggle_role') {
-                              _toggleUserRole(users[index].id, role);
+                              _toggleUserRole(userDoc.id, role);
                             }
                           },
                           itemBuilder:
