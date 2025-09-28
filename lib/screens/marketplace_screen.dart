@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-// --- NEW: Imports needed to fetch user data ---
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// --- SERVICE AND SCREEN IMPORTS ---
 import '../services/marketplace_service.dart';
-import 'chat_list_screen.dart';
 import 'create_listing_screen.dart';
 import 'product_detail_screen.dart';
+import 'marketplace_my_ads_screen.dart';
+import 'marketplace_profile_screen.dart';
+import 'marketplace_chat_list_screen.dart'; // Using the new dedicated chat list screen
 
+/// The main host screen with the Bottom Navigation Bar for the marketplace.
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
   @override
@@ -17,10 +21,125 @@ class MarketplaceScreen extends StatefulWidget {
 }
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
+  int _currentIndex = 0;
+
+  // The list of pages is now defined here with the dedicated chat list.
+  final List<Widget> _pages = [
+    const MarketplaceHome(),
+    const MarketplaceChatListScreen(),
+    const MarketplaceMyAdsScreen(),
+    const MarketplaceProfileScreen(),
+  ];
+
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const Color primaryRed = Color(0xFFE53935);
+    const Color primaryYellow = Color(0xFFFFC107);
+    const Color primaryGreen = Color(0xFF43A047);
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: IndexedStack(index: _currentIndex, children: _pages),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CreateListingScreen()),
+          );
+        },
+        backgroundColor: primaryRed,
+        foregroundColor: Colors.white,
+        tooltip: 'Sell Item',
+        child: const Icon(Icons.add),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8.0,
+        color: Colors.white,
+        elevation: 8.0,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  _buildNavItem(
+                    Icons.storefront_outlined,
+                    'Home',
+                    0,
+                    primaryYellow,
+                  ),
+                  _buildNavItem(
+                    Icons.chat_bubble_outline,
+                    'Chat',
+                    1,
+                    primaryGreen,
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _buildNavItem(
+                    Icons.inventory_2_outlined,
+                    'My Ads',
+                    2,
+                    primaryYellow,
+                  ),
+                  _buildNavItem(
+                    Icons.person_outline,
+                    'Profile',
+                    3,
+                    primaryYellow,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Helper widget to build each icon-only navigation item.
+  Widget _buildNavItem(
+    IconData icon,
+    String label,
+    int index,
+    Color activeColor,
+  ) {
+    final bool isSelected = _currentIndex == index;
+    return IconButton(
+      tooltip: label,
+      icon: Icon(
+        icon,
+        color: isSelected ? activeColor : Colors.grey.shade600,
+        size: 28,
+      ),
+      onPressed: () => _onTabTapped(index),
+    );
+  }
+}
+
+/// The home page widget containing the main product listings.
+class MarketplaceHome extends StatefulWidget {
+  const MarketplaceHome({super.key});
+  @override
+  State<MarketplaceHome> createState() => _MarketplaceHomeState();
+}
+
+class _MarketplaceHomeState extends State<MarketplaceHome> {
   final MarketplaceService _marketplaceService = MarketplaceService();
   String? _selectedCategory;
-
-  // --- NEW: State variables for user's profile photo ---
   String? _currentUserProfilePhotoUrl;
   bool _isLoadingProfilePhoto = true;
 
@@ -33,7 +152,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     {'name': 'Gaming', 'icon': Icons.sports_esports_outlined},
   ];
 
-  // --- NEW: Fetch user data when the screen initializes ---
   @override
   void initState() {
     super.initState();
@@ -43,40 +161,31 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Future<void> _loadUserProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() => _isLoadingProfilePhoto = false);
+      if (mounted) setState(() => _isLoadingProfilePhoto = false);
       return;
     }
-
     try {
       final doc =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
-      if (doc.exists &&
-          doc.data() != null &&
-          doc.data()!['profilePhotoUrl'] != null) {
+      if (doc.exists && doc.data()?['profilePhotoUrl'] != null) {
         if (mounted) {
           setState(() {
             _currentUserProfilePhotoUrl = doc.data()!['profilePhotoUrl'];
             _isLoadingProfilePhoto = false;
           });
         }
-      } else {
-        if (mounted) {
-          setState(() => _isLoadingProfilePhoto = false);
-        }
-      }
-    } catch (e) {
-      // Handle potential errors
-      if (mounted) {
+      } else if (mounted) {
         setState(() => _isLoadingProfilePhoto = false);
       }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingProfilePhoto = false);
     }
   }
 
   Future<void> _handleRefresh() async {
-    // Also refresh the user profile on pull-to-refresh
     _loadUserProfile();
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
@@ -85,55 +194,30 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        systemOverlayStyle: SystemUiOverlayStyle.light,
-        backgroundColor: Colors.grey.shade900,
-        elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        backgroundColor: Colors.white,
+        elevation: 1,
+        automaticallyImplyLeading: false, // No back button on a main tab
         title: Text(
           "Student Market",
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: Colors.black,
           ),
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: Colors.amber.shade600,
-              size: 28,
-            ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ChatListScreen()),
-              );
-            },
-          ),
-          // --- UPDATED: AppBar action to show the user's photo ---
           Padding(
-            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+            padding: const EdgeInsets.only(right: 16.0),
             child: _buildProfileAvatar(),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CreateListingScreen()),
-          );
-        },
-        backgroundColor: Colors.amber.shade700,
-        foregroundColor: Colors.black,
-        tooltip: 'Sell Item',
-        child: const Icon(Icons.add),
-      ),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
-        color: Colors.black,
-        backgroundColor: Colors.amber.shade700,
+        color: Colors.white,
+        backgroundColor: Colors.red.shade700,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
@@ -161,38 +245,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  // --- NEW: Helper widget to build the profile avatar with loading/fallback ---
   Widget _buildProfileAvatar() {
     if (_isLoadingProfilePhoto) {
-      return const CircleAvatar(
-        radius: 18,
-        backgroundColor: Colors.grey,
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-        ),
-      );
+      return CircleAvatar(radius: 18, backgroundColor: Colors.grey.shade300);
     }
-
     if (_currentUserProfilePhotoUrl != null &&
         _currentUserProfilePhotoUrl!.isNotEmpty) {
       return CircleAvatar(
         radius: 18,
         backgroundImage: NetworkImage(_currentUserProfilePhotoUrl!),
-        backgroundColor: Colors.grey.shade800,
+        backgroundColor: Colors.grey.shade200,
       );
     }
-
-    // Fallback icon if no photo is available
-    return const CircleAvatar(
+    return CircleAvatar(
       radius: 18,
-      backgroundColor: Colors.grey,
-      child: Icon(Icons.person, size: 22, color: Colors.white),
+      backgroundColor: Colors.grey.shade300,
+      child: Icon(Icons.person, size: 22, color: Colors.grey.shade700),
     );
   }
-
-  // ... (rest of the file remains exactly the same)
 
   Widget _buildPromoBanner() {
     return Container(
@@ -201,13 +271,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.circular(16),
-        image: DecorationImage(
-          image: const NetworkImage(
-            'https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG9otby1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80',
+        image: const DecorationImage(
+          image: NetworkImage(
+            'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1170',
           ),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
-            const Color.fromRGBO(0, 0, 0, 0.5),
+            Color.fromRGBO(0, 0, 0, 0.5),
             BlendMode.darken,
           ),
         ),
@@ -239,7 +309,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       title,
       style: GoogleFonts.poppins(
         fontWeight: FontWeight.bold,
-        color: Colors.white,
+        color: Colors.black,
         fontSize: 20,
       ),
     );
@@ -247,16 +317,24 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildSearchBar() {
     return TextField(
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         hintText: 'Search for anything...',
         hintStyle: TextStyle(color: Colors.grey.shade500),
         prefixIcon: Icon(Icons.search, color: Colors.grey.shade500),
         filled: true,
-        fillColor: Colors.grey.shade800,
+        fillColor: Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.yellow.shade800, width: 2),
         ),
         contentPadding: EdgeInsets.zero,
       ),
@@ -265,7 +343,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Widget _buildCategoryList() {
     return SizedBox(
-      height: 90,
+      height: 100,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: categories.length,
@@ -280,28 +358,40 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           return GestureDetector(
             onTap: () {
               setState(() {
-                if (categoryName == 'All') {
-                  _selectedCategory = null;
-                } else {
-                  _selectedCategory = categoryName;
-                }
+                _selectedCategory =
+                    (categoryName == 'All') ? null : categoryName;
               });
             },
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected
-                            ? Colors.amber.shade700
-                            : Colors.grey.shade800,
+                    color: isSelected ? Colors.yellow.shade700 : Colors.white,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color:
+                          isSelected
+                              ? Colors.transparent
+                              : Colors.grey.shade300,
+                    ),
+                    boxShadow:
+                        isSelected
+                            ? [
+                              BoxShadow(
+                                // ignore: deprecated_member_use
+                                color: Colors.yellow.withOpacity(0.3),
+                                blurRadius: 10,
+                                spreadRadius: 2,
+                              ),
+                            ]
+                            : [],
                   ),
                   child: Icon(
                     category['icon'],
-                    color: isSelected ? Colors.black : Colors.amber.shade600,
+                    color: isSelected ? Colors.white : Colors.grey.shade700,
                     size: 30,
                   ),
                 ),
@@ -309,7 +399,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 Text(
                   categoryName,
                   style: TextStyle(
-                    color: isSelected ? Colors.amber.shade600 : Colors.white70,
+                    fontSize: 12,
+                    color:
+                        isSelected
+                            ? Colors.yellow.shade800
+                            : Colors.grey.shade700,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   ),
                 ),
@@ -327,7 +421,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
-            child: CircularProgressIndicator(color: Colors.amber),
+            child: CircularProgressIndicator(color: Colors.red),
           );
         }
         if (snapshot.hasError) {
@@ -344,7 +438,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             _selectedCategory == null
                 ? allProducts
                 : allProducts
-                    .where((product) => product.category == _selectedCategory)
+                    .where((p) => p.category == _selectedCategory)
                     .toList();
 
         if (filteredProducts.isEmpty) {
@@ -402,29 +496,39 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final NumberFormat currencyFormatter = NumberFormat.currency(
-      locale: 'en_US',
-      symbol: '\$',
+      locale: 'en_IN',
+      symbol: '₹',
     );
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200,
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             flex: 5,
-            child: Container(
-              width: double.infinity,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
-                ),
-                image: DecorationImage(
-                  image: NetworkImage(product.imageUrl),
-                  fit: BoxFit.cover,
+            child: Hero(
+              tag: 'product_image_${product.id}',
+              child: Container(
+                width: double.infinity,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                  image: DecorationImage(
+                    image: NetworkImage(product.imageUrl),
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -442,7 +546,7 @@ class ProductCard extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: Colors.white,
+                      color: Colors.black,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -452,7 +556,7 @@ class ProductCard extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.amber.shade600,
+                      color: Colors.green.shade700,
                     ),
                   ),
                 ],
