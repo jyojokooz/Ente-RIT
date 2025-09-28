@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// --- Screen Imports (Paths updated with '../' to go up one directory) ---
+// --- Screen Imports (Corrected Paths) ---
+// Go up one level from 'pages' to 'screens' to find these files.
 import '../departments_screen.dart';
 import '../game_view_screen.dart';
 import '../id_card_screen.dart';
@@ -20,13 +21,12 @@ import '../quiz_categories_screen.dart';
 import '../pdf_buddy_screen.dart';
 import '../linkedin_analyzer_screen.dart';
 import '../youtube_summarizer_screen.dart';
-// --- THIS IS THE NEW IMPORT ---
 import '../cafeteria_screen.dart';
+import '../bus_list_screen.dart';
 
-// --- Widget Imports (Path updated to go up two directories) ---
+// --- Widget Imports (Corrected Path) ---
+// Go up two levels from 'pages' to 'lib', then into 'widgets'.
 import '../../widgets/feature_card.dart';
-
-// NOTE: The unused 'create_post_screen.dart' import has been removed.
 
 class ClassifyScreen extends StatefulWidget {
   const ClassifyScreen({super.key});
@@ -76,7 +76,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     }
   }
 
-  /// Helper method to launch external URLs.
   Future<void> _launchURLInBrowser(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await canLaunchUrl(uri)) {
@@ -97,7 +96,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'department_notes',
         'label': 'Department Notes',
         'icon': Icons.school_outlined,
-        'color': const Color(0xFF2E86DE), // Blue
+        'color': const Color(0xFF2E86DE),
         'action':
             () => Navigator.push(
               context,
@@ -110,7 +109,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'events',
         'label': 'Events',
         'icon': Icons.calendar_today_outlined,
-        'color': const Color(0xFFE040FB), // Pink/Magenta
+        'color': const Color(0xFFE040FB),
         'action':
             () => Navigator.push(
               context,
@@ -121,7 +120,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'lost_and_found',
         'label': 'Lost & Found',
         'icon': Icons.find_in_page_outlined,
-        'color': const Color(0xFFF48C06), // Orange
+        'color': const Color(0xFFF48C06),
         'action':
             () => Navigator.push(
               context,
@@ -134,7 +133,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'marketplace',
         'label': 'Marketplace',
         'icon': Icons.storefront_outlined,
-        'color': const Color(0xFF38B000), // Green
+        'color': const Color(0xFF38B000),
         'action':
             () => Navigator.push(
               context,
@@ -143,12 +142,11 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
               ),
             ),
       },
-      // --- THIS IS THE NEW CARD FOR THE CAFETERIA ---
       {
         'id': 'cafeteria',
         'label': 'Cafeteria',
         'icon': Icons.restaurant_menu_outlined,
-        'color': const Color(0xFFD98E04), // A warm orange/brown color
+        'color': const Color(0xFFD98E04),
         'action':
             () => Navigator.push(
               context,
@@ -156,10 +154,21 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             ),
       },
       {
+        'id': 'bus_tracker',
+        'label': 'Bus Tracker',
+        'icon': Icons.directions_bus_outlined,
+        'color': Colors.blue.shade600,
+        'action':
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const BusListScreen()),
+            ),
+      },
+      {
         'id': 'connect_ai',
         'label': 'Connect AI',
         'icon': Icons.auto_awesome_outlined,
-        'color': const Color(0xFF6A00F4), // Purple
+        'color': const Color(0xFF6A00F4),
         'action':
             () => Navigator.push(
               context,
@@ -172,7 +181,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'peer_rooms',
         'label': 'Peer Rooms',
         'icon': Icons.group_outlined,
-        'color': const Color(0xFF00B4D8), // Cyan
+        'color': const Color(0xFF00B4D8),
         'action':
             () => Navigator.push(
               context,
@@ -183,7 +192,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
         'id': 'nonote',
         'label': 'No-Note',
         'icon': Icons.note_alt_outlined,
-        'color': const Color(0xFFD00000), // Red
+        'color': const Color(0xFFD00000),
         'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
       },
       {
@@ -212,7 +221,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       },
       {
         'id': 'dev_community',
-        'label': 'stack overflow',
+        'label': 'Stack Overflow',
         'icon': Icons.question_answer_outlined,
         'color': Colors.orange.shade700,
         'action':
@@ -316,7 +325,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
       },
     ];
 
-    // The Scaffold has been removed. This widget now only returns its core content.
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
