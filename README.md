@@ -142,7 +142,7 @@ This code is proprietary and may not be used, copied, modified, or distributed w
 - GitHub: [@jyojokooz](https://github.com/jyojokooz)
 
 ## 🙏 Acknowledgments
-
+#
 - Rajiv Gandhi Institute of Technology (RIT) for the inspiration
 - All the students who provided feedback during development
 - The Flutter and Firebase communities
