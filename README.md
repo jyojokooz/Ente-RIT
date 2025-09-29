@@ -137,8 +137,8 @@ This code is proprietary and may not be used, copied, modified, or distributed w
 
 **Joel S Raphael**
 
-- Email: [your-email@example.com]
-- LinkedIn: [Your LinkedIn Profile]
+- Email: [joelraphael6425@gmail.com]
+- LinkedIn: [[Your LinkedIn Profile](https://www.linkedin.com/in/joel-s-raphael-660a04289/)]
 - GitHub: [@jyojokooz](https://github.com/jyojokooz)
 
 ## 🙏 Acknowledgments
