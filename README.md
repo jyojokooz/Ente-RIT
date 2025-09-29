@@ -138,11 +138,13 @@ This code is proprietary and may not be used, copied, modified, or distributed w
 **Joel S Raphael**
 
 - Email: [joelraphael6425@gmail.com]
-- LinkedIn: [[Your LinkedIn Profile](https://www.linkedin.com/in/joel-s-raphael-660a04289/)]
+- LinkedIn: [[joel-s-raphael](https://www.linkedin.com/in/joel-s-raphael-660a04289/)]
 - GitHub: [@jyojokooz](https://github.com/jyojokooz)
 
 ## 🙏 Acknowledgments
+
 #
+
 - Rajiv Gandhi Institute of Technology (RIT) for the inspiration
 - All the students who provided feedback during development
 - The Flutter and Firebase communities
