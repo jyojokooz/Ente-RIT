@@ -1,16 +1,14 @@
+// lib/widgets/feature_card.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:transparent_image/transparent_image.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-/// A hybrid card widget for the Campus Connect screen.
-///
-/// It displays a background image from `imageUrl` if provided.
-/// Otherwise, it falls back to a solid color design with a radial gradient.
 class FeatureCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final String? imageUrl; // This is now used to decide the background
+  final String? imageUrl; // The new property to accept the image URL
   final VoidCallback onTap;
 
   const FeatureCard({
@@ -18,107 +16,72 @@ class FeatureCard extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.color,
-    this.imageUrl, // Made it an optional parameter
+    this.imageUrl,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    // A clean way to check if we have a valid image URL to display.
+    // Determine if we have a valid image URL to display.
     final bool hasImage = imageUrl != null && imageUrl!.isNotEmpty;
 
-    return AspectRatio(
-      aspectRatio: 16 / 8,
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      clipBehavior:
+          Clip.antiAlias, // Ensures the container respects the card's rounded corners
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 16.0),
-          clipBehavior:
-              Clip.antiAlias, // Clips the image to the rounded corners
+          height: 120,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            // The background is now conditional.
-            // If there's no image, use the solid color gradient.
-            // If there is an image, the image itself will be the background.
-            gradient:
+            // --- CORE LOGIC: Display image or color background ---
+            color:
                 hasImage
-                    ? null
-                    : RadialGradient(
-                      colors: [Color.lerp(color, Colors.white, 0.15)!, color],
-                      center: Alignment.topRight,
-                      radius: 1.5,
-                    ),
-            // The solid color is also a good fallback for the image container
-            color: color,
+                    ? Colors.grey.shade800
+                    : color, // Fallback color while image loads
+            image:
+                hasImage
+                    ? DecorationImage(
+                      image: CachedNetworkImageProvider(imageUrl!),
+                      fit: BoxFit.cover,
+                      // Add a color filter to create a dark overlay for better text readability.
+                      colorFilter: ColorFilter.mode(
+                        // ignore: deprecated_member_use
+                        Colors.black.withOpacity(0.5),
+                        BlendMode.darken,
+                      ),
+                    )
+                    : null,
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // --- BACKGROUND LAYER ---
-              // If we have an image, display it. It will cover the container's color.
-              if (hasImage)
-                FadeInImage.memoryNetwork(
-                  placeholder: kTransparentImage,
-                  image: imageUrl!,
-                  fit: BoxFit.cover,
-                  // If the image fails to load, the solid color background will be visible.
-                  imageErrorBuilder:
-                      (context, error, stackTrace) => const SizedBox.shrink(),
-                ),
-
-              // --- GRADIENT OVERLAY (only for images) ---
-              // Add a dark overlay on top of images so white text is always readable.
-              if (hasImage)
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black87],
-                      stops: [0.5, 1.0],
-                    ),
-                  ),
-                ),
-
-              // --- CONTENT LAYER (Icon and Text) ---
-              Positioned(
-                top: 20,
-                left: 20,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    // Use a slightly different background for the icon based on the card type
-                    color:
-                        hasImage
-                            ? Colors.black.withAlpha(80)
-                            : Colors.white.withAlpha(38),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 28),
-                ),
-              ),
-              Positioned(
-                bottom: 20,
-                left: 20,
-                child: Text(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.end, // Align content to the bottom
+              crossAxisAlignment:
+                  CrossAxisAlignment.start, // Align content to the left
+              children: [
+                Icon(icon, color: Colors.white, size: 28),
+                const SizedBox(height: 8),
+                Text(
                   label,
                   style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    shadows:
-                        hasImage
-                            ? [
-                              const Shadow(
-                                blurRadius: 4,
-                                color: Colors.black54,
-                              ),
-                            ]
-                            : [],
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    shadows: [
+                      const Shadow(
+                        blurRadius: 4.0,
+                        color: Colors.black54,
+                        offset: Offset(1.0, 1.0),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

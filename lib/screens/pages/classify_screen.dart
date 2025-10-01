@@ -1,10 +1,11 @@
+// lib/pages/classify_screen.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// --- Screen Imports (Corrected Paths) ---
-// Go up one level from 'pages' to 'screens' to find these files.
+// --- Screen Imports ---
 import '../departments_screen.dart';
 import '../game_view_screen.dart';
 import '../id_card_screen.dart';
@@ -19,13 +20,12 @@ import '../etlab_webview_screen.dart';
 import '../lost_and_found_screen.dart';
 import '../quiz_categories_screen.dart';
 import '../pdf_buddy_screen.dart';
-import '../linkedin_analyzer_screen.dart';
+import '../resume_analyzer_screen.dart';
 import '../youtube_summarizer_screen.dart';
 import '../cafeteria_screen.dart';
 import '../bus_list_screen.dart';
 
-// --- Widget Imports (Corrected Path) ---
-// Go up two levels from 'pages' to 'lib', then into 'widgets'.
+// --- Widget Imports ---
 import '../../widgets/feature_card.dart';
 
 class ClassifyScreen extends StatefulWidget {
@@ -45,6 +45,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     _fetchBackgroundImages();
   }
 
+  // This method correctly fetches all image URLs from Firestore.
   Future<void> _fetchBackgroundImages() async {
     try {
       final snapshot =
@@ -91,6 +92,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // This feature list is the source of truth for the screen's content.
     final List<Map<String, dynamic>> features = [
       {
         'id': 'department_notes',
@@ -257,15 +259,15 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             ),
       },
       {
-        'id': 'linkedin_analyzer',
-        'label': 'LinkedIn Analyzer',
-        'icon': Icons.analytics_outlined,
-        'color': Colors.blue.shade700,
+        'id': 'resume_analyzer',
+        'label': 'AI Resume Analyzer',
+        'icon': Icons.document_scanner_outlined,
+        'color': Colors.teal.shade600,
         'action':
             () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const LinkedInAnalyzerScreen(),
+                builder: (context) => const ResumeAnalyzerScreen(),
               ),
             ),
       },
@@ -356,8 +358,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                         itemBuilder: (context, index) {
                           final feature = features[index];
                           final featureId = feature['id'];
+                          // This line correctly finds the URL from the map we fetched.
                           final imageUrl = _cardBackgrounds[featureId];
 
+                          // Now we pass the URL to our updated FeatureCard.
                           return FeatureCard(
                             label: feature['label'],
                             icon: feature['icon'],
