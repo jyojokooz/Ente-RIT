@@ -1,4 +1,7 @@
+// lib/screens/summary_chat_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // --- IMPROVEMENT: Import Markdown package
 import 'package:google_fonts/google_fonts.dart';
 import '../services/youtube_summarizer_service.dart';
 
@@ -115,8 +118,11 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16.0),
-              itemCount: _chatHistory.length,
+              itemCount: _chatHistory.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _chatHistory.length) {
+                  return const _TypingIndicatorBubble();
+                }
                 final message = _chatHistory[index];
                 final isUser = message['role'] == 'user';
                 return _ChatMessageBubble(
@@ -126,11 +132,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
               },
             ),
           ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: CircularProgressIndicator(color: Colors.yellow),
-            ),
           _buildMessageComposer(),
         ],
       ),
@@ -198,11 +199,50 @@ class _ChatMessageBubble extends StatelessWidget {
           color: isUser ? Colors.yellow : Colors.grey.shade800,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          message,
-          style: GoogleFonts.poppins(
-            color: isUser ? Colors.black : Colors.white,
-            height: 1.5,
+        // --- IMPROVEMENT: Use MarkdownBody to render formatted text ---
+        child: MarkdownBody(
+          data: message,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            p: GoogleFonts.poppins(
+              color: isUser ? Colors.black : Colors.white,
+              height: 1.5,
+            ),
+            h3: GoogleFonts.poppins(
+              color: isUser ? Colors.black : Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        // --- END OF IMPROVEMENT ---
+      ),
+    );
+  }
+}
+
+/// A bubble with a loading indicator to show the AI is "typing".
+class _TypingIndicatorBubble extends StatelessWidget {
+  const _TypingIndicatorBubble();
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2.5,
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,10 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
-// --- THIS IS THE CORRECTED LINE ---
 import 'package:flutter_markdown/flutter_markdown.dart';
-// ------------------------------------
-import 'dart:convert';
+// --- REVERTED CHANGE: Added google_generative_ai package back ---
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../services/chat_ai_service.dart';
 
@@ -64,6 +63,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   bool _isResponding = false;
   String? _currentConversationId;
 
+  // --- REVERTED CHANGE: Using Gemini API Key from .env ---
   final String _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
   final String _serperApiKey = dotenv.env['SERPER_API_KEY'] ?? '';
   final _currentUser = FirebaseAuth.instance.currentUser!;
@@ -162,6 +162,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     }
   }
 
+  // --- REVERTED CHANGE: Switched back to google_generative_ai SDK for streaming ---
   Future<void> _streamAiResponseToFirestore(
     String conversationId,
     String userQuestion,
@@ -194,7 +195,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
       }
 
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-pro',
         apiKey: _geminiApiKey,
         systemInstruction: Content.system(
           "You are Connect AI, an advanced and professional assistant for the Kampus Konnect app. Your purpose is to provide accurate, helpful, and well-formatted information. Always use Markdown for formatting. You must be analytical and resourceful. When given context (like app data or web search results), your primary goal is to synthesize answers from it. If context is missing for specific questions (like a person's name), you may use your own knowledge but you MUST add a disclaimer that the information may be outdated.",
@@ -236,11 +237,12 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     }
   }
 
+  // --- REVERTED CHANGE: Switched back to google_generative_ai SDK for decision making ---
   Future<String> _getAiDecision(String userQuestion) async {
     if (_geminiApiKey.isEmpty) return 'chat';
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-pro',
         apiKey: _geminiApiKey,
       );
       final prompt =
@@ -262,6 +264,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
     return 'chat';
   }
 
+  // --- DATABASE AND WEB FETCHING (No changes needed) ---
   Future<String> _fetchDatabaseContext(String userMessageText) async {
     final lowerCaseMessage = userMessageText.toLowerCase();
     List<String> contextSnippets = [];
@@ -563,7 +566,8 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
             );
     final bool isError =
         message.source == MessageSource.error ||
-        message.text.startsWith("Error:");
+        message.text.startsWith("Error:") ||
+        message.text.startsWith("API Error:");
     final errorColor = Colors.red[900]!.withAlpha(128);
 
     return Column(
@@ -685,6 +689,7 @@ class _AiConversationScreenState extends State<AiConversationScreen> {
   }
 }
 
+// --- ALL HELPER WIDGETS (TypingIndicator, ContextLabel, AnimatedMessage) remain unchanged ---
 class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
   @override
