@@ -18,13 +18,9 @@ class QuizService {
       throw Exception('GEMINI_API_KEY not found in .env file.');
     }
 
-    // --- THIS IS THE FIX: Changed the model name ---
-    // 'gemini-1.5-flash-latest' is the recommended, modern model for this task.
-    final model = GenerativeModel(
-      model: 'gemini-1.5-flash-latest',
-      apiKey: apiKey!,
-    );
-    // --- END OF FIX ---
+    // --- MODEL UPDATED to Gemini 1.5 Pro for higher quality generation ---
+    final model = GenerativeModel(model: 'gemini-2.5-pro', apiKey: apiKey!);
+    // --- END OF UPDATE ---
 
     final prompt = '''
     Generate a multiple-choice quiz with $questionCount questions on the topic of "$category".
@@ -48,6 +44,7 @@ class QuizService {
       );
     }
 
+    // Clean the response just in case the model adds markdown backticks
     final cleanJson =
         response.text!.replaceAll('```json', '').replaceAll('```', '').trim();
 
@@ -55,6 +52,7 @@ class QuizService {
       final List<dynamic> jsonList = json.decode(cleanJson);
       return jsonList.map((json) => QuizQuestion.fromJson(json)).toList();
     } catch (e) {
+      // Log the exact response from the AI for easier debugging
       log('--- AI Response Start ---', name: 'QuizService');
       log(
         response.text ?? 'AI returned a null response text.',

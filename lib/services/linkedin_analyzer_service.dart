@@ -14,10 +14,9 @@ class LinkedInAnalyzerService {
       throw Exception('GEMINI_API_KEY not found in .env file.');
     }
 
-    final model = GenerativeModel(
-      model: 'gemini-1.5-flash-latest',
-      apiKey: apiKey!,
-    );
+    // --- MODEL UPDATED to Gemini 1.5 Pro for higher quality analysis ---
+    final model = GenerativeModel(model: 'gemini-2.5-pro', apiKey: apiKey!);
+    // --- END OF UPDATE ---
 
     // This detailed prompt guides the AI to act as a helpful career coach.
     final prompt = '''
