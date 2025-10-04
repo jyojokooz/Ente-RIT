@@ -1,31 +1,10 @@
-import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:uuid/uuid.dart';
-import '../helpers/database_helper.dart';
-import '../widgets/chat_message_placeholder.dart';
 
-// --- Models ---
-class ChatMessage {
-  final String id;
-  final String senderId;
-  final String text;
-  final DateTime timestamp;
-  final String senderImageUrl;
-  ChatMessage({
-    required this.id,
-    required this.senderId,
-    required this.text,
-    required this.timestamp,
-    required this.senderImageUrl,
-  });
-}
+import '../widgets/chat_message_placeholder.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -46,16 +25,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String _chatRoomId;
-  final PusherChannelsFlutter pusher = PusherChannelsFlutter.getInstance();
+  late final CollectionReference _messagesCollection;
 
-  final String pusherAppKey = dotenv.env['PUSHER_APP_KEY'] ?? '';
-  final String pusherAppCluster = dotenv.env['PUSHER_APP_CLUSTER'] ?? '';
-
-  // --- FIX: Simplified data model. The list now only holds ChatMessage objects. ---
-  final List<ChatMessage> _chatMessages = [];
-  bool _isLoadingHistory = true;
-  String _currentUserImageUrl = '';
-  final uuid = const Uuid();
+  // --- FIX 1: Add a ScrollController ---
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -63,233 +36,76 @@ class _ChatScreenState extends State<ChatScreen> {
     List<String> ids = [_currentUser.uid, widget.receiverId];
     ids.sort();
     _chatRoomId = ids.join('_');
-    _initializeChat();
+    _messagesCollection = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatRoomId)
+        .collection('messages');
   }
 
   @override
   void dispose() {
-    pusher.unsubscribe(channelName: 'private-$_chatRoomId');
     _messageController.dispose();
+    // --- FIX 2: Dispose the controller to prevent memory leaks ---
+    _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<void> _initializeChat() async {
-    final userDoc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUser.uid)
-            .get();
-    if (userDoc.exists) {
-      _currentUserImageUrl = userDoc.data()?['profilePhotoUrl'] ?? '';
-    }
-
-    final historyData = await DatabaseHelper.instance.getMessages(
-      _chatRoomId,
-      _currentUser.uid,
-    );
-    final historyMessages =
-        historyData.map((item) {
-          final isMe = item['senderId'] == _currentUser.uid;
-          return ChatMessage(
-            id: item['messageId'],
-            senderId: item['senderId'],
-            text: item['text'],
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-              item['timestamp'],
-              isUtc: true,
-            ),
-            senderImageUrl:
-                isMe ? _currentUserImageUrl : widget.receiverImageUrl,
-          );
-        }).toList();
-
-    // --- FIX: Add all historical messages directly to the list. ---
-    _chatMessages.addAll(historyMessages);
-
-    if (mounted) {
-      setState(() {
-        _isLoadingHistory = false;
-      });
-    }
-
-    try {
-      await pusher.init(
-        apiKey: pusherAppKey,
-        cluster: pusherAppCluster,
-        onEvent: _onPusherEvent,
-      );
-      await pusher.subscribe(channelName: 'private-$_chatRoomId');
-      await pusher.connect();
-    } catch (e) {
-      // Handle Pusher connection error
-      debugPrint("Pusher Error: $e");
-    }
-  }
-
-  void _onPusherEvent(PusherEvent event) {
-    if (event.eventName == 'client-new-message') {
-      final data = jsonDecode(event.data);
-      if (data['senderId'] != _currentUser.uid) {
-        final newMessage = ChatMessage(
-          id: data['messageId'],
-          senderId: data['senderId'],
-          text: data['text'],
-          timestamp: DateTime.fromMillisecondsSinceEpoch(
-            data['timestamp'],
-            isUtc: true,
-          ),
-          senderImageUrl: widget.receiverImageUrl,
-        );
-        DatabaseHelper.instance.insertMessage({
-          'messageId': newMessage.id,
-          'chatRoomId': _chatRoomId,
-          'senderId': newMessage.senderId,
-          'text': newMessage.text,
-          'timestamp': newMessage.timestamp.millisecondsSinceEpoch,
-        });
-        if (mounted) {
-          setState(() {
-            // --- FIX: Add new messages to the start of the list for the reversed view. ---
-            _chatMessages.insert(0, newMessage);
-          });
-        }
-      }
-    }
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    final messageId = uuid.v4();
-    final message = ChatMessage(
-      id: messageId,
-      senderId: _currentUser.uid,
-      text: text,
-      timestamp: DateTime.now().toUtc(),
-      senderImageUrl: _currentUserImageUrl,
-    );
+    final batch = FirebaseFirestore.instance.batch();
+    final chatDocRef = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(_chatRoomId);
+    final newMessageRef = chatDocRef.collection('messages').doc();
+
     _messageController.clear();
 
-    setState(() {
-      _chatMessages.insert(0, message);
+    batch.set(chatDocRef, {
+      'participants': [_currentUser.uid, widget.receiverId],
+      'participantNames': {
+        _currentUser.uid: _currentUser.displayName ?? 'Me',
+        widget.receiverId: widget.receiverName,
+      },
+      'participantImages': {
+        _currentUser.uid: _currentUser.photoURL ?? '',
+        widget.receiverId: widget.receiverImageUrl,
+      },
+      'lastMessage': text,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    batch.set(newMessageRef, {
+      'senderId': _currentUser.uid,
+      'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
     });
 
-    await DatabaseHelper.instance.insertMessage({
-      'messageId': message.id,
-      'chatRoomId': _chatRoomId,
-      'senderId': message.senderId,
-      'text': message.text,
-      'timestamp': message.timestamp.millisecondsSinceEpoch,
-    });
-    await pusher.trigger(
-      PusherEvent(
-        channelName: 'private-$_chatRoomId',
-        eventName: 'client-new-message',
-        data: jsonEncode({
-          'messageId': message.id,
-          'senderId': message.senderId,
-          'text': message.text,
-          'timestamp': message.timestamp.millisecondsSinceEpoch,
-        }),
-      ),
-    );
+    await batch.commit();
   }
 
-  Future<void> _deleteMessageForMe(String messageId) async {
-    await DatabaseHelper.instance.markMessageAsDeletedFor(
-      messageId,
-      _currentUser.uid,
-    );
-    if (mounted) {
-      setState(() {
-        _chatMessages.removeWhere((msg) => msg.id == messageId);
-      });
-    }
+  bool _isSameDay(Timestamp? t1, Timestamp? t2) {
+    if (t1 == null || t2 == null) return false;
+    final d1 = t1.toDate();
+    final d2 = t2.toDate();
+    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
   }
 
-  void _showDeleteDialog(String messageId) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder:
-          (context) => SafeArea(
-            child: Container(
-              margin: const EdgeInsets.all(8.0),
-              child: Wrap(
-                children: <Widget>[
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade900,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                      ),
-                      title: const Text(
-                        'Delete for me',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        _deleteMessageForMe(messageId);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: ListTile(
-                      title: const Center(
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
+  String _formatDateSeparator(Timestamp timestamp) {
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final messageDate = DateTime(date.year, date.month, date.day);
 
-  String _formatDateSeparator(DateTime date) {
-    final location = tz.getLocation('Asia/Kolkata');
-    final istTime = tz.TZDateTime.from(date, location);
-    final now = tz.TZDateTime.now(location);
-    final today = tz.TZDateTime(location, now.year, now.month, now.day);
-    final yesterday = tz.TZDateTime(location, now.year, now.month, now.day - 1);
-    final messageDate = tz.TZDateTime(
-      location,
-      istTime.year,
-      istTime.month,
-      istTime.day,
-    );
-    if (messageDate.isAtSameMomentAs(today)) {
+    if (messageDate == today) {
       return 'Today';
-    } else if (messageDate.isAtSameMomentAs(yesterday)) {
+    } else if (messageDate == yesterday) {
       return 'Yesterday';
     } else {
-      return DateFormat('MMMM d, y').format(istTime);
+      return DateFormat('MMMM d, y').format(date);
     }
-  }
-
-  bool _isSameDay(DateTime d1, DateTime d2) {
-    final location = tz.getLocation('Asia/Kolkata');
-    final dt1 = tz.TZDateTime.from(d1, location);
-    final dt2 = tz.TZDateTime.from(d2, location);
-    return dt1.year == dt2.year && dt1.month == dt2.month && dt1.day == dt2.day;
   }
 
   @override
@@ -318,67 +134,89 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child:
-                _isLoadingHistory
-                    ? ListView.builder(
-                      reverse: true,
-                      itemCount: 10,
-                      padding: const EdgeInsets.all(12.0),
-                      itemBuilder:
-                          (context, index) =>
-                              ChatMessagePlaceholder(isMe: index.isEven),
-                    )
-                    : _chatMessages.isEmpty
-                    ? Center(
-                      child: Text(
-                        'Say hello!',
-                        style: GoogleFonts.poppins(color: Colors.white70),
-                      ),
-                    )
-                    : ListView.builder(
-                      reverse: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                      itemCount: _chatMessages.length,
-                      itemBuilder: (context, index) {
-                        final message = _chatMessages[index];
-                        final isMe = message.senderId == _currentUser.uid;
-
-                        // --- FIX: Logic for showing avatars and timestamps correctly in a reversed list ---
-                        // Show avatar only on the last message of a consecutive block.
-                        // In a reversed list, the "last" message is the one with the lowest index (e.g., index 0).
-                        final isLastInBlock =
-                            (index == 0) ||
-                            (_chatMessages[index - 1].senderId !=
-                                message.senderId);
-
-                        // --- FIX: Logic for showing date separators correctly in a reversed list ---
-                        // Show date separator if it's the oldest message or if the day changed.
-                        // In a reversed list, the "next" message (older) is at index + 1.
-                        final bool showDateSeparator =
-                            (index == _chatMessages.length - 1) ||
-                            !_isSameDay(
-                              message.timestamp,
-                              _chatMessages[index + 1].timestamp,
-                            );
-
-                        return Column(
-                          children: [
-                            if (showDateSeparator)
-                              _buildDateSeparator(message.timestamp),
-                            GestureDetector(
-                              onLongPress: () {
-                                if (isMe) _showDeleteDialog(message.id);
-                              },
-                              child: _buildMessageBubble(
-                                message: message,
-                                isMe: isMe,
-                                isLastInBlock: isLastInBlock,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  _messagesCollection
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return ListView.builder(
+                    reverse: true,
+                    itemCount: 10,
+                    padding: const EdgeInsets.all(12.0),
+                    itemBuilder:
+                        (context, index) =>
+                            ChatMessagePlaceholder(isMe: index.isEven),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Say hello!',
+                      style: GoogleFonts.poppins(color: Colors.white70),
                     ),
+                  );
+                }
+
+                // --- FIX 3: Schedule the scroll animation after the frame is built ---
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      0.0, // Scroll to the top of the reversed list
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                });
+
+                final messages = snapshot.data!.docs;
+
+                return ListView.builder(
+                  // --- FIX 4: Attach the controller to the ListView ---
+                  controller: _scrollController,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final doc = messages[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final isMe = data['senderId'] == _currentUser.uid;
+
+                    final isLastInBlock =
+                        (index == 0) ||
+                        (messages[index - 1].data()
+                                as Map<String, dynamic>)['senderId'] !=
+                            data['senderId'];
+
+                    final currentTimestamp = data['timestamp'] as Timestamp?;
+                    final nextTimestamp =
+                        (index < messages.length - 1)
+                            ? (messages[index + 1].data()
+                                    as Map<String, dynamic>)['timestamp']
+                                as Timestamp?
+                            : null;
+
+                    final bool showDateSeparator =
+                        (index == messages.length - 1) ||
+                        !_isSameDay(currentTimestamp, nextTimestamp);
+
+                    return Column(
+                      children: [
+                        if (showDateSeparator && currentTimestamp != null)
+                          _buildDateSeparator(currentTimestamp),
+                        _buildMessageBubble(
+                          text: data['text'],
+                          timestamp: data['timestamp'],
+                          isMe: isMe,
+                          isLastInBlock: isLastInBlock,
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
           ),
           _buildMessageInputField(),
         ],
@@ -386,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildDateSeparator(DateTime date) {
+  Widget _buildDateSeparator(Timestamp timestamp) {
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -396,7 +234,7 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          _formatDateSeparator(date),
+          _formatDateSeparator(timestamp),
           style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ),
@@ -404,16 +242,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble({
-    required ChatMessage message,
+    required String text,
+    required Timestamp? timestamp,
     required bool isMe,
     required bool isLastInBlock,
   }) {
-    final location = tz.getLocation('Asia/Kolkata');
-    final istTime = tz.TZDateTime.from(message.timestamp, location);
-    final formattedTime = DateFormat('HH:mm').format(istTime);
+    final formattedTime =
+        timestamp != null
+            ? DateFormat('HH:mm').format(timestamp.toDate())
+            : '--:--';
 
-    // --- UI REFRESH: Tailed corners for a more modern chat look ---
-    final bubbleRadius = Radius.circular(20);
+    final bubbleRadius = const Radius.circular(20);
     final bubbleBorderRadius =
         isMe
             ? BorderRadius.only(
@@ -440,21 +279,20 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisAlignment:
             isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          // Show avatar for the other user
           if (!isMe && isLastInBlock)
             CircleAvatar(
               radius: 16,
               backgroundImage:
-                  message.senderImageUrl.isNotEmpty
-                      ? NetworkImage(message.senderImageUrl)
+                  widget.receiverImageUrl.isNotEmpty
+                      ? NetworkImage(widget.receiverImageUrl)
                       : null,
               child:
-                  message.senderImageUrl.isEmpty
+                  widget.receiverImageUrl.isEmpty
                       ? const Icon(Icons.person, size: 16)
                       : null,
             )
           else if (!isMe)
-            const SizedBox(width: 32), // Spacer to align messages
+            const SizedBox(width: 32),
           const SizedBox(width: 8),
           Flexible(
             child: Column(
@@ -467,12 +305,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    // --- UI REFRESH: New colors ---
                     color: isMe ? Colors.blue : Colors.grey.shade800,
                     borderRadius: bubbleBorderRadius,
                   ),
                   child: Text(
-                    message.text,
+                    text,
                     style: GoogleFonts.poppins(color: Colors.white),
                   ),
                 ),
@@ -521,7 +358,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.send, color: Colors.blue), // UI Refresh
+              icon: const Icon(Icons.send, color: Colors.blue),
               onPressed: _sendMessage,
             ),
           ],
