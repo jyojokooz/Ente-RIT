@@ -180,7 +180,7 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
-                value: _status,
+                initialValue: _status,
                 onChanged: (value) {
                   setState(() {
                     _status = value!;

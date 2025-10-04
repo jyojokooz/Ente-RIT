@@ -254,7 +254,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: _selectedDepartment,
+                      initialValue: _selectedDepartment,
                       decoration: const InputDecoration(
                         labelText: 'Department',
                       ),

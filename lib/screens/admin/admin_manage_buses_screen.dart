@@ -53,7 +53,8 @@ class _AdminManageBusesScreenState extends State<AdminManageBusesScreen> {
                       ),
                     ),
                     DropdownButtonFormField<String>(
-                      value: selectedDriverId,
+                      initialValue: selectedDriverId,
+
                       hint: const Text('Assign Driver'),
                       onChanged:
                           (value) =>

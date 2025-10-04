@@ -226,7 +226,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                           ),
                           const SizedBox(height: 20),
                           DropdownButtonFormField<String>(
-                            value: _selectedCategory,
+                            initialValue: _selectedCategory,
+
                             style: const TextStyle(color: Colors.white),
                             iconEnabledColor: Colors.white70,
                             dropdownColor: Colors.grey.shade800,

@@ -161,7 +161,7 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<DocumentSnapshot>(
-                            value: _selectedRoute,
+                            initialValue: _selectedRoute,
                             hint: const Text('Choose a route'),
                             isExpanded: true,
                             items:

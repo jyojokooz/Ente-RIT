@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -57,9 +59,12 @@ class _SplashScreenState extends State<SplashScreen>
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 30),
       TweenSequenceItem(tween: Tween(begin: 1.2, end: 0.9), weight: 30),
       TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 40),
-    ]).animate(CurvedAnimation(
+    ]).animate(
+      CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.5, 0.65, curve: Curves.easeInOut)));
+        curve: const Interval(0.5, 0.65, curve: Curves.easeInOut),
+      ),
+    );
 
     _capsAnimation = CurvedAnimation(
       parent: _mainController,
@@ -121,7 +126,10 @@ class _SplashScreenState extends State<SplashScreen>
         ]),
         builder: (context, child) {
           return FadeTransition(
-            opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOutAnimation),
+            opacity: Tween<double>(
+              begin: 1.0,
+              end: 0.0,
+            ).animate(_fadeOutAnimation),
             child: Container(
               decoration: const BoxDecoration(
                 gradient: RadialGradient(
@@ -145,7 +153,11 @@ class _SplashScreenState extends State<SplashScreen>
                     CustomPaint(
                       painter: ConfettiPainter(
                         animationValue: _confettiController.value,
-                        colors: [primaryYellow, Colors.red.shade400, Colors.white],
+                        colors: [
+                          primaryYellow,
+                          Colors.red.shade400,
+                          Colors.white,
+                        ],
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -185,7 +197,9 @@ class _SplashScreenState extends State<SplashScreen>
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: glowColor.withAlpha((255 * _glowAnimation.value * 0.3).toInt()),
+                color: glowColor.withAlpha(
+                  (255 * _glowAnimation.value * 0.3).toInt(),
+                ),
                 blurRadius: 60 * _glowAnimation.value,
                 spreadRadius: 5 * _glowAnimation.value,
               ),
@@ -195,9 +209,10 @@ class _SplashScreenState extends State<SplashScreen>
             scale: _iconSqueezeAnimation.value,
             child: Transform(
               alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..rotateY(math.pi / 2 * (1 - _iconRotationAnimation.value)),
+              transform:
+                  Matrix4.identity()
+                    ..setEntry(3, 2, 0.001)
+                    ..rotateY(math.pi / 2 * (1 - _iconRotationAnimation.value)),
               child: Image.asset('assets/app_icon.png'),
             ),
           ),
@@ -250,13 +265,13 @@ class ConfettiPainter extends CustomPainter {
   final List<Particle> particles;
 
   ConfettiPainter({required this.animationValue, required this.colors})
-      : particles = List.generate(
-          100,
-          (index) => Particle(
-            color: colors[math.Random().nextInt(colors.length)],
-            random: math.Random(index),
-          ),
-        );
+    : particles = List.generate(
+        100,
+        (index) => Particle(
+          color: colors[math.Random().nextInt(colors.length)],
+          random: math.Random(index),
+        ),
+      );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -265,11 +280,14 @@ class ConfettiPainter extends CustomPainter {
     for (var particle in particles) {
       final progress = Curves.easeOut.transform(animationValue);
       final path = particle.updatePath(progress, center);
-      
+
       // --- THIS IS THE FIX ---
       // Replaced .withOpacity() with the more modern .withAlpha()
-      final paint = Paint()
-        ..color = particle.color.withAlpha((255 * (1.0 - progress)).toInt());
+      final paint =
+          Paint()
+            ..color = particle.color.withAlpha(
+              (255 * (1.0 - progress)).toInt(),
+            );
       // --- END OF FIX ---
 
       canvas.drawPath(path, paint);
@@ -289,23 +307,29 @@ class Particle {
   final double tilt;
 
   Particle({required this.color, required this.random})
-      : speed = random.nextDouble() * 200 + 150,
-        theta = random.nextDouble() * 2 * math.pi,
-        drag = random.nextDouble() * 0.05 + 0.9,
-        tilt = random.nextDouble() * math.pi;
+    : speed = random.nextDouble() * 200 + 150,
+      theta = random.nextDouble() * 2 * math.pi,
+      drag = random.nextDouble() * 0.05 + 0.9,
+      tilt = random.nextDouble() * math.pi;
 
   Path updatePath(double progress, Offset center) {
     final newX = center.dx + math.cos(theta) * speed * progress;
-    final newY = center.dy + math.sin(theta) * speed * progress + (150 * progress * progress); // Gravity
+    final newY =
+        center.dy +
+        math.sin(theta) * speed * progress +
+        (150 * progress * progress); // Gravity
     final size = 8.0 * (1 - progress);
 
     final path = Path();
-    path.addRect(Rect.fromCenter(center: Offset(newX, newY), width: size, height: size));
-    
-    final matrix = Matrix4.identity()
-      ..translate(newX, newY)
-      ..rotateZ(tilt * progress * 2)
-      ..translate(-newX, -newY);
+    path.addRect(
+      Rect.fromCenter(center: Offset(newX, newY), width: size, height: size),
+    );
+
+    final matrix =
+        Matrix4.identity()
+          ..translate(newX, newY)
+          ..rotateZ(tilt * progress * 2)
+          ..translate(-newX, -newY);
 
     return path.transform(matrix.storage);
   }
@@ -320,16 +344,17 @@ class FlyingCapsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..color = color.withAlpha((255 * (1.0 - animationValue)).toInt())
-      ..style = PaintingStyle.fill;
-    
+    final paint =
+        Paint()
+          ..color = color.withAlpha((255 * (1.0 - animationValue)).toInt())
+          ..style = PaintingStyle.fill;
+
     final progress = Curves.easeOut.transform(animationValue);
 
     for (int i = 0; i < 7; i++) {
       final angle = (i / 7) * 2 * math.pi;
       final distance = progress * size.width * 0.6;
-      
+
       final capCenter = Offset(
         center.dx + math.cos(angle) * distance,
         center.dy + math.sin(angle) * distance,
@@ -354,7 +379,7 @@ class FlyingCapsPainter extends CustomPainter {
       canvas.restore();
     }
   }
-  
+
   @override
   bool shouldRepaint(covariant FlyingCapsPainter oldDelegate) => true;
 }

@@ -54,7 +54,7 @@ class MyApp extends StatelessWidget {
           backgroundColor: Colors.grey.shade900,
           elevation: 0,
         ),
-        bottomAppBarTheme: BottomAppBarTheme(color: Colors.grey.shade900),
+        bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.black87),
       ),
 
       home: const SplashScreen(),

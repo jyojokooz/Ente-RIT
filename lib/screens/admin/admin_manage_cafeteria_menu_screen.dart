@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -189,7 +191,8 @@ class _AdminManageCafeteriaMenuScreenState
                         value: isAvailable,
                         onChanged:
                             (val) => setDialogState(() => isAvailable = val),
-                        activeColor: Colors.yellow,
+                        activeThumbColor: Colors.yellow,
+                        activeTrackColor: Colors.yellowAccent.withOpacity(0.5),
                       ),
                     ],
                   ),
@@ -263,7 +266,8 @@ class _AdminManageCafeteriaMenuScreenState
                         onChanged:
                             (val) =>
                                 item.reference.update({'isAvailable': val}),
-                        activeColor: Colors.yellow,
+                        activeThumbColor: Colors.yellow,
+                        activeTrackColor: Colors.yellowAccent.withOpacity(0.5),
                       ),
                       IconButton(
                         icon: const Icon(Icons.edit),
