@@ -385,6 +385,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadAllData();
   }
 
+  // --- NEW: Helper widget to display an icon based on the user's role ---
+  Widget _buildRoleIcon(String role) {
+    IconData? icon;
+    Color? color;
+
+    switch (role) {
+      case 'admin':
+        icon = Icons.admin_panel_settings;
+        color = Colors.yellow;
+        break;
+      case 'driver':
+        icon = Icons.local_shipping;
+        color = Colors.cyan;
+        break;
+      case 'teacher':
+        icon = Icons.school;
+        color = Colors.green;
+        break;
+      case 'cafeteria_admin':
+        icon = Icons.restaurant_menu;
+        color = Colors.orange;
+        break;
+    }
+
+    if (icon != null) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 8.0),
+        child: Icon(icon, color: color, size: 24),
+      );
+    }
+    // Return an empty widget if there's no specific role icon to show (e.g., student)
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -536,20 +570,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              _displayName,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-                color: Colors.white,
-                decoration: TextDecoration.none,
+            // Using Flexible to prevent long names from overflowing
+            Flexible(
+              child: Text(
+                _displayName,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                  color: Colors.white,
+                  decoration: TextDecoration.none,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (_role == 'driver')
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Icon(Icons.local_shipping, color: Colors.cyan, size: 24),
-              ),
+            // --- MODIFIED: Call the helper to display the role icon ---
+            _buildRoleIcon(_role),
           ],
         ),
         Text(
@@ -925,8 +960,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }
           return GestureDetector(
-            // --- THIS IS THE FIX ---
-            // Changed from passing the whole snapshot to passing only the ID.
             onTap:
                 () => Navigator.push(
                   context,
@@ -935,7 +968,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         (context) => PostDetailScreen(postId: postSnapshot.id),
                   ),
                 ),
-            // --- END OF FIX ---
             child: ClipRRect(
               borderRadius: BorderRadius.circular(15.0),
               child: Stack(

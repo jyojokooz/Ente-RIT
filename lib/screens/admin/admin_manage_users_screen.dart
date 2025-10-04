@@ -10,11 +10,17 @@ class AdminManageUsersScreen extends StatefulWidget {
 }
 
 class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
-  /// Toggles a user's role between 'user' and 'driver'.
-  Future<void> _toggleUserRole(String userId, String currentRole) async {
-    // Determine the new role based on the current role.
-    final newRole = currentRole == 'driver' ? 'user' : 'driver';
+  // --- NEW: Define the list of assignable roles ---
+  final List<String> _assignableRoles = [
+    'student',
+    'teacher',
+    'driver',
+    'cafeteria_admin',
+    'admin',
+  ];
 
+  /// Sets a user's role to the specified new role.
+  Future<void> _changeUserRole(String userId, String newRole) async {
     // Show a confirmation dialog to prevent accidental changes.
     final bool confirmChange =
         await showDialog<bool>(
@@ -45,10 +51,58 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
 
     if (confirmChange) {
       // If confirmed, update the user's document in Firestore.
+      // We also handle the isAdmin flag for convenience.
       await FirebaseFirestore.instance.collection('users').doc(userId).update({
         'role': newRole,
+        'isAdmin':
+            newRole == 'admin', // Set isAdmin to true if the role is admin
       });
     }
+  }
+
+  /// --- NEW: Helper widget to display a role chip ---
+  Widget _buildRoleChip(String role) {
+    Color chipColor;
+    String label;
+
+    switch (role) {
+      case 'admin':
+        chipColor = Colors.yellow;
+        label = 'Admin';
+        break;
+      case 'driver':
+        chipColor = Colors.cyan;
+        label = 'Driver';
+        break;
+      case 'teacher':
+        chipColor = Colors.green;
+        label = 'Teacher';
+        break;
+      case 'cafeteria_admin':
+        chipColor = Colors.orange;
+        label = 'Cafeteria';
+        break;
+      case 'student':
+        chipColor = Colors.blue;
+        label = 'Student';
+        break;
+      default:
+        return const SizedBox.shrink(); // Don't show a chip for default 'user'
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8.0),
+      child: Chip(
+        label: Text(label),
+        backgroundColor: chipColor,
+        labelStyle: TextStyle(
+          color: chipColor == Colors.yellow ? Colors.black : Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
   }
 
   @override
@@ -81,24 +135,20 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
           final users = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8), // Reduced padding
             itemCount: users.length,
             itemBuilder: (context, index) {
               final userDoc = users[index];
               final userData = userDoc.data() as Map<String, dynamic>;
-              final bool isAdmin = userData['isAdmin'] ?? false;
-              final String role = userData['role'] ?? 'user';
+              final String role = userData['role'] ?? 'student';
               final profilePhotoUrl = userData['profilePhotoUrl'] ?? '';
-              final bool hasImage = profilePhotoUrl.isNotEmpty;
+              final hasImage = profilePhotoUrl.isNotEmpty;
 
               return Card(
                 color: Colors.grey.shade900,
-                margin: const EdgeInsets.only(bottom: 16),
+                margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8.0,
-                    vertical: 12.0,
-                  ),
+                  padding: const EdgeInsets.all(8.0),
                   child: Row(
                     children: [
                       CircleAvatar(
@@ -114,7 +164,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                                 )
                                 : null,
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,6 +175,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               userData['email'] ?? 'No Email',
@@ -132,44 +183,33 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                                 color: Colors.white70,
                                 fontSize: 12,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
-                      // Display chips for special roles
-                      if (isAdmin)
-                        const Chip(
-                          label: Text('Admin'),
-                          backgroundColor: Colors.yellow,
-                          labelStyle: TextStyle(color: Colors.black),
-                        ),
+                      // Display chip for the user's role
+                      _buildRoleChip(role),
 
-                      if (role == 'driver')
-                        const Chip(
-                          label: Text('Driver'),
-                          backgroundColor: Colors.cyan,
-                        ),
-
-                      // Show role management menu for non-admins
-                      if (!isAdmin)
-                        PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'toggle_role') {
-                              _toggleUserRole(userDoc.id, role);
-                            }
-                          },
-                          itemBuilder:
-                              (ctx) => [
-                                PopupMenuItem(
-                                  value: 'toggle_role',
-                                  child: Text(
-                                    role == 'driver'
-                                        ? 'Set as User'
-                                        : 'Set as Driver',
-                                  ),
-                                ),
-                              ],
-                        ),
+                      // Role management menu
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (String newRole) {
+                          _changeUserRole(userDoc.id, newRole);
+                        },
+                        itemBuilder:
+                            (ctx) =>
+                                _assignableRoles
+                                    .map(
+                                      (roleToAssign) => PopupMenuItem<String>(
+                                        value: roleToAssign,
+                                        child: Text(
+                                          'Set as ${roleToAssign.replaceAll('_', ' ')}',
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                      ),
                     ],
                   ),
                 ),
