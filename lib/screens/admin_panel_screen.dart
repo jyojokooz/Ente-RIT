@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-// --- Combined & Corrected Management Screen Imports ---
+// --- Admin Management Screen Imports ---
 import 'admin/admin_manage_users_screen.dart';
 import 'admin/admin_manage_posts_screen.dart';
 import 'admin/admin_manage_departments_screen.dart';
@@ -12,8 +12,9 @@ import 'admin/admin_manage_events_screen.dart';
 import 'admin/admin_manage_lostfound_screen.dart';
 import 'admin/admin_manage_card_images_screen.dart';
 import 'admin/admin_manage_cafeteria_menu_screen.dart';
-import 'admin/admin_manage_buses_screen.dart'; // From your feature branch
-import 'cafeteria_admin_screen.dart'; // From your main branch
+import 'admin/admin_manage_buses_screen.dart';
+// CORRECTED: Points to the screen specifically for top-level admins
+import 'admin/admin_view_cafeteria_orders_screen.dart';
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -201,7 +202,8 @@ class AdminPanelScreen extends StatelessWidget {
             label: 'Manage Food Orders',
             icon: Icons.receipt_long_outlined,
             color: Colors.orange.shade600,
-            screen: const CafeteriaAdminScreen(),
+            // CORRECTED: Navigates to the screen for main admins.
+            screen: const AdminViewCafeteriaOrdersScreen(),
           ),
           const SizedBox(height: 12),
           _buildManagementCard(

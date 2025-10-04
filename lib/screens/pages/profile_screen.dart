@@ -18,6 +18,7 @@ import '../post_detail_screen.dart';
 import '../requests_screen.dart';
 import '../chat_screen.dart';
 import '../driver_tracking_screen.dart';
+import '../cafeteria_dashboard_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -385,7 +386,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadAllData();
   }
 
-  // --- NEW: Helper widget to display an icon based on the user's role ---
   Widget _buildRoleIcon(String role) {
     IconData? icon;
     Color? color;
@@ -415,7 +415,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Icon(icon, color: color, size: 24),
       );
     }
-    // Return an empty widget if there's no specific role icon to show (e.g., student)
     return const SizedBox.shrink();
   }
 
@@ -570,7 +569,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Using Flexible to prevent long names from overflowing
             Flexible(
               child: Text(
                 _displayName,
@@ -583,7 +581,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // --- MODIFIED: Call the helper to display the role icon ---
             _buildRoleIcon(_role),
           ],
         ),
@@ -641,6 +638,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // DRIVER BUTTON
           if (_role == 'driver') ...[
             SizedBox(
               width: double.infinity,
@@ -672,6 +670,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 8),
           ],
+
+          // CAFETERIA ADMIN BUTTON
+          if (_role == 'cafeteria_admin') ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CafeteriaDashboardScreen(),
+                      ),
+                    ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.restaurant_menu_outlined),
+                label: Text(
+                  'Manage Cafeteria',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
+          // MAIN ADMIN BUTTON
           if (_isAdmin) ...[
             SizedBox(
               width: double.infinity,
@@ -683,16 +716,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         builder: (context) => const AdminPanelScreen(),
                       ),
                     ),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
                 icon: const Icon(Icons.admin_panel_settings_outlined),
-                label: const Text('Admin Panel'),
+                label: Text(
+                  'Admin Panel',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 8),
           ],
+
+          // EDIT PROFILE BUTTON (Always shows if it's the current user)
           SizedBox(
             width: double.infinity,
-            child: TextButton(
+            child: OutlinedButton(
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -702,12 +750,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
                 _loadAllData();
               },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.yellow,
+                side: const BorderSide(color: Colors.yellow),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
               child: Text(
                 'Edit Profile',
                 style: GoogleFonts.poppins(
-                  color: Colors.yellow,
                   fontSize: 16,
-                  decoration: TextDecoration.none,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -715,6 +770,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
+    // Logic for viewing other users' profiles
     switch (_connectionStatus) {
       case ConnectionStatus.connected:
         return Row(
