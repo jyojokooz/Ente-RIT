@@ -1,3 +1,5 @@
+// lib/main.dart
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -14,6 +16,7 @@ import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/screens/search_screen.dart';
 import 'package:my_project/screens/chat_list_screen.dart';
 import 'package:my_project/screens/requests_screen.dart';
+import 'package:my_project/screens/create_username_screen.dart';
 
 import 'firebase_options.dart';
 
@@ -54,6 +57,8 @@ class MyApp extends StatelessWidget {
           backgroundColor: Colors.grey.shade900,
           elevation: 0,
         ),
+        // --- THE FIX IS HERE ---
+        // Changed BottomAppBarTheme to BottomAppBarThemeData
         bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.black87),
       ),
 
@@ -62,6 +67,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/auth-gate': (context) => const AuthGate(),
         '/home': (context) => const MainScreen(),
+        '/create-username': (context) => const CreateUsernameScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/create-post': (context) => const CreatePostScreen(),
         '/search': (context) => const SearchScreen(),

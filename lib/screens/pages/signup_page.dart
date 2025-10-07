@@ -1,9 +1,11 @@
+// lib/auth/pages/signup_page.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-// Import your reusable widgets. Ensure the paths are correct.
+// Import your reusable widgets.
 import '../../widgets/custom_auth_button.dart';
 import '../../widgets/custom_auth_textfield.dart';
 
@@ -17,8 +19,8 @@ class SignupPage extends StatefulWidget {
   State<SignupPage> createState() => _SignupPageState();
 }
 
-// 1. Add 'with AutomaticKeepAliveClientMixin' to your State class
-// This mixin prevents the page from being discarded when it's not visible.
+// Using 'AutomaticKeepAliveClientMixin' to preserve the state (like typed text)
+// when switching between the Login and Signup tabs in the PageView.
 class _SignupPageState extends State<SignupPage>
     with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
@@ -35,28 +37,27 @@ class _SignupPageState extends State<SignupPage>
     super.dispose();
   }
 
-  /// Sign up with email and password
+  /// Handles user sign-up with email and password.
   Future<void> _signupWithEmailPassword() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
+        // This is the only action needed. Creating the user will trigger the
+        // authStateChanges stream in AuthGate, which will then handle
+        // navigating the user to the correct screen (CreateUsernameScreen).
         await _auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully! Welcome!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pushReplacementNamed(context, '/home');
+
+        // --- NAVIGATION REMOVED ---
+        // We no longer navigate from here. The AuthGate is now responsible
+        // for routing the user after a successful sign-up.
       } on FirebaseAuthException catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.message ?? 'Signup failed'),
+            content: Text(e.message ?? 'Signup failed. Please try again.'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -66,25 +67,34 @@ class _SignupPageState extends State<SignupPage>
     }
   }
 
-  /// Sign up or log in with Google
+  /// Handles user sign-up or sign-in with a Google account.
   Future<void> _signupWithGoogle() async {
     final GoogleSignIn googleSignIn = GoogleSignIn();
     try {
       setState(() => _isGoogleLoading = true);
+      // We sign out first to ensure the account picker always appears.
       await googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
       if (googleUser == null) {
+        // The user cancelled the sign-in process.
         if (mounted) setState(() => _isGoogleLoading = false);
-        return; // User cancelled
+        return;
       }
+
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
+
+      // Signing in with the credential will trigger the authStateChanges stream
+      // in AuthGate, just like the email sign-up.
       await _auth.signInWithCredential(credential);
-      if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+
+      // --- NAVIGATION REMOVED ---
+      // AuthGate will now check if the user is new (via Firestore) and route
+      // them to CreateUsernameScreen, or to MainScreen if they are returning.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -98,21 +108,20 @@ class _SignupPageState extends State<SignupPage>
     }
   }
 
-  // 2. Override wantKeepAlive and return true.
-  // This tells the framework to keep this widget's state alive.
+  // This is required by AutomaticKeepAliveClientMixin.
+  // Returning true keeps the widget state alive.
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
-    // 3. IMPORTANT: Call super.build(context) for the mixin to work.
+    // This is also required by the mixin.
     super.build(context);
 
     const Color primaryAccentColor = Colors.yellow;
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
 
-    // NO SCAFFOLD OR APPBAR. This is a content widget.
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -224,9 +233,7 @@ class _SignupPageState extends State<SignupPage>
                       style: GoogleFonts.poppins(color: secondaryTextColor),
                     ),
                     GestureDetector(
-                      onTap:
-                          widget
-                              .onLoginTapped, // Use the callback to switch pages
+                      onTap: widget.onLoginTapped,
                       child: Text(
                         "Log In",
                         style: GoogleFonts.poppins(
