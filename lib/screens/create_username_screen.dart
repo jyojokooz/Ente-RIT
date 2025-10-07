@@ -2,9 +2,9 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// --- FIX 1: Corrected import statement (used ':' instead of '.') ---
 import 'package:flutter/material.dart';
-// --- FIX 2: Corrected import statement (used ':' instead of '.') ---
+// --- THE FIX IS HERE ---
+// Corrected the import statement to use ':' instead of '.'
 import 'package:google_fonts/google_fonts.dart';
 
 class CreateUsernameScreen extends StatefulWidget {
@@ -16,6 +16,7 @@ class CreateUsernameScreen extends StatefulWidget {
 
 class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser!;
   final _usersCollection = FirebaseFirestore.instance.collection('users');
@@ -24,7 +25,17 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    if (_currentUser.displayName != null &&
+        _currentUser.displayName!.isNotEmpty) {
+      _nameController.text = _currentUser.displayName!;
+    }
+  }
+
+  @override
   void dispose() {
+    _nameController.dispose();
     _usernameController.dispose();
     super.dispose();
   }
@@ -39,6 +50,7 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
       _errorMessage = null;
     });
 
+    final name = _nameController.text.trim();
     final username = _usernameController.text.trim().toLowerCase();
 
     try {
@@ -58,7 +70,7 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
 
       await _usersCollection.doc(_currentUser.uid).set({
         'username': username,
-        'displayName': _currentUser.displayName ?? 'New User',
+        'displayName': name,
         'email': _currentUser.email,
         'uid': _currentUser.uid,
         'bio': '',
@@ -110,20 +122,45 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                     'One Last Step!',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
+                      // This line will now work
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Choose a unique username to represent you.',
+                    'Let\'s set up your profile.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
+                      // This line will now work
                       fontSize: 16,
                       color: Colors.white70,
                     ),
                   ),
                   const SizedBox(height: 40),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.person_outline),
+                      labelText: 'Full Name',
+                      hintText: 'e.g., John Doe',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade900,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your name.';
+                      }
+                      if (value.length < 2) {
+                        return 'Name must be at least 2 characters.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _usernameController,
                     decoration: InputDecoration(
@@ -183,6 +220,7 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                             : Text(
                               'Confirm & Continue',
                               style: GoogleFonts.poppins(
+                                // This line will now work
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
