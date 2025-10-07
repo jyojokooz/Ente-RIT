@@ -1,3 +1,5 @@
+// lib/widgets/post_card.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,8 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'full_screen_image_viewer.dart';
-import 'full_screen_video_player.dart';
+import '../screens/full_screen_image_viewer.dart';
+import '../screens/full_screen_video_player.dart';
 import 'post_card_placeholder.dart';
 
 class PostCard extends StatefulWidget {
@@ -369,8 +371,6 @@ class _PostCardState extends State<PostCard> {
             if (isAuthor)
               PopupMenuButton<String>(
                 onSelected: (value) {
-                  // --- THIS IS THE FIX ---
-                  // Wrapped the single-line statements in curly braces.
                   if (value == 'edit') {
                     onEditPressed();
                   } else if (value == 'delete') {
@@ -410,7 +410,7 @@ class _PostCardState extends State<PostCard> {
     const Color secondaryTextColor = Colors.white70;
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         Row(
           children: [
@@ -464,14 +464,6 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ],
-        ),
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(
-            Icons.send_outlined,
-            size: 22,
-            color: secondaryTextColor,
-          ),
         ),
       ],
     );
