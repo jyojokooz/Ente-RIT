@@ -25,9 +25,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String _chatRoomId;
+  // --- MODIFICATION 1: Use a DocumentReference for easier access to the main chat doc ---
+  late final DocumentReference _chatDocRef;
   late final CollectionReference _messagesCollection;
 
-  // --- FIX 1: Add a ScrollController ---
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -36,16 +37,37 @@ class _ChatScreenState extends State<ChatScreen> {
     List<String> ids = [_currentUser.uid, widget.receiverId];
     ids.sort();
     _chatRoomId = ids.join('_');
-    _messagesCollection = FirebaseFirestore.instance
+
+    // Define references for both the chat document and its messages sub-collection
+    _chatDocRef = FirebaseFirestore.instance
         .collection('chats')
-        .doc(_chatRoomId)
-        .collection('messages');
+        .doc(_chatRoomId);
+    _messagesCollection = _chatDocRef.collection('messages');
+
+    // --- MODIFICATION 2: Reset the user's unread count when they enter the screen ---
+    _resetUnreadCount();
+  }
+
+  // --- NEW METHOD: To reset the unread count for the current user ---
+  void _resetUnreadCount() async {
+    // We run this without awaiting and wrap in a try-catch because:
+    // 1. We don't need to wait for it to finish. The UI can load immediately.
+    // 2. If the chat document doesn't exist yet (i.e., this is the first
+    //    message), this update call would fail. The catch block prevents a crash.
+    try {
+      await _chatDocRef.update({
+        // Use dot notation to target the specific user's key in the map
+        'unreadCounts.${_currentUser.uid}': 0,
+      });
+    } catch (e) {
+      // This is expected if the chat document hasn't been created yet.
+      // print("Could not reset unread count (likely a new chat): $e");
+    }
   }
 
   @override
   void dispose() {
     _messageController.dispose();
-    // --- FIX 2: Dispose the controller to prevent memory leaks ---
     _scrollController.dispose();
     super.dispose();
   }
@@ -55,26 +77,34 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
 
     final batch = FirebaseFirestore.instance.batch();
-    final chatDocRef = FirebaseFirestore.instance
-        .collection('chats')
-        .doc(_chatRoomId);
-    final newMessageRef = chatDocRef.collection('messages').doc();
+    // Use the predefined collection reference
+    final newMessageRef = _messagesCollection.doc();
 
     _messageController.clear();
 
-    batch.set(chatDocRef, {
-      'participants': [_currentUser.uid, widget.receiverId],
-      'participantNames': {
-        _currentUser.uid: _currentUser.displayName ?? 'Me',
-        widget.receiverId: widget.receiverName,
+    // --- MODIFICATION 3: Update the batch operation to handle unread counts ---
+    batch.set(
+      _chatDocRef,
+      {
+        'participants': [_currentUser.uid, widget.receiverId],
+        'participantNames': {
+          _currentUser.uid: _currentUser.displayName ?? 'Me',
+          widget.receiverId: widget.receiverName,
+        },
+        'participantImages': {
+          _currentUser.uid: _currentUser.photoURL ?? '',
+          widget.receiverId: widget.receiverImageUrl,
+        },
+        'lastMessage': text,
+        'lastMessageTimestamp': FieldValue.serverTimestamp(),
+        // Atomically increment the receiver's unread count.
+        // This is safe even if the field doesn't exist yet.
+        'unreadCounts.${widget.receiverId}': FieldValue.increment(1),
       },
-      'participantImages': {
-        _currentUser.uid: _currentUser.photoURL ?? '',
-        widget.receiverId: widget.receiverImageUrl,
-      },
-      'lastMessage': text,
-      'lastMessageTimestamp': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      // Use SetOptions(merge: true) to create the doc if it doesn't exist,
+      // or update it if it does. This is crucial for the first message.
+      SetOptions(merge: true),
+    );
 
     batch.set(newMessageRef, {
       'senderId': _currentUser.uid,
@@ -159,7 +189,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                // --- FIX 3: Schedule the scroll animation after the frame is built ---
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
                     _scrollController.animateTo(
@@ -173,7 +202,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 final messages = snapshot.data!.docs;
 
                 return ListView.builder(
-                  // --- FIX 4: Attach the controller to the ListView ---
                   controller: _scrollController,
                   reverse: true,
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
