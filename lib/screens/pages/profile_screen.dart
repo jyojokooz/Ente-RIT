@@ -86,6 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return result == null ? null : File(result.path);
   }
 
+  // --- THIS METHOD IS NOW FIXED ---
   Future<void> _loadAllData() async {
     if (mounted && !_isLoading) {
       await Future.delayed(const Duration(milliseconds: 300));
@@ -135,7 +136,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
-          _connections = data['connections'] ?? [];
+
+          // --- START: FIX FOR CONNECTION COUNT ---
+
+          // 1. Get the raw list of connection IDs from the user document.
+          final List<dynamic> rawConnections = data['connections'] ?? [];
+
+          if (rawConnections.isNotEmpty) {
+            // 2. Create a list of Futures to fetch each connection's document.
+            final List<Future<DocumentSnapshot>> connectionFutures =
+                rawConnections
+                    .map(
+                      (id) =>
+                          FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(id as String)
+                              .get(),
+                    )
+                    .toList();
+
+            // 3. Wait for all the fetches to complete in parallel.
+            final List<DocumentSnapshot> connectionSnapshots =
+                await Future.wait(connectionFutures);
+
+            // 4. Filter the results, keeping only the IDs of users that actually exist.
+            //    This creates a clean list of valid, existing connections.
+            _connections =
+                connectionSnapshots
+                    .where((snapshot) => snapshot.exists)
+                    .map((snapshot) => snapshot.id)
+                    .toList();
+          } else {
+            // If there are no connections, just set an empty list.
+            _connections = [];
+          }
+
+          // --- END: FIX FOR CONNECTION COUNT ---
+
           _determineConnectionStatus(
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
