@@ -1,3 +1,5 @@
+// cafeteria_admin_screen.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,148 +13,179 @@ class CafeteriaAdminScreen extends StatefulWidget {
 }
 
 class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
-  // Method to update the status of an order
-  Future<void> _updateOrderStatus(
-    DocumentSnapshot orderDoc,
-    String newStatus,
-  ) async {
-    await orderDoc.reference.update({'orderStatus': newStatus});
-  }
-
-  // Shows a dialog with status options
-  void _showStatusUpdateDialog(DocumentSnapshot orderDoc) {
-    const statuses = ['Placed', 'Preparing', 'Ready for Pickup', 'Completed'];
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey.shade800,
-          title: const Text('Update Order Status'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            // --- THIS IS THE FIX ---
-            // The unnecessary .toList() has been removed from the .map() call.
-            children:
-                statuses.map(
-                  (status) {
-                    return ListTile(
-                      title: Text(status),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        _updateOrderStatus(orderDoc, status);
-                      },
-                    );
-                  },
-                ).toList(), // This .toList() is necessary for the Column's children
+  // Method to update the status of an order in Firestore
+  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('cafeteria_orders')
+          .doc(orderId)
+          .update({'orderStatus': newStatus});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Order status updated to "$newStatus"'),
+            backgroundColor: Colors.green,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
         );
-      },
-    );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Manage Cafeteria Orders', style: GoogleFonts.poppins()),
+        title: Text('Manage Food Orders', style: GoogleFonts.poppins()),
         backgroundColor: Colors.grey.shade900,
       ),
       body: StreamBuilder<QuerySnapshot>(
+        // Listen to the live stream of all cafeteria orders
         stream:
             FirebaseFirestore.instance
                 .collection('cafeteria_orders')
-                .orderBy('pickupTime', descending: false)
+                .orderBy(
+                  'pickupTime',
+                  descending: false,
+                ) // Show upcoming orders first
                 .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Something went wrong: ${snapshot.error}'),
-            );
-          }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No orders found.'));
+            return Center(
+              child: Text(
+                'No active orders found.',
+                style: GoogleFonts.poppins(),
+              ),
+            );
           }
 
           final orders = snapshot.data!.docs;
-          final activeOrders =
-              orders.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return data['orderStatus'] != 'Completed';
-              }).toList();
-
-          if (activeOrders.isEmpty) {
-            return const Center(child: Text('No active orders.'));
-          }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(8.0),
-            itemCount: activeOrders.length,
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            itemCount: orders.length,
             itemBuilder: (context, index) {
-              final orderDoc = activeOrders[index];
-              final order = orderDoc.data() as Map<String, dynamic>;
-              final pickupTime = (order['pickupTime'] as Timestamp).toDate();
+              final orderDoc = orders[index];
+              final data = orderDoc.data() as Map<String, dynamic>;
+
+              // --- THIS IS THE FIX ---
+              // We are now fetching and displaying the 'userName' from the order document.
+              final String userName = data['userName'] ?? 'Unknown User';
+              // --- END OF FIX ---
+
+              final List<dynamic> items = data['items'] ?? [];
+              final String orderStatus = data['orderStatus'] ?? 'Unknown';
+              final double totalPrice = data['totalPrice'] ?? 0.0;
+              final Timestamp pickupTimestamp = data['pickupTime'];
+              final String formattedPickupTime = DateFormat(
+                'EEE, MMM d, h:mm a',
+              ).format(pickupTimestamp.toDate());
 
               return Card(
-                color: Colors.grey.shade800,
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Pickup: ${DateFormat.yMMMMd().add_jm().format(pickupTime)}',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text('Ordered by: ${order['userName'] ?? 'N/A'}'),
-                      const Divider(height: 20),
-
-                      // This is where the original error was, but it's for the dialog, not here.
-                      // The main build method's list view of items is fine.
-                      ...(order['items'] as List).map((item) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: Text(
-                            '• ${item['itemName']} (x${item['quantity']})',
-                          ),
-                        );
-                      }),
-
-                      const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                color: Colors.grey.shade900,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ExpansionTile(
+                  // Display the user's name in the tile's title
+                  title: Text(
+                    'Order for: $userName',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Pickup: $formattedPickupTime',
+                    style: GoogleFonts.poppins(color: Colors.white70),
+                  ),
+                  trailing: Text(
+                    '₹${totalPrice.toStringAsFixed(2)}',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: Colors.yellow,
+                    ),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          const Divider(height: 24),
                           Text(
-                            'Status: ${order['orderStatus']}',
-                            style: TextStyle(
-                              color: _getStatusColor(order['orderStatus']),
-                              fontWeight: FontWeight.bold,
+                            "Items:",
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          ElevatedButton(
-                            onPressed: () => _showStatusUpdateDialog(orderDoc),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.yellow,
-                              foregroundColor: Colors.black,
+                          const SizedBox(height: 8),
+                          // List all items in the order
+                          ...items.map(
+                            (item) => Text(
+                              '• ${item['itemName']} (x${item['quantity']})',
+                              style: GoogleFonts.poppins(),
                             ),
-                            child: const Text('Update'),
+                          ),
+                          const SizedBox(height: 16),
+                          // Display and allow changing the order status
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Status:',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              DropdownButton<String>(
+                                value: orderStatus,
+                                dropdownColor: Colors.grey.shade800,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.yellow,
+                                ),
+                                underline: const SizedBox(),
+                                items:
+                                    <String>[
+                                      'Placed',
+                                      'Preparing',
+                                      'Ready for Pickup',
+                                      'Completed',
+                                      'Cancelled',
+                                    ].map<DropdownMenuItem<String>>((
+                                      String value,
+                                    ) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value),
+                                      );
+                                    }).toList(),
+                                onChanged: (String? newStatus) {
+                                  if (newStatus != null) {
+                                    _updateOrderStatus(orderDoc.id, newStatus);
+                                  }
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -160,20 +193,5 @@ class _CafeteriaAdminScreenState extends State<CafeteriaAdminScreen> {
         },
       ),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Placed':
-        return Colors.blue.shade300;
-      case 'Preparing':
-        return Colors.orange.shade300;
-      case 'Ready for Pickup':
-        return Colors.green.shade300;
-      case 'Completed':
-        return Colors.grey;
-      default:
-        return Colors.white;
-    }
   }
 }
