@@ -22,7 +22,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
     super.dispose();
   }
 
-  // --- START: THE UPDATED _postComment METHOD ---
   Future<void> _postComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
@@ -80,7 +79,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
           final newCommentDocRef = commentCollectionRef.doc();
           transaction.set(newCommentDocRef, newCommentData);
 
-          // --- NEW: LOGIC TO CREATE NOTIFICATION ---
           // Only create a notification if the commenter is not the post author.
           if (postAuthorId != null && postAuthorId != _currentUser.uid) {
             final newNotificationDocRef = notificationsCollectionRef.doc();
@@ -105,7 +103,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
           }
         });
   }
-  // --- END: UPDATED METHOD ---
 
   Future<void> _deleteComment(String commentId) async {
     final postRef = FirebaseFirestore.instance
@@ -147,6 +144,42 @@ class _CommentsScreenState extends State<CommentsScreen> {
     }
   }
 
+  // --- NEW: ASYNC FUNCTION TO FILTER COMMENTS ---
+  Future<List<QueryDocumentSnapshot>> _filterComments(
+    List<QueryDocumentSnapshot> rawComments,
+  ) async {
+    if (rawComments.isEmpty) {
+      return [];
+    }
+
+    // 1. Get all unique user IDs from the comments
+    final userIds =
+        rawComments.map((doc) => doc['userId'] as String).toSet().toList();
+
+    // 2. Fetch user documents for all those IDs in parallel
+    final userFutures =
+        userIds
+            .map(
+              (id) =>
+                  FirebaseFirestore.instance.collection('users').doc(id).get(),
+            )
+            .toList();
+
+    final userSnapshots = await Future.wait(userFutures);
+
+    // 3. Create a Set of user IDs that actually exist
+    final existingUserIds =
+        userSnapshots
+            .where((snap) => snap.exists)
+            .map((snap) => snap.id)
+            .toSet();
+
+    // 4. Return only the comments where the author's ID is in the existing set
+    return rawComments
+        .where((comment) => existingUserIds.contains(comment['userId']))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,6 +194,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
       body: Column(
         children: [
           Expanded(
+            // --- UPDATED WIDGET STRUCTURE ---
             child: StreamBuilder<QuerySnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -185,73 +219,107 @@ class _CommentsScreenState extends State<CommentsScreen> {
                   );
                 }
 
-                final comments = snapshot.data!.docs;
+                // The raw list of comments from the stream
+                final rawComments = snapshot.data!.docs;
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(8.0),
-                  itemCount: comments.length,
-                  itemBuilder: (context, index) {
-                    final comment = comments[index];
-                    final commentData = comment.data() as Map<String, dynamic>;
-                    final userImage = commentData['userImageUrl'] ?? '';
-                    final timestamp =
-                        (commentData['timestamp'] as Timestamp?)?.toDate();
-                    final commentAuthorId = commentData['userId'];
-                    final bool isAuthor = _currentUser.uid == commentAuthorId;
-
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage:
-                            userImage.isNotEmpty
-                                ? NetworkImage(userImage)
-                                : null,
-                        child:
-                            userImage.isEmpty
-                                ? const Icon(Icons.person_outline)
-                                : null,
-                      ),
-                      title: Row(
-                        children: [
-                          Text(
-                            commentData['userName'] ?? 'User',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            timestamp != null
-                                ? timeago.format(timestamp, locale: 'en_short')
-                                : '',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 2.0),
+                // Use a FutureBuilder to wait for our filtering to complete
+                return FutureBuilder<List<QueryDocumentSnapshot>>(
+                  future: _filterComments(rawComments),
+                  builder: (context, filteredSnapshot) {
+                    if (filteredSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      // While filtering, you can show a loader or the old list.
+                      // A loader is better to avoid flicker.
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.yellow),
+                      );
+                    }
+                    if (!filteredSnapshot.hasData ||
+                        filteredSnapshot.data!.isEmpty) {
+                      return Center(
                         child: Text(
-                          commentData['text'] ?? '',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white.withAlpha(220),
-                          ),
+                          'No comments to display.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(color: Colors.white70),
                         ),
-                      ),
-                      trailing:
-                          isAuthor
-                              ? IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                  size: 20,
+                      );
+                    }
+
+                    // The clean, filtered list of comments
+                    final comments = filteredSnapshot.data!;
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(8.0),
+                      itemCount: comments.length,
+                      itemBuilder: (context, index) {
+                        final comment = comments[index];
+                        final commentData =
+                            comment.data() as Map<String, dynamic>;
+                        final userImage = commentData['userImageUrl'] ?? '';
+                        final timestamp =
+                            (commentData['timestamp'] as Timestamp?)?.toDate();
+                        final commentAuthorId = commentData['userId'];
+                        final bool isAuthor =
+                            _currentUser.uid == commentAuthorId;
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage:
+                                userImage.isNotEmpty
+                                    ? NetworkImage(userImage)
+                                    : null,
+                            child:
+                                userImage.isEmpty
+                                    ? const Icon(Icons.person_outline)
+                                    : null,
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                commentData['userName'] ?? 'User',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  fontSize: 14,
                                 ),
-                                onPressed: () => _deleteComment(comment.id),
-                              )
-                              : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                timestamp != null
+                                    ? timeago.format(
+                                      timestamp,
+                                      locale: 'en_short',
+                                    )
+                                    : '',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              commentData['text'] ?? '',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white.withAlpha(220),
+                              ),
+                            ),
+                          ),
+                          trailing:
+                              isAuthor
+                                  ? IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.redAccent,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => _deleteComment(comment.id),
+                                  )
+                                  : null,
+                        );
+                      },
                     );
                   },
                 );
