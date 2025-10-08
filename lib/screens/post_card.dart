@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
-// import 'post_card_placeholder.dart'; // REMOVED: This import was unused and causing a warning.
 
 class PostCard extends StatelessWidget {
   final DocumentSnapshot postSnapshot;
@@ -38,6 +37,47 @@ class PostCard extends StatelessWidget {
     }
     return originalUrl;
   }
+
+  // --- NEW: HELPER FUNCTION TO VALIDATE COMMENTS ---
+  // This function is moved here from comments_screen.dart to be reused.
+  Future<int> _getValidatedCommentCount(
+    List<QueryDocumentSnapshot> rawComments,
+  ) async {
+    if (rawComments.isEmpty) {
+      return 0;
+    }
+
+    // 1. Get all unique user IDs from the comments
+    final userIds =
+        rawComments.map((doc) => doc['userId'] as String).toSet().toList();
+
+    // 2. Fetch user documents for all those IDs in parallel
+    final userFutures =
+        userIds
+            .map(
+              (id) =>
+                  FirebaseFirestore.instance.collection('users').doc(id).get(),
+            )
+            .toList();
+
+    final userSnapshots = await Future.wait(userFutures);
+
+    // 3. Create a Set of user IDs that actually exist
+    final existingUserIds =
+        userSnapshots
+            .where((snap) => snap.exists)
+            .map((snap) => snap.id)
+            .toSet();
+
+    // 4. Count only the comments where the author's ID is in the existing set
+    final validCommentCount =
+        rawComments
+            .where((comment) => existingUserIds.contains(comment['userId']))
+            .length;
+
+    return validCommentCount;
+  }
+  // --- END OF NEW HELPER FUNCTION ---
 
   @override
   Widget build(BuildContext context) {
@@ -109,33 +149,67 @@ class PostCard extends StatelessWidget {
                         : _buildImageViewer(context, originalMediaUrl, heroTag),
               ),
             const SizedBox(height: 12),
+            // --- START: UPDATED ACTION BUTTONS LOGIC ---
+            // This whole section is now wrapped in builders to get real-time, validated counts.
             StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
                       .collection('posts')
                       .doc(postSnapshot.id)
                       .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  final likesList = postData['likes'] ?? [];
-                  return _buildActionButtons(
-                    context,
-                    isLiked: likesList.contains(currentUserId),
-                    likeCount: likesList.length,
-                    commentCount: postData['comments'] ?? 0,
-                  );
-                }
-                final realTimeData =
-                    snapshot.data!.data() as Map<String, dynamic>;
-                final rtLikes = realTimeData['likes'] ?? [];
-                return _buildActionButtons(
-                  context,
-                  isLiked: rtLikes.contains(currentUserId),
-                  likeCount: rtLikes.length,
-                  commentCount: realTimeData['comments'] ?? 0,
+              builder: (context, postStreamSnapshot) {
+                // Get real-time like data from the post document itself
+                final likesData =
+                    postStreamSnapshot.hasData
+                        ? postStreamSnapshot.data!.data()
+                            as Map<String, dynamic>
+                        : postData;
+                final rtLikes = likesData['likes'] ?? [];
+
+                // Now, stream the comments subcollection to get the real count
+                return StreamBuilder<QuerySnapshot>(
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection('posts')
+                          .doc(postSnapshot.id)
+                          .collection('comments')
+                          .snapshots(),
+                  builder: (context, commentStreamSnapshot) {
+                    if (!commentStreamSnapshot.hasData) {
+                      // While loading comments, show the potentially outdated count from the post
+                      return _buildActionButtons(
+                        context,
+                        isLiked: rtLikes.contains(currentUserId),
+                        likeCount: rtLikes.length,
+                        commentCount: postData['comments'] ?? 0,
+                      );
+                    }
+
+                    final rawComments = commentStreamSnapshot.data!.docs;
+
+                    // Use a FutureBuilder to validate the raw comments list
+                    return FutureBuilder<int>(
+                      future: _getValidatedCommentCount(rawComments),
+                      builder: (context, finalCountSnapshot) {
+                        // Use the validated count if available, otherwise fallback
+                        final commentCount =
+                            finalCountSnapshot.hasData
+                                ? finalCountSnapshot.data!
+                                : postData['comments'] ?? 0;
+
+                        return _buildActionButtons(
+                          context,
+                          isLiked: rtLikes.contains(currentUserId),
+                          likeCount: rtLikes.length,
+                          commentCount: commentCount,
+                        );
+                      },
+                    );
+                  },
                 );
               },
             ),
+            // --- END: UPDATED ACTION BUTTONS LOGIC ---
           ],
         ),
       ),
@@ -348,7 +422,6 @@ class PostCard extends StatelessWidget {
                       ),
                     ],
                 color: Colors.grey.shade800,
-                // FIXED: Moved 'icon' property to the end to resolve the lint warning.
                 icon: const Icon(Icons.more_horiz, color: secondaryTextColor),
               ),
           ],
