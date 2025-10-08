@@ -7,10 +7,10 @@ import 'post_card.dart';
 import 'post_card_placeholder.dart';
 import 'comments_screen.dart';
 import 'edit_post_screen.dart';
+// Make sure this path is correct for your project structure
 import 'pages/profile_screen.dart';
 
 class PostDetailScreen extends StatefulWidget {
-  // Use postId for a more robust and reusable screen.
   final String postId;
   const PostDetailScreen({super.key, required this.postId});
 
@@ -22,7 +22,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   final _firestore = FirebaseFirestore.instance;
 
-  // Updated to include notification logic for consistency.
   Future<void> _toggleLike(
     String postAuthorId,
     List<dynamic> currentLikes,
@@ -83,6 +82,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  // --- THIS FUNCTION HAS BEEN UPDATED ---
   Future<void> _deletePost() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -90,9 +90,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text('Delete Post?'),
+            backgroundColor: Colors.grey.shade900,
+            title: const Text(
+              'Delete Post?',
+              style: TextStyle(color: Colors.white),
+            ),
             content: const Text(
               'Are you sure you want to permanently delete this post?',
+              style: TextStyle(color: Colors.white70),
             ),
             actions: [
               TextButton(
@@ -120,7 +125,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           ),
         );
         if (navigator.canPop()) {
-          navigator.pop();
+          // *** THE FIX IS HERE ***
+          // Instead of a simple pop(), we pop with a result map.
+          // This tells the previous screen (the feed) what happened.
+          navigator.pop({'action': 'deleted', 'postId': widget.postId});
         }
       } catch (e) {
         if (scaffoldMessenger.mounted) {
@@ -135,22 +143,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black, // Added for consistent theme
       appBar: AppBar(
         title: Text("Post", style: GoogleFonts.poppins()),
         backgroundColor: Colors.grey.shade900,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        // The stream now correctly fetches the document using the postId.
         stream: _firestore.collection('posts').doc(widget.postId).snapshots(),
         builder: (context, snapshot) {
-          // While waiting, show the professional shimmer placeholder.
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SingleChildScrollView(child: PostCardPlaceholder());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text("Error loading post."));
+            return const Center(
+              child: Text(
+                "Error loading post.",
+                style: TextStyle(color: Colors.white70),
+              ),
+            );
           }
-          // Handle the case where the post was deleted.
           if (!snapshot.hasData || !snapshot.data!.exists) {
             return Center(
               child: Text(
@@ -161,7 +172,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             );
           }
 
-          // On success, extract all data from the fresh snapshot.
           final postSnapshot = snapshot.data!;
           final postData = postSnapshot.data() as Map<String, dynamic>;
           final postAuthorId = postData['userId'] ?? '';

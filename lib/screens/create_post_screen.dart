@@ -37,8 +37,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<File?> _compressImage(File file) async {
     if (mounted) setState(() => _uploadStatus = 'Compressing image...');
     final tempDir = await getTemporaryDirectory();
-    // --- THIS IS THE TYPO FIX ---
-    // Changed 'temp.path' to 'tempDir.path'
     final targetPath = p.join(tempDir.path, '${DateTime.now().millisecondsSinceEpoch}.jpg');
 
     final XFile? result = await FlutterImageCompress.compressAndGetFile(
@@ -122,7 +120,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  // --- MAIN POST CREATION LOGIC (Handles BOTH Image and Video) ---
+  // --- MAIN POST CREATION LOGIC ---
   Future<void> _createPost() async {
     if (_mediaFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select an image or video.')));
@@ -185,6 +183,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'postThumbnailUrl': thumbnailUrl,
         'caption': _captionController.text.trim(),
         'userId': user.uid,
+        // --- NOTE: The user data here is ALREADY CORRECT. This is good! ---
         'userName': userData['displayName'] ?? 'A User',
         'username': userData['username'] ?? '',
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
@@ -192,10 +191,32 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'likes': [],
         'comments': 0,
       };
-      await FirebaseFirestore.instance.collection('posts').add(postData);
+
+      // ***************************************************************
+      // --- START OF THE FIX ---
+      // ***************************************************************
+
+      // 1. Add the data to Firestore and get the DocumentReference
+      final DocumentReference docRef = await FirebaseFirestore.instance.collection('posts').add(postData);
+
+      // 2. Create a new map with the data we want to return to the feed screen
+      final Map<String, dynamic> resultData = Map<String, dynamic>.from(postData);
+
+      // 3. Add the new post's ID, which is essential for liking/commenting later
+      resultData['id'] = docRef.id;
+
+      // 4. Replace the server timestamp with a local one for immediate display
+      resultData['timestamp'] = Timestamp.now();
 
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+
+      // 5. Pop the screen and pass the complete post data back
+      Navigator.of(context).pop(resultData);
+
+      // ***************************************************************
+      // --- END OF THE FIX (The old `pop(true)` line is removed) ---
+      // ***************************************************************
+
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create post: ${e.toString()}')));
