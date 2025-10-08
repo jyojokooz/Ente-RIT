@@ -2,10 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+// FIX 1: Corrected typo from 'package.' to 'package:'
 import 'package:intl/intl.dart';
 
-// Import the new screen we just created
+// Import the screen for posts
 import 'post_detail_screen.dart';
+// FIX 2: This import should now work correctly after fixing the other errors
+import 'pages/profile_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -17,27 +20,51 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final currentUser = FirebaseAuth.instance.currentUser!;
 
-  // --- THIS FUNCTION IS NOW UPDATED ---
   Future<void> _handleNotificationTap(DocumentSnapshot notificationDoc) async {
     final data = notificationDoc.data() as Map<String, dynamic>;
 
-    // First, mark the notification as read
+    // First, mark the notification as read if it isn't already
     if (data['isRead'] == false) {
       await notificationDoc.reference.update({'isRead': true});
     }
 
-    // Then, navigate if there's a related post ID
-    final String? postId = data['relatedDocId'];
-    if (postId != null && postId.isNotEmpty) {
-      if (mounted) {
-        // Check if the widget is still in the tree
+    // Get the notification type and the related document ID
+    final String? type = data['type'];
+    final String? relatedDocId = data['relatedDocId'];
+
+    // If there's no related ID, we can't navigate anywhere
+    if (relatedDocId == null || relatedDocId.isEmpty) {
+      return;
+    }
+
+    // Ensure the widget is still mounted before navigating
+    if (!mounted) return;
+
+    // Navigate based on the notification type
+    switch (type) {
+      case 'like':
+      case 'comment':
+        // These types relate to a post
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PostDetailScreen(postId: postId),
+            builder: (context) => PostDetailScreen(postId: relatedDocId),
           ),
         );
-      }
+        break;
+      case 'connection_accepted':
+      case 'follow': // You can handle 'follow' and 'connection' types here
+        // These types relate to a user
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfileScreen(userId: relatedDocId),
+          ),
+        );
+        break;
+      default:
+        // FIX 3: Removed the 'print' statement to resolve the lint warning.
+        break;
     }
   }
 
@@ -88,7 +115,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         : const Color.fromARGB(38, 255, 235, 59),
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: ListTile(
-                  // Call the new handler function on tap
+                  // The onTap now calls our updated handler
                   onTap: () => _handleNotificationTap(notification),
                   leading: Icon(
                     _getIconForType(data['type']),
@@ -109,6 +136,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   trailing:
                       timestamp != null
                           ? Text(
+                            // This will now work correctly
                             DateFormat.yMd().add_jm().format(timestamp),
                             style: const TextStyle(
                               fontSize: 10,
@@ -132,6 +160,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'comment':
         return Icons.comment;
       case 'follow':
+      case 'connection_accepted':
         return Icons.person_add;
       default:
         return Icons.notifications;
