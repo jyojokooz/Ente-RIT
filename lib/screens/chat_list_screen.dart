@@ -1,5 +1,3 @@
-// chat_list_screen.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +16,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
   Future<void> _deleteConversation(String chatRoomId) async {
-    // ... This method is unchanged
     final chatDocRef = FirebaseFirestore.instance
         .collection('chats')
         .doc(chatRoomId);
@@ -52,7 +49,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 .orderBy('lastMessageTimestamp', descending: true)
                 .snapshots(),
         builder: (context, snapshot) {
-          // ... waiting and no data states are unchanged ...
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.yellow),
@@ -76,17 +72,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
               final chatData = chatDoc.data() as Map<String, dynamic>;
               final chatRoomId = chatDoc.id;
 
-              // --- MODIFICATION: Extract the unread count ---
-              // Use null-aware operators to safely get the count.
               final unreadCounts =
                   chatData['unreadCounts'] as Map<String, dynamic>? ?? {};
               final unreadCount = unreadCounts[_currentUser.uid] as int? ?? 0;
-              
-              // ... rest of the variable assignments are unchanged ...
+
               final List<dynamic> participants = chatData['participants'];
               final otherUserId = participants.firstWhere(
                 (id) => id != _currentUser.uid,
+                orElse: () => '',
               );
+
+              // Handle case where other user might not be found
+              if (otherUserId.isEmpty) return const SizedBox.shrink();
+
               final otherUserName =
                   chatData['participantNames'][otherUserId] ?? 'User';
               final otherUserImage =
@@ -97,7 +95,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
               return Dismissible(
                 key: Key(chatRoomId),
-                // ... dismissible properties are unchanged ...
                 background: Container(
                   color: Colors.red.shade800,
                   alignment: Alignment.centerRight,
@@ -111,26 +108,29 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 child: ListTile(
                   leading: CircleAvatar(
                     radius: 28,
-                    backgroundImage: otherUserImage.isNotEmpty
-                        ? NetworkImage(otherUserImage)
-                        : null,
-                    child: otherUserImage.isEmpty
-                        ? const Icon(Icons.person)
-                        : null,
+                    backgroundImage:
+                        otherUserImage.isNotEmpty
+                            ? NetworkImage(otherUserImage)
+                            : null,
+                    child:
+                        otherUserImage.isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
                   ),
-                  title: Text(otherUserName),
+                  title: Text(
+                    otherUserName,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                   subtitle: Text(
                     lastMessage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    // --- MODIFICATION: Make text bold if there are unread messages ---
                     style: TextStyle(
                       color: unreadCount > 0 ? Colors.white : Colors.white70,
                       fontWeight:
                           unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
-                  // --- MODIFICATION: Update the trailing widget to show the count ---
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -155,14 +155,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ),
                           ),
                           backgroundColor: Colors.yellow.shade700,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 0, vertical: 0),
-                          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: EdgeInsets.zero,
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ),
                           visualDensity: VisualDensity.compact,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                         )
                       else
-                        // Add a spacer to keep alignment consistent
                         const SizedBox(height: 24),
                     ],
                   ),
@@ -170,11 +171,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ChatScreen(
-                          receiverId: otherUserId,
-                          receiverName: otherUserName,
-                          receiverImageUrl: otherUserImage,
-                        ),
+                        builder:
+                            (context) => ChatScreen(
+                              receiverId: otherUserId,
+                              receiverName: otherUserName,
+                              receiverImageUrl: otherUserImage,
+                            ),
                       ),
                     );
                   },

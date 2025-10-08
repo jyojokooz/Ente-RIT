@@ -25,9 +25,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String _chatRoomId;
-  // --- MODIFICATION 1: Use a DocumentReference for easier access to the main chat doc ---
   late final DocumentReference _chatDocRef;
-  late final CollectionReference _messagesCollection;
+  // --- CHANGE 1: Specify the type of data in the CollectionReference ---
+  late final CollectionReference<Map<String, dynamic>> _messagesCollection;
 
   final ScrollController _scrollController = ScrollController();
 
@@ -38,30 +38,25 @@ class _ChatScreenState extends State<ChatScreen> {
     ids.sort();
     _chatRoomId = ids.join('_');
 
-    // Define references for both the chat document and its messages sub-collection
     _chatDocRef = FirebaseFirestore.instance
         .collection('chats')
         .doc(_chatRoomId);
-    _messagesCollection = _chatDocRef.collection('messages');
+    // --- CHANGE 2: The type is inferred here from the variable's definition ---
+    _messagesCollection = _chatDocRef
+        .collection('messages')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snapshot, _) => snapshot.data()!,
+          toFirestore: (data, _) => data,
+        );
 
-    // --- MODIFICATION 2: Reset the user's unread count when they enter the screen ---
     _resetUnreadCount();
   }
 
-  // --- NEW METHOD: To reset the unread count for the current user ---
   void _resetUnreadCount() async {
-    // We run this without awaiting and wrap in a try-catch because:
-    // 1. We don't need to wait for it to finish. The UI can load immediately.
-    // 2. If the chat document doesn't exist yet (i.e., this is the first
-    //    message), this update call would fail. The catch block prevents a crash.
     try {
-      await _chatDocRef.update({
-        // Use dot notation to target the specific user's key in the map
-        'unreadCounts.${_currentUser.uid}': 0,
-      });
+      await _chatDocRef.update({'unreadCounts.${_currentUser.uid}': 0});
     } catch (e) {
-      // This is expected if the chat document hasn't been created yet.
-      // print("Could not reset unread count (likely a new chat): $e");
+      // Expected if chat doc doesn't exist yet.
     }
   }
 
@@ -76,35 +71,34 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final userDoc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUser.uid)
+            .get();
+    final userData = userDoc.data() ?? {};
+    final senderName = userData['displayName'] ?? 'A User';
+    final senderImageUrl = userData['profilePhotoUrl'] ?? '';
+
     final batch = FirebaseFirestore.instance.batch();
-    // Use the predefined collection reference
     final newMessageRef = _messagesCollection.doc();
 
     _messageController.clear();
 
-    // --- MODIFICATION 3: Update the batch operation to handle unread counts ---
-    batch.set(
-      _chatDocRef,
-      {
-        'participants': [_currentUser.uid, widget.receiverId],
-        'participantNames': {
-          _currentUser.uid: _currentUser.displayName ?? 'Me',
-          widget.receiverId: widget.receiverName,
-        },
-        'participantImages': {
-          _currentUser.uid: _currentUser.photoURL ?? '',
-          widget.receiverId: widget.receiverImageUrl,
-        },
-        'lastMessage': text,
-        'lastMessageTimestamp': FieldValue.serverTimestamp(),
-        // Atomically increment the receiver's unread count.
-        // This is safe even if the field doesn't exist yet.
-        'unreadCounts.${widget.receiverId}': FieldValue.increment(1),
+    batch.set(_chatDocRef, {
+      'participants': [_currentUser.uid, widget.receiverId],
+      'participantNames': {
+        _currentUser.uid: senderName,
+        widget.receiverId: widget.receiverName,
       },
-      // Use SetOptions(merge: true) to create the doc if it doesn't exist,
-      // or update it if it does. This is crucial for the first message.
-      SetOptions(merge: true),
-    );
+      'participantImages': {
+        _currentUser.uid: senderImageUrl,
+        widget.receiverId: widget.receiverImageUrl,
+      },
+      'lastMessage': text,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+      'unreadCounts.${widget.receiverId}': FieldValue.increment(1),
+    }, SetOptions(merge: true));
 
     batch.set(newMessageRef, {
       'senderId': _currentUser.uid,
@@ -164,7 +158,8 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
+            // --- CHANGE 3: Specify the type for the StreamBuilder ---
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream:
                   _messagesCollection
                       .orderBy('timestamp', descending: true)
@@ -192,7 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
                     _scrollController.animateTo(
-                      0.0, // Scroll to the top of the reversed list
+                      0.0,
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeOut,
                     );
@@ -208,20 +203,22 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final doc = messages[index];
-                    final data = doc.data() as Map<String, dynamic>;
+                    // --- CHANGE 4: The cast `as Map<String, dynamic>` is now removed ---
+                    final data = doc.data();
                     final isMe = data['senderId'] == _currentUser.uid;
 
                     final isLastInBlock =
                         (index == 0) ||
-                        (messages[index - 1].data()
-                                as Map<String, dynamic>)['senderId'] !=
+                        // --- CHANGE 5: Cast removed here ---
+                        (messages[index - 1].data())['senderId'] !=
                             data['senderId'];
 
+                    // The cast to Timestamp? is still needed because the map value is `dynamic`
                     final currentTimestamp = data['timestamp'] as Timestamp?;
                     final nextTimestamp =
                         (index < messages.length - 1)
-                            ? (messages[index + 1].data()
-                                    as Map<String, dynamic>)['timestamp']
+                            // --- CHANGE 6: Cast removed here ---
+                            ? (messages[index + 1].data())['timestamp']
                                 as Timestamp?
                             : null;
 
