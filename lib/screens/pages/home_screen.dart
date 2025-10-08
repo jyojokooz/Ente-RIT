@@ -4,17 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // --- Screen Imports (Corrected Paths) ---
-// Go up one level from 'pages' to 'screens' to find these files.
+// These files are one level up, in the 'screens' directory.
 import '../comments_screen.dart';
 import '../edit_post_screen.dart';
 import '../notifications_screen.dart';
 import '../chat_list_screen.dart';
-import 'profile_screen.dart'; // This one is in the same 'pages' folder
+import '../post_card.dart'; // Correct path to post_card.dart
+import '../post_card_placeholder.dart'; // Correct path
 
-// --- Widget Imports (Corrected Paths) ---
-// Go up two levels from 'pages' to 'lib', then into 'widgets'.
-import '../post_card.dart';
-import '../post_card_placeholder.dart';
+// ProfileScreen is in the same 'pages' directory
+import 'profile_screen.dart';
+
+// --- Widget Imports (Corrected Path) ---
+// Assuming 'widgets' is a folder inside 'lib'
 import '../../widgets/notification_badge.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,11 +29,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
 
+  /// Triggers a refresh of the post feed.
   Future<void> _refreshPosts() async {
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
+  /// Navigates to the screen for editing a post.
   void _editPost(String postId, String currentCaption) {
     Navigator.push(
       context,
@@ -69,13 +73,13 @@ class _HomeScreenState extends State<HomeScreen> {
           'type': 'like',
           'relatedDocId': postId,
           'isRead': false,
-          'isDelivered': false,
           'timestamp': FieldValue.serverTimestamp(),
         });
       }
     }
   }
 
+  /// Navigates to the comments screen for a specific post.
   void _onCommentTapped(String postId) {
     Navigator.push(
       context,
@@ -83,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Navigates to a user's profile screen.
   void _onProfileTapped(String userId) {
     Navigator.push(
       context,
@@ -90,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Shows a confirmation dialog and deletes a post if confirmed.
   Future<void> _deletePost(String postId) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
@@ -97,16 +103,17 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Colors.grey.shade900,
-          title: const Text('Delete Post?'),
+          title: const Text(
+            'Delete Post?',
+            style: TextStyle(color: Colors.white),
+          ),
           content: const Text(
             'Are you sure you want to permanently delete this post?',
+            style: TextStyle(color: Colors.white70),
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.white70),
-              ),
+              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
@@ -228,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Builds the top bar with the notification button and chat button.
+  /// Builds the top bar with the app title and action buttons.
   Widget _buildTopBar(Color textColor, Color iconBgColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),

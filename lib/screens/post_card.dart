@@ -1,5 +1,3 @@
-// lib/widgets/post_card.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,11 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../screens/full_screen_image_viewer.dart';
-import '../screens/full_screen_video_player.dart';
-import 'post_card_placeholder.dart';
+import 'full_screen_image_viewer.dart';
+import 'full_screen_video_player.dart';
+// import 'post_card_placeholder.dart'; // REMOVED: This import was unused and causing a warning.
 
-class PostCard extends StatefulWidget {
+class PostCard extends StatelessWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
@@ -29,49 +27,6 @@ class PostCard extends StatefulWidget {
     required this.onEditPressed,
   });
 
-  @override
-  State<PostCard> createState() => _PostCardState();
-}
-
-class _PostCardState extends State<PostCard> {
-  Map<String, dynamic>? _authorData;
-  bool _isLoadingAuthor = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchAuthorData();
-  }
-
-  Future<void> _fetchAuthorData() async {
-    try {
-      final postData = widget.postSnapshot.data() as Map<String, dynamic>;
-      final authorId = postData['userId'];
-      if (authorId == null || authorId.isEmpty) {
-        throw Exception("Author ID is missing");
-      }
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(authorId)
-              .get();
-
-      if (mounted) {
-        setState(() {
-          _authorData = userDoc.data();
-          _isLoadingAuthor = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingAuthor = false;
-          _authorData = {'displayName': 'Unknown User', 'username': ''};
-        });
-      }
-    }
-  }
-
   String getOptimizedCloudinaryUrl(String originalUrl) {
     if (!originalUrl.contains('res.cloudinary.com')) {
       return originalUrl;
@@ -86,24 +41,30 @@ class _PostCardState extends State<PostCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingAuthor) {
-      return const PostCardPlaceholder();
+    final postData = postSnapshot.data() as Map<String, dynamic>?;
+
+    if (postData == null) {
+      return const SizedBox.shrink();
     }
 
-    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
     final Color cardBackgroundColor = Colors.grey.shade900;
     const Color primaryTextColor = Colors.white;
 
+    final authorData = {
+      'displayName': postData['userName'] ?? 'Unknown User',
+      'username': postData['username'] ?? '',
+      'profilePhotoUrl': postData['userImageUrl'] ?? '',
+    };
+
     final String originalMediaUrl =
         postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
     final String? originalThumbnailUrl = postData['postThumbnailUrl'];
-
     final String postType = postData['postType'] ?? 'image';
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    final String heroTag = 'postImage-${widget.postSnapshot.id}';
+    final String heroTag = 'postImage-${postSnapshot.id}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -118,12 +79,12 @@ class _PostCardState extends State<PostCard> {
           children: [
             _buildPostHeader(
               context: context,
-              authorData: _authorData,
+              authorData: authorData,
               timestamp: timestamp,
               isAuthor: isAuthor,
-              onProfileTapped: widget.onProfileTapped,
-              onDeletePressed: widget.onDeletePressed,
-              onEditPressed: widget.onEditPressed,
+              onProfileTapped: onProfileTapped,
+              onDeletePressed: onDeletePressed,
+              onEditPressed: onEditPressed,
             ),
             if (caption.isNotEmpty)
               Padding(
@@ -152,7 +113,7 @@ class _PostCardState extends State<PostCard> {
               stream:
                   FirebaseFirestore.instance
                       .collection('posts')
-                      .doc(widget.postSnapshot.id)
+                      .doc(postSnapshot.id)
                       .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
@@ -210,9 +171,7 @@ class _PostCardState extends State<PostCard> {
             width: double.infinity,
             height: 300,
             loadingBuilder: (context, child, progress) {
-              if (progress == null) {
-                return child;
-              }
+              if (progress == null) return child;
               return Shimmer.fromColors(
                 baseColor: Colors.grey.shade800,
                 highlightColor: Colors.grey.shade700,
@@ -267,9 +226,7 @@ class _PostCardState extends State<PostCard> {
               width: double.infinity,
               height: 300,
               loadingBuilder: (context, child, progress) {
-                if (progress == null) {
-                  return child;
-                }
+                if (progress == null) return child;
                 return Shimmer.fromColors(
                   baseColor: Colors.grey.shade800,
                   highlightColor: Colors.grey.shade700,
@@ -304,7 +261,7 @@ class _PostCardState extends State<PostCard> {
 
   Widget _buildPostHeader({
     required BuildContext context,
-    required Map<String, dynamic>? authorData,
+    required Map<String, dynamic> authorData,
     required DateTime? timestamp,
     required bool isAuthor,
     required VoidCallback onProfileTapped,
@@ -319,10 +276,9 @@ class _PostCardState extends State<PostCard> {
             ? DateFormat('MMM d, h:mm a').format(timestamp)
             : '...';
 
-    final userData = authorData ?? {};
-    final String name = userData['displayName'] ?? 'Unknown User';
-    final String username = userData['username'] ?? '';
-    final String userImage = userData['profilePhotoUrl'] ?? '';
+    final String name = authorData['displayName'] ?? 'Unknown User';
+    final String username = authorData['username'] ?? '';
+    final String userImage = authorData['profilePhotoUrl'] ?? '';
 
     return GestureDetector(
       onTap: onProfileTapped,
@@ -392,6 +348,7 @@ class _PostCardState extends State<PostCard> {
                       ),
                     ],
                 color: Colors.grey.shade800,
+                // FIXED: Moved 'icon' property to the end to resolve the lint warning.
                 icon: const Icon(Icons.more_horiz, color: secondaryTextColor),
               ),
           ],
@@ -415,7 +372,7 @@ class _PostCardState extends State<PostCard> {
         Row(
           children: [
             GestureDetector(
-              onTap: widget.onCommentPressed,
+              onTap: onCommentPressed,
               child: Container(
                 color: Colors.transparent,
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
@@ -440,7 +397,7 @@ class _PostCardState extends State<PostCard> {
             ),
             const SizedBox(width: 10),
             GestureDetector(
-              onTap: widget.onLikePressed,
+              onTap: onLikePressed,
               child: Container(
                 color: Colors.transparent,
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
