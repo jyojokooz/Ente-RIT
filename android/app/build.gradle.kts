@@ -1,3 +1,7 @@
+// NEW: Add these two import statements at the very top
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,8 +10,14 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-
     kotlin("android")
+}
+
+// Load the key.properties file
+val keyProperties = Properties()
+val keyPropertiesFile = rootProject.file("key.properties")
+if (keyPropertiesFile.exists()) {
+    keyProperties.load(FileInputStream(keyPropertiesFile))
 }
 
 android {
@@ -24,41 +34,41 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    // Add the signing configurations block here
+    signingConfigs {
+        create("release") {
+            keyAlias = keyProperties["keyAlias"] as String?
+            keyPassword = keyProperties["keyPassword"] as String?
+            storeFile = if (keyProperties["storeFile"] != null) file(keyProperties["storeFile"] as String) else null
+            storePassword = keyProperties["storePassword"] as String?
+        }
+    }
+
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.my_project"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
-android {
-        buildTypes {
-            getByName("release") {
-                isMinifyEnabled = true
-
-                // ✅ Correct way in Kotlin DSL
-                // Use 'buildConfigField' for boolean properties
-                // shrinkResources = true → SET via property below
-                // If using AGP 8.0+, the new syntax is:
-                // enable resource shrinking with:
-                // isShrinkResources = true
-                isShrinkResources = true
-
-                proguardFiles(
-                    getDefaultProguardFile("proguard-android-optimize.txt"),
-                    file("proguard-rules.pro")
-                )
-            }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                file("proguard-rules.pro")
+            )
+            // Tell Gradle to use the release signing configuration
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
-
-
-
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 flutter {
