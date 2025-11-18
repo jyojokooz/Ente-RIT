@@ -1,9 +1,14 @@
+// ===============================
+// FILE NAME: login_page.dart
+// FILE PATH: C:\kampus_konnect\appmaking2\lib\screens\pages\login_page.dart
+// ===============================
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
-// Import your reusable widgets. Ensure the paths are correct.
+// Import your reusable widgets and the new auth service.
+import '../../auth/auth_service.dart';
 import '../../widgets/custom_auth_button.dart';
 import '../../widgets/custom_auth_textfield.dart';
 
@@ -17,12 +22,11 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-// 1. Add 'with AutomaticKeepAliveClientMixin' to your State class
-// This mixin prevents the page from being discarded when it's not visible.
 class _LoginPageState extends State<LoginPage>
     with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
   final _auth = FirebaseAuth.instance;
+  final AuthService _authService = AuthService(); // Use the centralized service
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -44,8 +48,7 @@ class _LoginPageState extends State<LoginPage>
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/home');
+        // AuthGate will handle navigation
       } on FirebaseAuthException catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -60,30 +63,17 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  /// Login with Google
+  /// Login with Google using AuthService
   Future<void> _loginWithGoogle() async {
-    final GoogleSignIn googleSignIn = GoogleSignIn();
+    setState(() => _isGoogleLoading = true);
     try {
-      setState(() => _isGoogleLoading = true);
-      await googleSignIn.signOut();
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        if (mounted) setState(() => _isGoogleLoading = false);
-        return; // User cancelled
-      }
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      await _auth.signInWithCredential(credential);
-      if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      await _authService.signInWithGoogle();
+      // AuthGate will handle navigation
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Google Login failed. Please try again."),
+        SnackBar(
+          content: Text(e.toString().replaceFirst("Exception: ", "")),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -124,21 +114,17 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  // 2. Override wantKeepAlive and return true.
-  // This tells the framework to keep this widget's state alive.
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
-    // 3. IMPORTANT: Call super.build(context) for the mixin to work.
     super.build(context);
 
     const Color primaryAccentColor = Colors.yellow;
     const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
 
-    // NO SCAFFOLD OR APPBAR. This is a content widget.
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(

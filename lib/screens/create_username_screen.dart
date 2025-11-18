@@ -1,10 +1,13 @@
+// ===============================
+// FILE NAME: create_username_screen.dart
+// FILE PATH: C:\kampus_konnect\appmaking2\lib\screens\create_username_screen.dart
+// ===============================
+
 // lib/screens/create_username_screen.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-// --- THE FIX IS HERE ---
-// Corrected the import statement to use ':' instead of '.'
 import 'package:google_fonts/google_fonts.dart';
 
 class CreateUsernameScreen extends StatefulWidget {
@@ -31,6 +34,12 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
         _currentUser.displayName!.isNotEmpty) {
       _nameController.text = _currentUser.displayName!;
     }
+    // --- NEW: Auto-fill username from email and make it read-only ---
+    if (_currentUser.email != null &&
+        _currentUser.email!.toLowerCase().endsWith('@rit.ac.in')) {
+      final username = _currentUser.email!.split('@').first;
+      _usernameController.text = username;
+    }
   }
 
   @override
@@ -54,15 +63,19 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
     final username = _usernameController.text.trim().toLowerCase();
 
     try {
+      // The username is now pre-filled and read-only, so the check for uniqueness
+      // is less critical but kept as a safeguard for edge cases.
       final querySnapshot =
           await _usersCollection
               .where('username', isEqualTo: username)
               .limit(1)
               .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
+      if (querySnapshot.docs.isNotEmpty &&
+          querySnapshot.docs.first.id != _currentUser.uid) {
         setState(() {
-          _errorMessage = 'This username is already taken. Please try another.';
+          _errorMessage =
+              'This username is already taken. Please contact support.';
           _isLoading = false;
         });
         return;
@@ -101,6 +114,9 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Determine if the username field should be read-only
+    final bool isUsernameReadOnly = _usernameController.text.isNotEmpty;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -122,7 +138,6 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                     'One Last Step!',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
-                      // This line will now work
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
@@ -132,7 +147,6 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                     'Let\'s set up your profile.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
-                      // This line will now work
                       fontSize: 16,
                       color: Colors.white70,
                     ),
@@ -163,6 +177,7 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _usernameController,
+                    readOnly: isUsernameReadOnly,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.alternate_email),
                       labelText: 'Username',
@@ -171,7 +186,10 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       filled: true,
-                      fillColor: Colors.grey.shade900,
+                      fillColor:
+                          isUsernameReadOnly
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade900,
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -220,7 +238,6 @@ class _CreateUsernameScreenState extends State<CreateUsernameScreen> {
                             : Text(
                               'Confirm & Continue',
                               style: GoogleFonts.poppins(
-                                // This line will now work
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),

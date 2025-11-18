@@ -1,11 +1,17 @@
+// ===============================
+// FILE NAME: signup_page.dart
+// FILE PATH: C:\kampus_konnect\appmaking2\lib\screens\pages\signup_page.dart
+// ===============================
+
 // lib/auth/pages/signup_page.dart
 
-import 'package:firebase_auth/firebase_auth.dart';
+// --- THIS IMPORT HAS BEEN REMOVED ---
+// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
-// Import your reusable widgets.
+// Import your reusable widgets and the new auth service.
+import '../../auth/auth_service.dart';
 import '../../widgets/custom_auth_button.dart';
 import '../../widgets/custom_auth_textfield.dart';
 
@@ -24,7 +30,7 @@ class SignupPage extends StatefulWidget {
 class _SignupPageState extends State<SignupPage>
     with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
-  final _auth = FirebaseAuth.instance;
+  final AuthService _authService = AuthService(); // Use the centralized service
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -37,27 +43,21 @@ class _SignupPageState extends State<SignupPage>
     super.dispose();
   }
 
-  /// Handles user sign-up with email and password.
+  /// Handles user sign-up with email and password using AuthService.
   Future<void> _signupWithEmailPassword() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        // This is the only action needed. Creating the user will trigger the
-        // authStateChanges stream in AuthGate, which will then handle
-        // navigating the user to the correct screen (CreateUsernameScreen).
-        await _auth.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+        await _authService.signUpWithEmailAndPassword(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
         );
-
-        // --- NAVIGATION REMOVED ---
-        // We no longer navigate from here. The AuthGate is now responsible
-        // for routing the user after a successful sign-up.
-      } on FirebaseAuthException catch (e) {
+        // Navigation is now handled by AuthGate, no action needed here.
+      } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.message ?? 'Signup failed. Please try again.'),
+            content: Text(e.toString().replaceFirst("Exception: ", "")),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -67,39 +67,17 @@ class _SignupPageState extends State<SignupPage>
     }
   }
 
-  /// Handles user sign-up or sign-in with a Google account.
+  /// Handles user sign-up or sign-in with Google using AuthService.
   Future<void> _signupWithGoogle() async {
-    final GoogleSignIn googleSignIn = GoogleSignIn();
+    setState(() => _isGoogleLoading = true);
     try {
-      setState(() => _isGoogleLoading = true);
-      // We sign out first to ensure the account picker always appears.
-      await googleSignIn.signOut();
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        // The user cancelled the sign-in process.
-        if (mounted) setState(() => _isGoogleLoading = false);
-        return;
-      }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Signing in with the credential will trigger the authStateChanges stream
-      // in AuthGate, just like the email sign-up.
-      await _auth.signInWithCredential(credential);
-
-      // --- NAVIGATION REMOVED ---
-      // AuthGate will now check if the user is new (via Firestore) and route
-      // them to CreateUsernameScreen, or to MainScreen if they are returning.
+      await _authService.signInWithGoogle();
+      // Navigation is handled by AuthGate, no action needed here.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Google Sign-In failed. Please try again."),
+        SnackBar(
+          content: Text(e.toString().replaceFirst("Exception: ", "")),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -165,14 +143,20 @@ class _SignupPageState extends State<SignupPage>
                 const SizedBox(height: 30),
                 CustomAuthTextField(
                   controller: _emailController,
-                  labelText: 'Email Address',
+                  labelText: 'RIT Email Address',
                   icon: Icons.person_outline,
                   keyboardType: TextInputType.emailAddress,
-                  validator:
-                      (val) =>
-                          val != null && val.contains('@') && val.contains('.')
-                              ? null
-                              : 'Please enter a valid email',
+                  validator: (val) {
+                    if (val == null ||
+                        !val.contains('@') ||
+                        !val.contains('.')) {
+                      return 'Please enter a valid email';
+                    }
+                    if (!val.toLowerCase().endsWith('@rit.ac.in')) {
+                      return 'Only @rit.ac.in emails are allowed';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 15),
                 CustomAuthTextField(

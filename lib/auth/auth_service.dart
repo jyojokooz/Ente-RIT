@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: auth_service.dart
+// FILE PATH: C:\kampus_konnect\appmaking2\lib\auth\auth_service.dart
+// ===============================
+
 import 'dart:developer';
 import 'package:flutter/services.dart'; // Required for PlatformException
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,13 +20,63 @@ class AuthService {
   // This is essential for release builds to work correctly.
   // Replace the placeholder with your actual Web Client ID from the Google Cloud Console.
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com',
+    clientId:
+        '267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com',
   );
 
+  /// Signs a new user up with their Email & Password.
+  /// Enforces RIT email and auto-creates the user profile with a username.
+  Future<UserCredential?> signUpWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
+    // --- RIT EMAIL VALIDATION ---
+    if (!email.trim().toLowerCase().endsWith('@rit.ac.in')) {
+      throw Exception('Only emails from rit.ac.in are allowed for sign up.');
+    }
+
+    try {
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+
+      // --- NEW USER PROFILE CREATION ---
+      if (userCredential.user != null) {
+        final user = userCredential.user!;
+        // Auto-generate username from email prefix
+        final username = email.split('@').first;
+
+        await _firestore.collection('users').doc(user.uid).set({
+          'displayName': user.displayName ?? '', // User will set this later
+          'email': user.email,
+          'uid': user.uid,
+          'profilePhotoUrl': user.photoURL ?? '',
+          'lastLogin': Timestamp.now(),
+          'createdAt': Timestamp.now(),
+          'username': username, // Set auto-generated username
+          'role': 'student', // Assign default role
+        });
+        log(
+          'New user signed up and profile created for $username',
+          name: 'AuthService',
+        );
+      }
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      // Re-throw with a more user-friendly message
+      throw Exception(e.message ?? 'An unknown sign-up error occurred.');
+    } catch (e) {
+      log(
+        'An unexpected error occurred during email sign-up: $e',
+        name: 'AuthService',
+      );
+      throw Exception('An unexpected error occurred. Please try again.');
+    }
+  }
+
   /// Signs the user in with their Google account.
-  ///
-  /// This method now includes logic to differentiate between a new user
-  /// and a returning user to support the mandatory username creation step.
+  /// Enforces RIT email and auto-creates the user profile with a username for new users.
   Future<UserCredential?> signInWithGoogle() async {
     try {
       // It's good practice to sign out first to ensure the account picker is always shown.
@@ -33,6 +88,12 @@ class AuthService {
         // The user canceled the sign-in process.
         log('Google Sign-In was cancelled by the user.', name: 'AuthService');
         return null;
+      }
+
+      // --- RIT EMAIL VALIDATION ---
+      if (!googleUser.email.toLowerCase().endsWith('@rit.ac.in')) {
+        await _googleSignIn.signOut(); // Sign them out immediately
+        throw Exception('Only Google accounts from rit.ac.in are allowed.');
       }
 
       // Get the authentication tokens from the Google user.
@@ -47,25 +108,28 @@ class AuthService {
       final UserCredential userCredential = await _auth.signInWithCredential(
         credential,
       );
-      log('Successfully signed in to Firebase with Google.', name: 'AuthService');
+      log(
+        'Successfully signed in to Firebase with Google.',
+        name: 'AuthService',
+      );
 
       // --- USER PROFILE HANDLING LOGIC ---
       // After signing in, check if this is the user's first time.
       if (userCredential.user != null) {
-        final userDocRef =
-            _firestore.collection('users').doc(userCredential.user!.uid);
+        final userDocRef = _firestore
+            .collection('users')
+            .doc(userCredential.user!.uid);
 
         final docSnapshot = await userDocRef.get();
 
         // SCENARIO 1: NEW USER
-        // If the document does NOT exist, it's their first time signing in.
-        // We create their document but WITHOUT a 'username' field.
-        // This will cause the AuthGate to redirect them to CreateUsernameScreen.
         if (!docSnapshot.exists) {
           log(
-            'New user detected. Creating profile for ${userCredential.user!.uid} without a username.',
+            'New user detected via Google. Creating profile for ${userCredential.user!.uid}.',
             name: 'AuthService',
           );
+          // Auto-generate username from email prefix
+          final username = userCredential.user!.email!.split('@').first;
           await userDocRef.set({
             'displayName': userCredential.user!.displayName,
             'email': userCredential.user!.email,
@@ -73,12 +137,11 @@ class AuthService {
             'profilePhotoUrl': userCredential.user!.photoURL,
             'lastLogin': Timestamp.now(),
             'createdAt': Timestamp.now(),
-            // 'username' is intentionally omitted to trigger the setup flow.
+            'username': username, // Set auto-generated username
+            'role': 'student', // Assign default role
           });
         }
         // SCENARIO 2: RETURNING USER
-        // If the document already exists, they are a returning user.
-        // We simply update their last login time.
         else {
           log(
             'Returning user detected: ${userCredential.user!.uid}. Updating last login.',
@@ -90,25 +153,26 @@ class AuthService {
       // --- END OF USER PROFILE LOGIC ---
 
       return userCredential;
-    }
-    // --- CRITICAL CHANGE: DETAILED ERROR HANDLING ---
-    // Catch the specific error from the native Google Sign-In SDK.
-    on PlatformException catch (error) {
+    } on PlatformException catch (error) {
       log(
         'Google Sign-In failed with a PlatformException. THIS IS THE KEY ERROR!',
         name: 'AuthService',
       );
-      // This will print the specific error code like '10' (DEVELOPER_ERROR)
-      // or '8' (INTERNAL_ERROR) that tells us exactly what is wrong.
       log('Error Code: ${error.code}', name: 'AuthService');
       log('Error Message: ${error.message}', name: 'AuthService');
-      log('Error Details: ${error.details}', name: 'AuthService');
-      return null;
-    }
-    // Catch any other general errors.
-    catch (e) {
-      log('An unexpected error occurred during Google sign-in: $e', name: 'AuthService');
-      return null;
+      throw Exception(
+        'A platform error occurred during sign-in. Please try again.',
+      );
+    } catch (e) {
+      log(
+        'An unexpected error occurred during Google sign-in: $e',
+        name: 'AuthService',
+      );
+      // Re-throw the specific exception message if it came from our validation
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('An unexpected error occurred. Please try again.');
     }
   }
 
