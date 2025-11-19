@@ -7,8 +7,13 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/jyojokooz/appmaking2/blob/0e50db5151c3b977cdc2bee12819a81804cfdc67/splashimgproj.jpg?raw=true" alt="Kampus Connect" width="300"/>
+  <video width="300" autoplay loop muted playsinline>
+    <source src="https://github.com/jyojokooz/appmaking2/raw/main/assets/kk.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
 </p>
+
+
 
 <p align="center">
   <em>The next-generation college community platform for Rajiv Gandhi Institute of Technology (RIT)</em>
