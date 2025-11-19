@@ -7,7 +7,8 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/jyojokooz/appmaking2/raw/main/assets/kk.gif" width="300" />
+  <img src="https://github.com/jyojokooz/appmaking2/blob/main/assets/kk.gif?raw=true" 
+       width="100%" />
 </p>
 
 
