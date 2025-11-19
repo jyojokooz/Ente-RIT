@@ -7,11 +7,9 @@
 </p>
 
 <p align="center">
-  <video width="300" autoplay loop muted playsinline>
-    <source src="https://github.com/jyojokooz/appmaking2/raw/main/assets/kk.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
+  <img src="https://github.com/jyojokooz/appmaking2/raw/main/assets/kk.gif" width="300" />
 </p>
+
 
 
 
