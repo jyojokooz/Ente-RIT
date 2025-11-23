@@ -17,7 +17,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _mainController;
-  late AnimationController _binaryController; 
+  late AnimationController _binaryController;
 
   // Animation Stages
   late Animation<double> _boxAppear;
@@ -46,9 +46,10 @@ class _SplashScreenState extends State<SplashScreen>
     // --- INTERVAL DEFINITIONS ---
 
     // Phase 1: Box pops in (0% - 15%)
+    // FIX: Changed from elasticOut (jittery) to easeOutBack (smooth pop)
     _boxAppear = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.0, 0.15, curve: Curves.elasticOut),
+      curve: const Interval(0.0, 0.15, curve: Curves.easeOutBack),
     );
 
     // Phase 2: Monitor slides UP (15% - 30%)
@@ -77,7 +78,6 @@ class _SplashScreenState extends State<SplashScreen>
     _loaderVisibility = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        // Changed to standard threshold to avoid error
         curve: const Interval(0.30, 0.75, curve: Threshold(0.0)),
       ),
     );
@@ -126,7 +126,8 @@ class _SplashScreenState extends State<SplashScreen>
         animation: _mainController,
         builder: (context, child) {
           // Calculate visibility boolean for the loader
-          final bool showLoader = _loaderVisibility.value > 0 && _cableDraw.value < 0.1;
+          final bool showLoader =
+              _loaderVisibility.value > 0 && _cableDraw.value < 0.1;
 
           return FadeTransition(
             opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOut),
@@ -185,11 +186,9 @@ class _SplashScreenState extends State<SplashScreen>
 
                   const SizedBox(height: 60),
 
-                  // --- BINARY DATA STREAM (Fixed Layout) ---
-                  // We use a fixed height Container so the column doesn't shift
-                  // We use Opacity to hide it instead of removing it
+                  // --- BINARY DATA STREAM ---
                   SizedBox(
-                    height: 50, // Reserve fixed height space
+                    height: 50,
                     child: AnimatedOpacity(
                       opacity: showLoader ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 300),
@@ -203,11 +202,10 @@ class _SplashScreenState extends State<SplashScreen>
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: List.generate(5, (index) {
-                                  final randomBit = math.Random().nextBool() ? '1' : '0';
-                                  // FIX: Use SizedBox here to ensure every digit takes
-                                  // exact same width so the row doesn't jitter
+                                  final randomBit =
+                                      math.Random().nextBool() ? '1' : '0';
                                   return SizedBox(
-                                    width: 20, 
+                                    width: 20,
                                     child: Text(
                                       randomBit,
                                       textAlign: TextAlign.center,
@@ -228,7 +226,7 @@ class _SplashScreenState extends State<SplashScreen>
                                   fontSize: 10,
                                   letterSpacing: 1.5,
                                   color: Colors.grey[500],
-                                  fontWeight: FontWeight.w600
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -277,11 +275,7 @@ class MonitorWidget extends StatelessWidget {
           ),
         ),
         // Stand neck
-        Container(
-          width: 4,
-          height: 6,
-          color: Colors.black,
-        ),
+        Container(width: 4, height: 6, color: Colors.black),
         // Stand base
         Container(
           width: 24,
@@ -303,15 +297,17 @@ class BoxBackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeJoin = StrokeJoin.round;
+    final Paint stroke =
+        Paint()
+          ..color = Colors.black
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..strokeJoin = StrokeJoin.round;
 
-    final Paint fillWhite = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
+    final Paint fillWhite =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill;
 
     final w = size.width;
     final h = size.height;
@@ -348,18 +344,21 @@ class BoxFrontPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeJoin = StrokeJoin.round;
+    final Paint stroke =
+        Paint()
+          ..color = Colors.black
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..strokeJoin = StrokeJoin.round;
 
-    final Paint fillPurple = Paint()
-      ..color = purpleFill
-      ..style = PaintingStyle.fill;
-    final Paint fillWhite = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
+    final Paint fillPurple =
+        Paint()
+          ..color = purpleFill
+          ..style = PaintingStyle.fill;
+    final Paint fillWhite =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill;
 
     final w = size.width;
     final h = size.height;
@@ -410,14 +409,21 @@ class BoxFrontPainter extends CustomPainter {
     canvas.drawPath(frontFlapR, stroke);
 
     // 5. Small details on the white face
-    final Paint detailPaint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+    final Paint detailPaint =
+        Paint()
+          ..color = Colors.black
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke;
     canvas.drawLine(
-        Offset(cx + 10, cy + 25), Offset(cx + 25, cy + 20), detailPaint);
+      Offset(cx + 10, cy + 25),
+      Offset(cx + 25, cy + 20),
+      detailPaint,
+    );
     canvas.drawLine(
-        Offset(cx + 10, cy + 32), Offset(cx + 25, cy + 27), detailPaint);
+      Offset(cx + 10, cy + 32),
+      Offset(cx + 25, cy + 27),
+      detailPaint,
+    );
   }
 
   @override
@@ -433,7 +439,9 @@ class BackgroundElementsPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (boxScale < 0.1) return;
+    // FIX: Removed the hard limit that caused jitter at 0 scale
+    // We now draw shadow as long as scale is > 0
+    if (boxScale <= 0) return;
 
     final w = size.width;
     final h = size.height;
@@ -443,24 +451,27 @@ class BackgroundElementsPainter extends CustomPainter {
     // 1. Shadow (Black oval underneath)
     final Paint shadowPaint = Paint()..color = Colors.black;
     final Rect shadowRect = Rect.fromCenter(
-        center: Offset(cx, cy + 45),
-        width: 100 * boxScale,
-        height: 30 * boxScale);
+      center: Offset(cx, cy + 45),
+      width: 100 * boxScale,
+      height: 30 * boxScale,
+    );
     canvas.drawOval(shadowRect, shadowPaint);
 
     // 2. Cable Animation
     if (progress > 0) {
-      final Paint cablePaint = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..strokeCap = StrokeCap.round;
+      final Paint cablePaint =
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 8
+            ..strokeCap = StrokeCap.round;
 
-      final Paint cableOutline = Paint()
-        ..color = Colors.black
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 12
-        ..strokeCap = StrokeCap.round;
+      final Paint cableOutline =
+          Paint()
+            ..color = Colors.black
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 12
+            ..strokeCap = StrokeCap.round;
 
       final startX = cx + 25;
       final startY = cy + 15;
@@ -469,10 +480,13 @@ class BackgroundElementsPainter extends CustomPainter {
       path.moveTo(startX, startY);
 
       path.cubicTo(
-          startX + 60, startY + 10, // Control 1
-          startX + 20, startY + 50, // Control 2
-          startX + 100, startY + 20 // End
-          );
+        startX + 60,
+        startY + 10, // Control 1
+        startX + 20,
+        startY + 50, // Control 2
+        startX + 100,
+        startY + 20, // End
+      );
 
       final pathMetrics = path.computeMetrics();
       for (var metric in pathMetrics) {
@@ -488,13 +502,15 @@ class BackgroundElementsPainter extends CustomPainter {
             canvas.translate(tangent.position.dx, tangent.position.dy);
             canvas.rotate(-tangent.angle);
 
-            final Paint plugFill = Paint()
-              ..color = Colors.white
-              ..style = PaintingStyle.fill;
-            final Paint plugStroke = Paint()
-              ..color = Colors.black
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2;
+            final Paint plugFill =
+                Paint()
+                  ..color = Colors.white
+                  ..style = PaintingStyle.fill;
+            final Paint plugStroke =
+                Paint()
+                  ..color = Colors.black
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 2;
 
             final Rect plugRect = const Rect.fromLTWH(-2, -5, 8, 10);
             canvas.drawRect(plugRect, plugFill);
