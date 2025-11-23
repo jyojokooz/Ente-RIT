@@ -1,8 +1,11 @@
-// ignore_for_file: deprecated_member_use
+// ===============================
+// FILE NAME: splash_screen.dart
+// FILE PATH: lib/screens/splash_screen.dart
+// ===============================
 
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:math' as math;
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,78 +17,82 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _mainController;
-  late AnimationController _pulseController;
-  late AnimationController _confettiController;
+  late AnimationController _binaryController; 
 
-  late Animation<double> _iconRotationAnimation;
-  late Animation<double> _iconOpacityAnimation;
-  late Animation<double> _glowAnimation;
-  late Animation<double> _textAnimation;
-  late Animation<double> _fadeOutAnimation;
-  late Animation<double> _iconSqueezeAnimation;
-  late Animation<double> _capsAnimation;
+  // Animation Stages
+  late Animation<double> _boxAppear;
+  late Animation<double> _monitorSlide;
+  late Animation<double> _monitorWobble;
+  late Animation<double> _cableDraw;
+  late Animation<double> _loaderVisibility;
+  late Animation<double> _fadeOut;
 
   @override
   void initState() {
     super.initState();
 
+    // 1. Main Timeline Controller (8 Seconds)
     _mainController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4000),
-    );
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-    _confettiController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 8000),
     );
 
-    _iconRotationAnimation = CurvedAnimation(
+    // 2. Binary Glitch Controller (Fast ticker)
+    _binaryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+    )..repeat();
+
+    // --- INTERVAL DEFINITIONS ---
+
+    // Phase 1: Box pops in (0% - 15%)
+    _boxAppear = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
-    );
-    _iconOpacityAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeIn),
-    );
-    _glowAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.1, 0.6, curve: Curves.easeIn),
+      curve: const Interval(0.0, 0.15, curve: Curves.elasticOut),
     );
 
-    _iconSqueezeAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 30),
-      TweenSequenceItem(tween: Tween(begin: 1.2, end: 0.9), weight: 30),
-      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 40),
+    // Phase 2: Monitor slides UP (15% - 30%)
+    _monitorSlide = CurvedAnimation(
+      parent: _mainController,
+      curve: const Interval(0.15, 0.30, curve: Curves.easeInOutCubic),
+    );
+
+    // Phase 3: Monitor Wobbles/Processes (30% - 70%)
+    _monitorWobble = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.05), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 0.05, end: -0.05), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 0.05, end: -0.05), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 0.05, end: 0.0), weight: 1),
     ]).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.5, 0.65, curve: Curves.easeInOut),
+        curve: const Interval(0.30, 0.70, curve: Curves.easeInOut),
       ),
     );
 
-    _capsAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.55, 0.9, curve: Curves.easeOut),
+    // Loader Visibility (30% - 75%)
+    _loaderVisibility = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        // Changed to standard threshold to avoid error
+        curve: const Interval(0.30, 0.75, curve: Threshold(0.0)),
+      ),
     );
 
-    _textAnimation = CurvedAnimation(
+    // Phase 4: Cable snakes out AFTER wobble (75% - 95%)
+    _cableDraw = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.4, 0.75, curve: Curves.easeOutBack),
+      curve: const Interval(0.75, 0.95, curve: Curves.easeInOut),
     );
 
-    _fadeOutAnimation = CurvedAnimation(
+    // Phase 5: Fade out entire screen (95% - 100%)
+    _fadeOut = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.85, 1.0, curve: Curves.easeOut),
+      curve: const Interval(0.95, 1.0, curve: Curves.easeOut),
     );
-
-    _mainController.addListener(() {
-      if (_mainController.value > 0.5 && !_confettiController.isAnimating) {
-        _confettiController.forward(from: 0.0);
-      }
-    });
 
     _mainController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -93,8 +100,8 @@ class _SplashScreenState extends State<SplashScreen>
       }
     });
 
+    // Start animation
     _mainController.forward();
-    _pulseController.repeat(reverse: true);
   }
 
   void _navigate() {
@@ -105,72 +112,132 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _mainController.dispose();
-    _pulseController.dispose();
-    _confettiController.dispose();
+    _binaryController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color darkBrown = Color(0xFF3E2723);
-    const Color darkOrange = Color(0xFFBF360C);
-    const Color primaryYellow = Color(0xFFFFC107);
-    const Color lightTextColor = Color(0xFFFFF8E1);
+    const Color purpleFill = Color(0xFF9C27B0);
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: AnimatedBuilder(
-        animation: Listenable.merge([
-          _mainController,
-          _pulseController,
-          _confettiController,
-        ]),
+        animation: _mainController,
         builder: (context, child) {
+          // Calculate visibility boolean for the loader
+          final bool showLoader = _loaderVisibility.value > 0 && _cableDraw.value < 0.1;
+
           return FadeTransition(
-            opacity: Tween<double>(
-              begin: 1.0,
-              end: 0.0,
-            ).animate(_fadeOutAnimation),
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.0,
-                  colors: [darkOrange, darkBrown, Colors.black],
-                  stops: [0.0, 0.6, 1.0],
-                ),
-              ),
-              child: Center(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CustomPaint(
-                      painter: FlyingCapsPainter(
-                        animationValue: _capsAnimation.value,
-                        color: primaryYellow,
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                    CustomPaint(
-                      painter: ConfettiPainter(
-                        animationValue: _confettiController.value,
-                        colors: [
-                          primaryYellow,
-                          Colors.red.shade400,
-                          Colors.white,
-                        ],
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOut),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // --- THE ANIMATED ICON STACK ---
+                  SizedBox(
+                    width: 250,
+                    height: 200,
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        _buildAnimatedIcon(primaryYellow),
-                        const SizedBox(height: 40),
-                        _buildAnimatedText(lightTextColor),
+                        // --- LAYER 1: SHADOW & CABLE ---
+                        CustomPaint(
+                          size: const Size(250, 200),
+                          painter: BackgroundElementsPainter(
+                            progress: _cableDraw.value,
+                            boxScale: _boxAppear.value,
+                          ),
+                        ),
+
+                        // --- LAYER 2: BACK OF BOX (Inside) ---
+                        Transform.scale(
+                          scale: _boxAppear.value,
+                          child: CustomPaint(
+                            size: const Size(120, 120),
+                            painter: BoxBackPainter(purpleFill: purpleFill),
+                          ),
+                        ),
+
+                        // --- LAYER 3: THE MONITOR ---
+                        Positioned(
+                          top: 40 + (1 - _monitorSlide.value) * 60,
+                          child: Transform.scale(
+                            scale: _boxAppear.value,
+                            child: Transform.rotate(
+                              angle: _monitorWobble.value,
+                              child: const MonitorWidget(),
+                            ),
+                          ),
+                        ),
+
+                        // --- LAYER 4: FRONT OF BOX ---
+                        Transform.scale(
+                          scale: _boxAppear.value,
+                          child: CustomPaint(
+                            size: const Size(120, 120),
+                            painter: BoxFrontPainter(purpleFill: purpleFill),
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 60),
+
+                  // --- BINARY DATA STREAM (Fixed Layout) ---
+                  // We use a fixed height Container so the column doesn't shift
+                  // We use Opacity to hide it instead of removing it
+                  SizedBox(
+                    height: 50, // Reserve fixed height space
+                    child: AnimatedOpacity(
+                      opacity: showLoader ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: AnimatedBuilder(
+                        animation: _binaryController,
+                        builder: (context, child) {
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // The Glitch Text
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (index) {
+                                  final randomBit = math.Random().nextBool() ? '1' : '0';
+                                  // FIX: Use SizedBox here to ensure every digit takes
+                                  // exact same width so the row doesn't jitter
+                                  return SizedBox(
+                                    width: 20, 
+                                    child: Text(
+                                      randomBit,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.firaCode(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: purpleFill,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 8),
+                              // Static Label
+                              Text(
+                                "INITIALIZING SYSTEM...",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  letterSpacing: 1.5,
+                                  color: Colors.grey[500],
+                                  fontWeight: FontWeight.w600
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -178,208 +245,270 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
+}
 
-  Widget _buildAnimatedIcon(Color glowColor) {
-    return FadeTransition(
-      opacity: _iconOpacityAnimation,
-      child: AnimatedBuilder(
-        animation: _pulseController,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: 1.0 + (_pulseController.value * 0.05),
-            child: child,
-          );
-        },
-        child: Container(
-          width: 180,
-          height: 180,
+// --- 1. THE MONITOR ICON WIDGET ---
+class MonitorWidget extends StatelessWidget {
+  const MonitorWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Screen
+        Container(
+          width: 50,
+          height: 35,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: glowColor.withAlpha(
-                  (255 * _glowAnimation.value * 0.3).toInt(),
-                ),
-                blurRadius: 60 * _glowAnimation.value,
-                spreadRadius: 5 * _glowAnimation.value,
-              ),
-            ],
+            color: Colors.white,
+            border: Border.all(color: Colors.black, width: 2.5),
+            borderRadius: BorderRadius.circular(4),
           ),
-          child: Transform.scale(
-            scale: _iconSqueezeAnimation.value,
-            child: Transform(
-              alignment: Alignment.center,
-              transform:
-                  Matrix4.identity()
-                    ..setEntry(3, 2, 0.001)
-                    ..rotateY(math.pi / 2 * (1 - _iconRotationAnimation.value)),
-              child: Image.asset('assets/app_icon.png'),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedText(Color textColor) {
-    return FadeTransition(
-      opacity: _textAnimation,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.5),
-          end: Offset.zero,
-        ).animate(_textAnimation),
-        child: Column(
-          children: [
-            Text(
-              'KAMPUS KONNECT',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.orbitron(
-                fontSize: 32,
+          child: Center(
+            child: Text(
+              "</>",
+              style: GoogleFonts.firaCode(
                 fontWeight: FontWeight.bold,
-                color: textColor,
-                letterSpacing: 4.0,
+                fontSize: 12,
+                color: Colors.black,
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Connect • Learn • Grow',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.w300,
-                color: textColor.withAlpha(200),
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        // Stand neck
+        Container(
+          width: 4,
+          height: 6,
+          color: Colors.black,
+        ),
+        // Stand base
+        Container(
+          width: 24,
+          height: 3,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class ConfettiPainter extends CustomPainter {
-  final double animationValue;
-  final List<Color> colors;
-  final List<Particle> particles;
-
-  ConfettiPainter({required this.animationValue, required this.colors})
-    : particles = List.generate(
-        100,
-        (index) => Particle(
-          color: colors[math.Random().nextInt(colors.length)],
-          random: math.Random(index),
-        ),
-      );
+// --- 2. PAINTER FOR BACK OF BOX (Flaps and Inside) ---
+class BoxBackPainter extends CustomPainter {
+  final Color purpleFill;
+  BoxBackPainter({required this.purpleFill});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
+    final Paint stroke = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
 
-    for (var particle in particles) {
-      final progress = Curves.easeOut.transform(animationValue);
-      final path = particle.updatePath(progress, center);
+    final Paint fillWhite = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
 
-      // --- THIS IS THE FIX ---
-      // Replaced .withOpacity() with the more modern .withAlpha()
-      final paint =
-          Paint()
-            ..color = particle.color.withAlpha(
-              (255 * (1.0 - progress)).toInt(),
-            );
-      // --- END OF FIX ---
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final cy = h / 2 + 20;
 
-      canvas.drawPath(path, paint);
+    final topY = cy - 30;
+
+    // Back Flap (Left)
+    final Path backFlapL = Path();
+    backFlapL.moveTo(cx, topY);
+    backFlapL.lineTo(cx - 35, topY - 25);
+    backFlapL.lineTo(cx - 40, topY + 10);
+    canvas.drawPath(backFlapL, fillWhite);
+    canvas.drawPath(backFlapL, stroke);
+
+    // Back Flap (Right)
+    final Path backFlapR = Path();
+    backFlapR.moveTo(cx, topY);
+    backFlapR.lineTo(cx + 35, topY - 25);
+    backFlapR.lineTo(cx + 40, topY + 10);
+    canvas.drawPath(backFlapR, fillWhite);
+    canvas.drawPath(backFlapR, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// --- 3. PAINTER FOR FRONT OF BOX (The purple/white cube parts) ---
+class BoxFrontPainter extends CustomPainter {
+  final Color purpleFill;
+  BoxFrontPainter({required this.purpleFill});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint stroke = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
+
+    final Paint fillPurple = Paint()
+      ..color = purpleFill
+      ..style = PaintingStyle.fill;
+    final Paint fillWhite = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final cy = h / 2 + 20;
+
+    final double boxH = 40;
+    final double boxW = 40;
+
+    // 1. Left Face (Purple)
+    final Path leftFace = Path();
+    leftFace.moveTo(cx, cy);
+    leftFace.lineTo(cx - boxW, cy - 15);
+    leftFace.lineTo(cx - boxW, cy - 15 + boxH);
+    leftFace.lineTo(cx, cy + boxH);
+    leftFace.close();
+    canvas.drawPath(leftFace, fillPurple);
+    canvas.drawPath(leftFace, stroke);
+
+    // 2. Right Face (White)
+    final Path rightFace = Path();
+    rightFace.moveTo(cx, cy);
+    rightFace.lineTo(cx + boxW, cy - 15);
+    rightFace.lineTo(cx + boxW, cy - 15 + boxH);
+    rightFace.lineTo(cx, cy + boxH);
+    rightFace.close();
+    canvas.drawPath(rightFace, fillWhite);
+    canvas.drawPath(rightFace, stroke);
+
+    // 3. Front Flap (Left - Purple)
+    final Path frontFlapL = Path();
+    frontFlapL.moveTo(cx, cy);
+    frontFlapL.lineTo(cx - boxW, cy - 15);
+    frontFlapL.lineTo(cx - boxW - 15, cy);
+    frontFlapL.lineTo(cx - 15, cy + 15);
+    frontFlapL.close();
+    canvas.drawPath(frontFlapL, fillPurple);
+    canvas.drawPath(frontFlapL, stroke);
+
+    // 4. Front Flap (Right - Purple)
+    final Path frontFlapR = Path();
+    frontFlapR.moveTo(cx, cy);
+    frontFlapR.lineTo(cx + boxW, cy - 15);
+    frontFlapR.lineTo(cx + boxW + 15, cy);
+    frontFlapR.lineTo(cx + 15, cy + 15);
+    frontFlapR.close();
+    canvas.drawPath(frontFlapR, fillPurple);
+    canvas.drawPath(frontFlapR, stroke);
+
+    // 5. Small details on the white face
+    final Paint detailPaint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+        Offset(cx + 10, cy + 25), Offset(cx + 25, cy + 20), detailPaint);
+    canvas.drawLine(
+        Offset(cx + 10, cy + 32), Offset(cx + 25, cy + 27), detailPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// --- 4. PAINTER FOR BACKGROUND (Shadow & Animated Cable) ---
+class BackgroundElementsPainter extends CustomPainter {
+  final double progress;
+  final double boxScale;
+
+  BackgroundElementsPainter({required this.progress, required this.boxScale});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (boxScale < 0.1) return;
+
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final cy = h / 2 + 20;
+
+    // 1. Shadow (Black oval underneath)
+    final Paint shadowPaint = Paint()..color = Colors.black;
+    final Rect shadowRect = Rect.fromCenter(
+        center: Offset(cx, cy + 45),
+        width: 100 * boxScale,
+        height: 30 * boxScale);
+    canvas.drawOval(shadowRect, shadowPaint);
+
+    // 2. Cable Animation
+    if (progress > 0) {
+      final Paint cablePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round;
+
+      final Paint cableOutline = Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round;
+
+      final startX = cx + 25;
+      final startY = cy + 15;
+
+      final Path path = Path();
+      path.moveTo(startX, startY);
+
+      path.cubicTo(
+          startX + 60, startY + 10, // Control 1
+          startX + 20, startY + 50, // Control 2
+          startX + 100, startY + 20 // End
+          );
+
+      final pathMetrics = path.computeMetrics();
+      for (var metric in pathMetrics) {
+        final extractPath = metric.extractPath(0.0, metric.length * progress);
+        canvas.drawPath(extractPath, cableOutline);
+        canvas.drawPath(extractPath, cablePaint);
+
+        // Draw Plug Head
+        if (progress > 0.1) {
+          final tangent = metric.getTangentForOffset(metric.length * progress);
+          if (tangent != null) {
+            canvas.save();
+            canvas.translate(tangent.position.dx, tangent.position.dy);
+            canvas.rotate(-tangent.angle);
+
+            final Paint plugFill = Paint()
+              ..color = Colors.white
+              ..style = PaintingStyle.fill;
+            final Paint plugStroke = Paint()
+              ..color = Colors.black
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2;
+
+            final Rect plugRect = const Rect.fromLTWH(-2, -5, 8, 10);
+            canvas.drawRect(plugRect, plugFill);
+            canvas.drawRect(plugRect, plugStroke);
+
+            canvas.restore();
+          }
+        }
+      }
     }
   }
 
   @override
-  bool shouldRepaint(covariant ConfettiPainter oldDelegate) => true;
-}
-
-class Particle {
-  final Color color;
-  final math.Random random;
-  final double speed;
-  final double theta;
-  final double drag;
-  final double tilt;
-
-  Particle({required this.color, required this.random})
-    : speed = random.nextDouble() * 200 + 150,
-      theta = random.nextDouble() * 2 * math.pi,
-      drag = random.nextDouble() * 0.05 + 0.9,
-      tilt = random.nextDouble() * math.pi;
-
-  Path updatePath(double progress, Offset center) {
-    final newX = center.dx + math.cos(theta) * speed * progress;
-    final newY =
-        center.dy +
-        math.sin(theta) * speed * progress +
-        (150 * progress * progress); // Gravity
-    final size = 8.0 * (1 - progress);
-
-    final path = Path();
-    path.addRect(
-      Rect.fromCenter(center: Offset(newX, newY), width: size, height: size),
-    );
-
-    final matrix =
-        Matrix4.identity()
-          ..translate(newX, newY)
-          ..rotateZ(tilt * progress * 2)
-          ..translate(-newX, -newY);
-
-    return path.transform(matrix.storage);
+  bool shouldRepaint(covariant BackgroundElementsPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.boxScale != boxScale;
   }
-}
-
-class FlyingCapsPainter extends CustomPainter {
-  final double animationValue;
-  final Color color;
-
-  FlyingCapsPainter({required this.animationValue, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint =
-        Paint()
-          ..color = color.withAlpha((255 * (1.0 - animationValue)).toInt())
-          ..style = PaintingStyle.fill;
-
-    final progress = Curves.easeOut.transform(animationValue);
-
-    for (int i = 0; i < 7; i++) {
-      final angle = (i / 7) * 2 * math.pi;
-      final distance = progress * size.width * 0.6;
-
-      final capCenter = Offset(
-        center.dx + math.cos(angle) * distance,
-        center.dy + math.sin(angle) * distance,
-      );
-
-      final capSize = 25.0 * (1.0 - progress);
-      if (capSize < 2) continue;
-
-      canvas.save();
-      canvas.translate(capCenter.dx, capCenter.dy);
-      canvas.rotate(progress * math.pi * 2);
-
-      // Draw a simple cap shape
-      final path = Path();
-      path.moveTo(-capSize / 2, 0);
-      path.lineTo(capSize / 2, 0);
-      path.lineTo(capSize * 0.3, capSize * 0.4);
-      path.lineTo(-capSize * 0.3, capSize * 0.4);
-      path.close();
-      canvas.drawPath(path, paint);
-
-      canvas.restore();
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant FlyingCapsPainter oldDelegate) => true;
 }
