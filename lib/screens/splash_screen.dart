@@ -118,7 +118,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    const Color purpleFill = Color(0xFF9C27B0);
+    // --- CHANGED COLOR HERE ---
+    const Color purpleFill = Color(0xFF9983F3);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -439,8 +440,6 @@ class BackgroundElementsPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // FIX: Removed the hard limit that caused jitter at 0 scale
-    // We now draw shadow as long as scale is > 0
     if (boxScale <= 0) return;
 
     final w = size.width;
@@ -528,3 +527,4 @@ class BackgroundElementsPainter extends CustomPainter {
     return oldDelegate.progress != progress || oldDelegate.boxScale != boxScale;
   }
 }
+
