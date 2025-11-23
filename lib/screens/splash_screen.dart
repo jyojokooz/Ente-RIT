@@ -23,8 +23,6 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _boxAppear;
   late Animation<double> _monitorSlide;
   late Animation<double> _monitorWobble;
-  late Animation<double> _cableDraw;
-  late Animation<double> _outletFadeIn;
   late Animation<double> _loaderVisibility;
   late Animation<double> _fadeOut;
 
@@ -32,11 +30,13 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
 
+    // 1. Main Timeline Controller (3.5 Seconds)
     _mainController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 8000),
+      duration: const Duration(milliseconds: 3500),
     );
 
+    // 2. Binary Glitch Controller
     _binaryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 80),
@@ -44,19 +44,19 @@ class _SplashScreenState extends State<SplashScreen>
 
     // --- INTERVAL DEFINITIONS ---
 
-    // 1. Box pops in (0% - 15%)
+    // 1. Box pops in
     _boxAppear = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.0, 0.15, curve: Curves.easeOutBack),
+      curve: const Interval(0.0, 0.20, curve: Curves.easeOutBack),
     );
 
-    // 2. Monitor slides UP (15% - 30%)
+    // 2. Monitor slides UP
     _monitorSlide = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.15, 0.30, curve: Curves.easeInOutCubic),
+      curve: const Interval(0.20, 0.40, curve: Curves.easeInOutCubic),
     );
 
-    // 3. Monitor Wobbles (30% - 70%)
+    // 3. Monitor Wobbles/Processing
     _monitorWobble = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.05), weight: 1),
       TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
@@ -68,34 +68,22 @@ class _SplashScreenState extends State<SplashScreen>
     ]).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.30, 0.70, curve: Curves.easeInOut),
+        curve: const Interval(0.40, 0.80, curve: Curves.easeInOut),
       ),
     );
 
-    // Loading Data Visibility (30% - 75%)
+    // Loader Visibility
     _loaderVisibility = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
-        curve: const Interval(0.30, 0.75, curve: Threshold(0.0)),
+        curve: const Interval(0.40, 0.80, curve: Threshold(0.0)),
       ),
     );
 
-    // 3.5 Outlet Fades In (65% - 75%)
-    _outletFadeIn = CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.65, 0.75, curve: Curves.easeIn),
-    );
-
-    // 4. Cable snakes out (75% - 95%)
-    _cableDraw = CurvedAnimation(
-      parent: _mainController,
-      curve: const Interval(0.75, 0.95, curve: Curves.easeInOut),
-    );
-
-    // 5. Fade out (96% - 100%)
+    // 4. Fade out
     _fadeOut = CurvedAnimation(
       parent: _mainController,
-      curve: const Interval(0.96, 1.0, curve: Curves.easeOut),
+      curve: const Interval(0.90, 1.0, curve: Curves.easeOut),
     );
 
     _mainController.addStatusListener((status) {
@@ -128,13 +116,12 @@ class _SplashScreenState extends State<SplashScreen>
       body: AnimatedBuilder(
         animation: _mainController,
         builder: (context, child) {
-          final bool showLoader =
-              _loaderVisibility.value > 0 && _cableDraw.value < 0.1;
-
-          // Determine screen color based on connection status
-          final bool isConnected = _cableDraw.value > 0.99;
-          // CHANGED: Uses purpleFill instead of Yellow
-          final Color screenColor = isConnected ? purpleFill : Colors.white;
+          // Show loader only during the specific interval
+          final bool showLoader = _loaderVisibility.value > 0;
+          
+          // Turn screen purple after wobble finishes
+          final bool isSystemReady = _mainController.value > 0.8;
+          final Color screenColor = isSystemReady ? purpleFill : Colors.white;
 
           return FadeTransition(
             opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOut),
@@ -144,18 +131,16 @@ class _SplashScreenState extends State<SplashScreen>
                 children: [
                   // --- THE ANIMATED ICON STACK ---
                   SizedBox(
-                    width: 320,
+                    width: 250,
                     height: 200,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // --- LAYER 1: SHADOW, CABLE & OUTLET ---
+                        // --- LAYER 1: SHADOW ---
                         CustomPaint(
-                          size: const Size(320, 200),
-                          painter: BackgroundElementsPainter(
-                            progress: _cableDraw.value,
+                          size: const Size(250, 200),
+                          painter: ShadowPainter(
                             boxScale: _boxAppear.value,
-                            outletOpacity: _outletFadeIn.value,
                           ),
                         ),
 
@@ -199,7 +184,7 @@ class _SplashScreenState extends State<SplashScreen>
                     height: 50,
                     child: AnimatedOpacity(
                       opacity: showLoader ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
+                      duration: const Duration(milliseconds: 200),
                       child: AnimatedBuilder(
                         animation: _binaryController,
                         builder: (context, child) {
@@ -253,13 +238,12 @@ class _SplashScreenState extends State<SplashScreen>
 
 // --- 1. THE MONITOR ICON WIDGET ---
 class MonitorWidget extends StatelessWidget {
-  final Color screenColor;
-
+  final Color screenColor; 
+  
   const MonitorWidget({super.key, required this.screenColor});
 
   @override
   Widget build(BuildContext context) {
-    // Check if screen is active (not white) to apply text color change
     final bool isActive = screenColor != Colors.white;
 
     return Column(
@@ -270,26 +254,21 @@ class MonitorWidget extends StatelessWidget {
           width: 50,
           height: 35,
           decoration: BoxDecoration(
-            color: screenColor,
+            color: screenColor, 
             border: Border.all(color: Colors.black, width: 2.5),
             borderRadius: BorderRadius.circular(4),
-            // Purple Glow when active
-            boxShadow:
-                isActive
-                    ? [
-                      BoxShadow(
-                        color: screenColor.withOpacity(0.6),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                    : [
-                      const BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+            // --- FIX: Replaced withOpacity(0.6) with withAlpha(153) ---
+            boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: screenColor.withAlpha(153), // 0.6 * 255 = 153
+                    blurRadius: 15,
+                    spreadRadius: 2
+                  )
+                ] 
+              : [
+                  const BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                ],
           ),
           child: Center(
             child: Text(
@@ -297,7 +276,6 @@ class MonitorWidget extends StatelessWidget {
               style: GoogleFonts.firaCode(
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
-                // Make text White if screen is Purple, else Black
                 color: isActive ? Colors.white : Colors.black,
               ),
             ),
@@ -324,17 +302,13 @@ class BoxBackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke =
-        Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..strokeJoin = StrokeJoin.round;
+    final Paint stroke = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
 
-    final Paint fillWhite =
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.fill;
+    final Paint fillWhite = Paint()..color = Colors.white..style = PaintingStyle.fill;
 
     final w = size.width;
     final h = size.height;
@@ -368,21 +342,14 @@ class BoxFrontPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke =
-        Paint()
-          ..color = Colors.black
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..strokeJoin = StrokeJoin.round;
+    final Paint stroke = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
 
-    final Paint fillPurple =
-        Paint()
-          ..color = purpleFill
-          ..style = PaintingStyle.fill;
-    final Paint fillWhite =
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.fill;
+    final Paint fillPurple = Paint()..color = purpleFill..style = PaintingStyle.fill;
+    final Paint fillWhite = Paint()..color = Colors.white..style = PaintingStyle.fill;
 
     final w = size.width;
     final h = size.height;
@@ -427,182 +394,41 @@ class BoxFrontPainter extends CustomPainter {
     canvas.drawPath(frontFlapR, fillPurple);
     canvas.drawPath(frontFlapR, stroke);
 
-    final Paint detailPaint =
-        Paint()
-          ..color = Colors.black
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      Offset(cx + 10, cy + 25),
-      Offset(cx + 25, cy + 20),
-      detailPaint,
-    );
-    canvas.drawLine(
-      Offset(cx + 10, cy + 32),
-      Offset(cx + 25, cy + 27),
-      detailPaint,
-    );
+    final Paint detailPaint = Paint()..color = Colors.black..strokeWidth = 2..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(cx + 10, cy + 25), Offset(cx + 25, cy + 20), detailPaint);
+    canvas.drawLine(Offset(cx + 10, cy + 32), Offset(cx + 25, cy + 27), detailPaint);
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- 4. PAINTER FOR BACKGROUND (Shadow, Cable & Outlet) ---
-class BackgroundElementsPainter extends CustomPainter {
-  final double progress;
+// --- 4. PAINTER FOR SHADOW ---
+class ShadowPainter extends CustomPainter {
   final double boxScale;
-  final double outletOpacity;
 
-  BackgroundElementsPainter({
-    required this.progress,
-    required this.boxScale,
-    required this.outletOpacity,
-  });
+  ShadowPainter({required this.boxScale});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (boxScale <= 0) return;
 
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final cy = h / 2 + 20;
+    final cx = size.width / 2;
+    final cy = size.height / 2 + 20;
 
-    // 1. Shadow
-    final Paint shadowPaint = Paint()..color = Colors.black;
+    // --- FIX: Used withAlpha for proper transparency on shadow ---
+    // 50 alpha is roughly 20% opacity
+    final Paint shadowPaint = Paint()..color = Colors.black.withAlpha(50);
+    
     final Rect shadowRect = Rect.fromCenter(
-      center: Offset(cx, cy + 45),
-      width: 100 * boxScale,
-      height: 30 * boxScale,
-    );
+        center: Offset(cx, cy + 45),
+        width: 100 * boxScale,
+        height: 30 * boxScale);
     canvas.drawOval(shadowRect, shadowPaint);
-
-    // Coordinates for Connection
-    final outletX = cx + 130.0;
-    final outletY = cy + 20.0;
-
-    // 2. Wall Outlet
-    if (outletOpacity > 0) {
-      final Paint outletStroke =
-          Paint()
-            ..color = Colors.black.withOpacity(outletOpacity)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.5;
-      final Paint outletFill =
-          Paint()
-            ..color = Colors.white.withOpacity(outletOpacity)
-            ..style = PaintingStyle.fill;
-
-      final Rect outletRect = Rect.fromCenter(
-        center: Offset(outletX, outletY),
-        width: 22,
-        height: 28,
-      );
-
-      canvas.drawRect(outletRect, outletFill);
-      canvas.drawRect(outletRect, outletStroke);
-
-      final Paint holePaint =
-          Paint()..color = Colors.black.withOpacity(outletOpacity);
-      canvas.drawCircle(Offset(outletX, outletY - 6), 2.5, holePaint);
-      canvas.drawCircle(Offset(outletX, outletY + 6), 2.5, holePaint);
-    }
-
-    // 3. Cable Animation
-    if (progress > 0) {
-      final Paint cablePaint =
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 8
-            ..strokeCap = StrokeCap.round;
-
-      final Paint cableOutline =
-          Paint()
-            ..color = Colors.black
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 12
-            ..strokeCap = StrokeCap.round;
-
-      final startX = cx + 25;
-      final startY = cy + 15;
-
-      final endX = outletX - 20;
-      final endY = outletY;
-
-      final Path path = Path();
-      path.moveTo(startX, startY);
-
-      path.cubicTo(
-        startX + 60,
-        startY + 10, // Control 1
-        startX + 40,
-        endY, // Control 2
-        endX,
-        endY, // End
-      );
-
-      final pathMetrics = path.computeMetrics();
-      for (var metric in pathMetrics) {
-        final extractPath = metric.extractPath(0.0, metric.length * progress);
-        canvas.drawPath(extractPath, cableOutline);
-        canvas.drawPath(extractPath, cablePaint);
-
-        // Draw Plug Head
-        if (progress > 0.05) {
-          final tangent = metric.getTangentForOffset(metric.length * progress);
-          if (tangent != null) {
-            canvas.save();
-            canvas.translate(tangent.position.dx, tangent.position.dy);
-            canvas.rotate(-tangent.angle);
-
-            final Paint plugFill =
-                Paint()
-                  ..color = Colors.white
-                  ..style = PaintingStyle.fill;
-            final Paint plugStroke =
-                Paint()
-                  ..color = Colors.black
-                  ..style = PaintingStyle.stroke
-                  ..strokeWidth = 2.5;
-            final Paint prongPaint =
-                Paint()
-                  ..color = Colors.black
-                  ..strokeWidth = 3;
-
-            // Prongs
-            canvas.drawLine(
-              const Offset(7, -4),
-              const Offset(15, -4),
-              prongPaint,
-            );
-            canvas.drawLine(
-              const Offset(7, 4),
-              const Offset(15, 4),
-              prongPaint,
-            );
-
-            // Plug Body
-            final RRect plugBody = RRect.fromRectAndRadius(
-              const Rect.fromLTWH(-7, -8, 14, 16),
-              const Radius.circular(3),
-            );
-
-            canvas.drawRRect(plugBody, plugFill);
-            canvas.drawRRect(plugBody, plugStroke);
-
-            canvas.restore();
-          }
-        }
-      }
-    }
   }
 
   @override
-  bool shouldRepaint(covariant BackgroundElementsPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.boxScale != boxScale ||
-        oldDelegate.outletOpacity != outletOpacity;
+  bool shouldRepaint(covariant ShadowPainter oldDelegate) {
+    return oldDelegate.boxScale != boxScale;
   }
 }
