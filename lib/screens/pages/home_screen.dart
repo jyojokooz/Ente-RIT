@@ -1,22 +1,23 @@
+// ===============================
+// FILE NAME: home_screen.dart
+// FILE PATH: lib/screens/pages/home_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// --- Screen Imports (Corrected Paths) ---
-// These files are one level up, in the 'screens' directory.
+// --- Screen Imports ---
 import '../comments_screen.dart';
 import '../edit_post_screen.dart';
 import '../notifications_screen.dart';
 import '../chat_list_screen.dart';
-import '../post_card.dart'; // Correct path to post_card.dart
-import '../post_card_placeholder.dart'; // Correct path
-
-// ProfileScreen is in the same 'pages' directory
+import '../post_card.dart';
+import '../post_card_placeholder.dart';
 import 'profile_screen.dart';
 
-// --- Widget Imports (Corrected Path) ---
-// Assuming 'widgets' is a folder inside 'lib'
+// --- Widget Imports ---
 import '../../widgets/notification_badge.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,13 +30,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
 
-  /// Triggers a refresh of the post feed.
   Future<void> _refreshPosts() async {
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
-  /// Navigates to the screen for editing a post.
   void _editPost(String postId, String currentCaption) {
     Navigator.push(
       context,
@@ -47,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Handles liking/unliking a post and creates a notification on like.
   Future<void> _toggleLike(
     String postId,
     List<dynamic> currentLikes,
@@ -79,7 +77,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Navigates to the comments screen for a specific post.
   void _onCommentTapped(String postId) {
     Navigator.push(
       context,
@@ -87,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Navigates to a user's profile screen.
   void _onProfileTapped(String userId) {
     Navigator.push(
       context,
@@ -95,29 +91,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Shows a confirmation dialog and deletes a post if confirmed.
   Future<void> _deletePost(String postId) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Colors.grey.shade900,
-          title: const Text(
+          backgroundColor: Colors.white,
+          title: Text(
             'Delete Post?',
-            style: TextStyle(color: Colors.white),
+            style: GoogleFonts.poppins(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          content: const Text(
+          content: Text(
             'Are you sure you want to permanently delete this post?',
-            style: TextStyle(color: Colors.white70),
+            style: GoogleFonts.poppins(color: Colors.grey[700]),
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(color: Colors.grey[600]),
+              ),
               onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child: Text(
+                'Delete',
+                style: GoogleFonts.poppins(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
@@ -134,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             const SnackBar(
-              content: Text('Post deleted successfully.'),
+              content: Text('Post deleted.'),
               backgroundColor: Colors.green,
             ),
           );
@@ -151,144 +158,173 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryAccentColor = Colors.yellow;
-    final Color cardBackgroundColor = Colors.grey.shade900;
+    // Theme Colors
+    const Color brandPurple = Color(0xFF9983F3);
+    const Color bgColor = Colors.white; // Changed to White
 
-    return RefreshIndicator(
-      onRefresh: _refreshPosts,
-      color: primaryAccentColor,
-      backgroundColor: cardBackgroundColor,
-      child: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildTopBar(Colors.white, cardBackgroundColor),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
-            StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('posts')
-                      .orderBy('timestamp', descending: true)
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => const PostCardPlaceholder(),
-                      childCount: 5,
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return SliverFillRemaining(
-                    child: Center(
-                      child: Text(
-                        'Something went wrong!',
-                        style: GoogleFonts.poppins(color: Colors.red),
+    return Scaffold(
+      backgroundColor: bgColor, // Set Scaffold background
+      body: RefreshIndicator(
+        onRefresh: _refreshPosts,
+        color: brandPurple,
+        backgroundColor: Colors.white,
+        child: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildTopBar()),
+              // removed the SizedBox to pull content up slightly
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .orderBy('timestamp', descending: true)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            const PostCardPlaceholder(), // Make sure placeholder is also updated for light theme
+                        childCount: 5,
                       ),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return SliverFillRemaining(
-                    child: Center(
-                      child: Text(
-                        'No posts yet. Be the first!',
-                        style: GoogleFonts.poppins(color: Colors.white70),
-                      ),
-                    ),
-                  );
-                }
-
-                final posts = snapshot.data!.docs;
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final postSnapshot = posts[index];
-                    final postData =
-                        postSnapshot.data() as Map<String, dynamic>;
-                    final postAuthorId = postData['userId'] ?? '';
-                    final currentLikes = postData['likes'] ?? [];
-                    final currentCaption = postData['caption'] ?? '';
-
-                    return PostCard(
-                      postSnapshot: postSnapshot,
-                      onCommentPressed: () => _onCommentTapped(postSnapshot.id),
-                      onDeletePressed: () => _deletePost(postSnapshot.id),
-                      onProfileTapped: () => _onProfileTapped(postAuthorId),
-                      onLikePressed:
-                          () => _toggleLike(
-                            postSnapshot.id,
-                            currentLikes,
-                            postAuthorId,
-                          ),
-                      onEditPressed:
-                          () => _editPost(postSnapshot.id, currentCaption),
                     );
-                  }, childCount: posts.length),
-                );
-              },
-            ),
-          ],
+                  }
+                  if (snapshot.hasError) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          'Something went wrong!',
+                          style: GoogleFonts.poppins(color: Colors.redAccent),
+                        ),
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.post_add,
+                              size: 64,
+                              color: Colors.grey[300],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No posts yet.',
+                              style: GoogleFonts.poppins(
+                                color: Colors.grey[500],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  final posts = snapshot.data!.docs;
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final postSnapshot = posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
+                      final currentLikes = postData['likes'] ?? [];
+                      final currentCaption = postData['caption'] ?? '';
+
+                      return PostCard(
+                        postSnapshot: postSnapshot,
+                        onCommentPressed:
+                            () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onLikePressed:
+                            () => _toggleLike(
+                              postSnapshot.id,
+                              currentLikes,
+                              postAuthorId,
+                            ),
+                        onEditPressed:
+                            () => _editPost(postSnapshot.id, currentCaption),
+                      );
+                    }, childCount: posts.length),
+                  );
+                },
+              ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 80),
+              ), // Bottom padding for scrolling past FAB
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Builds the top bar with the app title and action buttons.
-  Widget _buildTopBar(Color textColor, Color iconBgColor) {
+  Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          NotificationBadge(
-            child: GestureDetector(
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NotificationsScreen(),
-                    ),
-                  ),
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: iconBgColor,
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  color: textColor,
-                  size: 28,
-                ),
-              ),
-            ),
-          ),
+          // --- TITLE ---
           Text(
             'Explore',
             style: GoogleFonts.poppins(
-              fontSize: 22,
+              fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: textColor,
+              color: Colors.black, // Dark text
+              letterSpacing: -0.5,
             ),
           ),
-          GestureDetector(
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ChatListScreen(),
+
+          // --- ACTIONS ---
+          Row(
+            children: [
+              NotificationBadge(
+                child: IconButton(
+                  onPressed:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationsScreen(),
+                        ),
+                      ),
+                  icon: const Icon(
+                    Icons.notifications_outlined,
+                    color: Colors.black87,
+                    size: 26,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: iconBgColor,
               ),
-              child: Icon(Icons.message_outlined, color: textColor, size: 28),
-            ),
+              const SizedBox(width: 20),
+              IconButton(
+                onPressed:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ChatListScreen(),
+                      ),
+                    ),
+                icon: const Icon(
+                  Icons.message_outlined,
+                  color: Colors.black87,
+                  size: 26,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                style: IconButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
           ),
         ],
       ),

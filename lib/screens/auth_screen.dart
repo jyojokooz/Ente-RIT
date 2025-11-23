@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: auth_screen.dart
+// FILE PATH: lib/screens/auth_screen.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:animations/animations.dart';
 
@@ -14,20 +19,27 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   int _currentPageIndex = 0;
+  bool _reverse = false;
   bool _areImagesPrecached = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Pre-cache images to prevent lag/jitter on first load
     if (!_areImagesPrecached) {
-      precacheImage(const AssetImage('assets/person_and_dog.png'), context);
       precacheImage(const AssetImage('assets/rocket_person.png'), context);
+      precacheImage(
+        const AssetImage('assets/kampus_konnect_logo_wide.png'),
+        context,
+      );
+      precacheImage(const AssetImage('assets/google_logo.png'), context);
       _areImagesPrecached = true;
     }
   }
 
   void _goToPage(int pageIndex) {
     setState(() {
+      _reverse = pageIndex < _currentPageIndex;
       _currentPageIndex = pageIndex;
     });
   }
@@ -35,33 +47,37 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // --- THIS IS THE ONLY LINE YOU NEED TO CHANGE ---
-      // This single line explicitly sets the background for Welcome, Login,
-      // and Signup pages to black, overriding any theme color.
-      backgroundColor: Colors.black,
-
+      backgroundColor: Colors.white,
+      // Only show AppBar on Login/Signup to allow going back
       appBar:
           _currentPageIndex == 0
               ? null
               : AppBar(
-                backgroundColor: Colors.transparent,
+                backgroundColor: Colors.white,
                 elevation: 0,
+                scrolledUnderElevation: 0, // Prevents color change on scroll
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.black,
+                  ),
                   onPressed: () => _goToPage(0),
                 ),
               ),
       body: PageTransitionSwitcher(
-        duration: const Duration(milliseconds: 600),
-        reverse: _currentPageIndex == 0,
+        duration: const Duration(milliseconds: 500),
+        reverse: _reverse,
         transitionBuilder: (
           Widget child,
           Animation<double> primaryAnimation,
           Animation<double> secondaryAnimation,
         ) {
-          return FadeThroughTransition(
+          return SharedAxisTransition(
             animation: primaryAnimation,
             secondaryAnimation: secondaryAnimation,
+            transitionType:
+                SharedAxisTransitionType.horizontal, // Smooth side-slide
+            fillColor: Colors.white,
             child: child,
           );
         },
@@ -71,6 +87,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildCurrentPage() {
+    // Wrap pages in Keys to ensure state is preserved/reset correctly during transition
     switch (_currentPageIndex) {
       case 1:
         return LoginPage(
