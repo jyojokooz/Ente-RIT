@@ -6,10 +6,7 @@
   <strong>Campus Community App - The Ultimate College Companion</strong>
 </p>
 
-<p align="center">
-  <img src="https://github.com/jyojokooz/appmaking2/blob/main/assets/kk.gif?raw=true" 
-       width="100%" />
-</p>
+
 
 
 
