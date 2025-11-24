@@ -23,12 +23,13 @@ class WelcomePage extends StatefulWidget {
 
 class _WelcomePageState extends State<WelcomePage>
     with TickerProviderStateMixin {
+  // Controllers (Nullable for safety)
   AnimationController? _controller;
   AnimationController? _floatingController;
   AnimationController? _marqueeController;
-  AnimationController?
-  _rotationController; // New controller for spinning elements
+  AnimationController? _rotationController;
 
+  // Animations
   late Animation<double> _logoScale;
   late Animation<double> _logoFade;
   late Animation<Offset> _titleSlide;
@@ -45,7 +46,7 @@ class _WelcomePageState extends State<WelcomePage>
     // 1. Main Entrance Controller
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 1500),
     );
 
     // 2. Floating Background Controller
@@ -60,18 +61,19 @@ class _WelcomePageState extends State<WelcomePage>
       duration: const Duration(seconds: 10),
     )..repeat();
 
-    // 4. Rotation Controller (Slow spin)
+    // 4. Rotation Controller
     _rotationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 12),
     )..repeat();
 
-    // --- Entrance Tweens ---
-    const Curve transitionCurve = Curves.fastLinearToSlowEaseIn;
+    // --- Setup Animations ---
+    // We use easeOutQuart for a smooth landing without the jitter of heavier curves
+    const Curve transitionCurve = Curves.easeOutQuart;
 
     Animation<Offset> createSlide(double start, double end) {
       return Tween<Offset>(
-        begin: const Offset(0, -2.0),
+        begin: const Offset(0, -1.5),
         end: Offset.zero,
       ).animate(
         CurvedAnimation(
@@ -90,24 +92,31 @@ class _WelcomePageState extends State<WelcomePage>
       );
     }
 
-    _logoScale = Tween<double>(begin: 0.5, end: 1.0).animate(
+    // Define staggered timings
+    _logoScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller!,
-        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+        curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
       ),
     );
-    _logoFade = createFade(0.0, 0.4);
+    _logoFade = createFade(0.0, 0.3);
 
-    _titleSlide = createSlide(0.2, 0.7);
-    _titleFade = createFade(0.2, 0.5);
+    _titleSlide = createSlide(0.1, 0.6);
+    _titleFade = createFade(0.1, 0.4);
 
-    _subtitleSlide = createSlide(0.3, 0.8);
-    _subtitleFade = createFade(0.3, 0.6);
+    _subtitleSlide = createSlide(0.2, 0.7);
+    _subtitleFade = createFade(0.2, 0.5);
 
-    _buttonsSlide = createSlide(0.4, 0.9);
-    _buttonsFade = createFade(0.4, 0.7);
+    _buttonsSlide = createSlide(0.3, 0.8);
+    _buttonsFade = createFade(0.3, 0.6);
 
-    _controller?.forward();
+    // --- FIX FOR JITTER: Delay animation start ---
+    // Wait for the navigation transition (Splash -> Welcome) to finish before starting elements
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _controller?.forward();
+      }
+    });
   }
 
   @override
@@ -127,18 +136,19 @@ class _WelcomePageState extends State<WelcomePage>
     const Color accentPink = Color(0xFFFF6B6B);
     const Color accentBlue = Color(0xFF4D96FF);
 
-    if (_floatingController == null) return const SizedBox();
+    // Safety check
+    if (_floatingController == null) {
+      return const Scaffold(backgroundColor: Colors.white);
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // --- 0. DOTTED BACKGROUND PATTERN ---
+          // --- 0. DOTTED BACKGROUND ---
           CustomPaint(size: Size.infinite, painter: DottedBackgroundPainter()),
 
           // --- BACKGROUND FLOATING SHAPES ---
-
-          // 1. Top Left Star (Floating)
           Positioned(
             top: 80,
             left: 30,
@@ -148,8 +158,6 @@ class _WelcomePageState extends State<WelcomePage>
               child: const Icon(Icons.star, size: 40, color: accentYellow),
             ),
           ),
-
-          // 2. Top Right Circle (Hollow)
           Positioned(
             top: 120,
             right: 40,
@@ -166,8 +174,6 @@ class _WelcomePageState extends State<WelcomePage>
               ),
             ),
           ),
-
-          // 3. Bottom Left Plus Icon
           Positioned(
             bottom: 200,
             left: 40,
@@ -177,8 +183,6 @@ class _WelcomePageState extends State<WelcomePage>
               child: const Icon(Icons.add, size: 50, color: accentPurple),
             ),
           ),
-
-          // 4. Bottom Right Square (Hollow)
           Positioned(
             bottom: 150,
             right: 30,
@@ -194,8 +198,6 @@ class _WelcomePageState extends State<WelcomePage>
               ),
             ),
           ),
-
-          // 5. Middle Right Pill (Filled)
           Positioned(
             top: 300,
             right: -20,
@@ -216,8 +218,6 @@ class _WelcomePageState extends State<WelcomePage>
               ),
             ),
           ),
-
-          // 6. Spinning Star (Top Center-ish)
           Positioned(
             top: 180,
             left: 80,
@@ -235,8 +235,6 @@ class _WelcomePageState extends State<WelcomePage>
               },
             ),
           ),
-
-          // 7. Squiggly Line (Bottom Left)
           Positioned(
             bottom: 100,
             left: -10,
@@ -248,155 +246,137 @@ class _WelcomePageState extends State<WelcomePage>
 
           // --- MAIN CONTENT ---
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 20),
-
-                          // --- 1. APP ICON ---
-                          FadeTransition(
-                            opacity: _logoFade,
-                            child: ScaleTransition(
-                              scale: _logoScale,
-                              child: Center(
-                                child: SizedBox(
-                                  width: 260,
-                                  height: 260,
-                                  child: Image.asset(
-                                    'assets/app_icon.png',
-                                    fit: BoxFit.contain,
-                                    errorBuilder:
-                                        (c, e, s) => const Icon(
-                                          Icons.image_not_supported,
-                                          color: Colors.grey,
-                                          size: 120,
-                                        ),
-                                  ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Spacer(), // Pushes content to center vertically
+                  // --- 1. APP ICON ---
+                  FadeTransition(
+                    opacity: _logoFade,
+                    child: ScaleTransition(
+                      scale: _logoScale,
+                      child: Center(
+                        child: SizedBox(
+                          width: 260,
+                          height: 260,
+                          child: Image.asset(
+                            'assets/app_icon.png',
+                            fit: BoxFit.contain,
+                            errorBuilder:
+                                (c, e, s) => const Icon(
+                                  Icons.image_not_supported,
+                                  color: Colors.grey,
+                                  size: 120,
                                 ),
-                              ),
-                            ),
                           ),
-
-                          const SizedBox(height: 20),
-
-                          // --- 2. TITLE ---
-                          FadeTransition(
-                            opacity: _titleFade,
-                            child: SlideTransition(
-                              position: _titleSlide,
-                              child: Text(
-                                "KAMPUS\nKONNECT",
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.archivoBlack(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.w900,
-                                  color: brandBlack,
-                                  height: 1.0,
-                                  letterSpacing: -1.0,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // --- 3. SUBTITLE ---
-                          FadeTransition(
-                            opacity: _subtitleFade,
-                            child: SlideTransition(
-                              position: _subtitleSlide,
-                              child: Center(
-                                child: Transform.rotate(
-                                  angle: -0.03,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                      horizontal: 20,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: brandBlack,
-                                        width: 2,
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: brandBlack,
-                                          offset: Offset(4, 4),
-                                          blurRadius: 0,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      "Your ultimate hub for campus life.",
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.spaceMono(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: brandBlack,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 60),
-
-                          // --- 4. BUTTONS ---
-                          FadeTransition(
-                            opacity: _buttonsFade,
-                            child: SlideTransition(
-                              position: _buttonsSlide,
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 280,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      NeoBrutalistButton(
-                                        text: "GET STARTED",
-                                        onPressed: widget.onSignupTapped,
-                                        bgColor: brandBlack,
-                                        textColor: Colors.white,
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      NeoBrutalistButton(
-                                        text: "LOG IN",
-                                        onPressed: widget.onLoginTapped,
-                                        bgColor: Colors.white,
-                                        textColor: brandBlack,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 40),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                );
-              },
+
+                  const SizedBox(height: 20),
+
+                  // --- 2. TITLE ---
+                  FadeTransition(
+                    opacity: _titleFade,
+                    child: SlideTransition(
+                      position: _titleSlide,
+                      child: Text(
+                        "KAMPUS\nKONNECT",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.archivoBlack(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          color: brandBlack,
+                          height: 1.0,
+                          letterSpacing: -1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // --- 3. SUBTITLE ---
+                  FadeTransition(
+                    opacity: _subtitleFade,
+                    child: SlideTransition(
+                      position: _subtitleSlide,
+                      child: Center(
+                        child: Transform.rotate(
+                          angle: -0.03,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 20,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: brandBlack, width: 2),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: brandBlack,
+                                  offset: Offset(4, 4),
+                                  blurRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              "Your ultimate hub for campus life.",
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.spaceMono(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: brandBlack,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 60),
+
+                  // --- 4. BUTTONS ---
+                  FadeTransition(
+                    opacity: _buttonsFade,
+                    child: SlideTransition(
+                      position: _buttonsSlide,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Column(
+                            children: [
+                              NeoBrutalistButton(
+                                text: "GET STARTED",
+                                onPressed: widget.onSignupTapped,
+                                bgColor: brandBlack,
+                                textColor: Colors.white,
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              NeoBrutalistButton(
+                                text: "LOG IN",
+                                onPressed: widget.onLoginTapped,
+                                bgColor: Colors.white,
+                                textColor: brandBlack,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(flex: 2), // Balances bottom spacing
+                ],
+              ),
             ),
           ),
 
@@ -406,7 +386,7 @@ class _WelcomePageState extends State<WelcomePage>
             left: 0,
             right: 0,
             child: FadeTransition(
-              opacity: _buttonsFade, // Fade in with buttons
+              opacity: _buttonsFade,
               child: SizedBox(
                 height: 30,
                 child: MarqueeText(controller: _marqueeController!),
@@ -419,7 +399,8 @@ class _WelcomePageState extends State<WelcomePage>
   }
 }
 
-// --- HELPER: Floating Animation Wrapper ---
+// --- HELPERS (Optimized for performance) ---
+
 class FloatingShape extends StatelessWidget {
   final AnimationController controller;
   final double delay;
@@ -437,6 +418,7 @@ class FloatingShape extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, childWidget) {
+        // Use simple sine wave for smooth floating
         final double offset =
             math.sin((controller.value * 2 * math.pi) + delay) * 10;
         return Transform.translate(
@@ -449,7 +431,6 @@ class FloatingShape extends StatelessWidget {
   }
 }
 
-// --- HELPER: Infinite Marquee Text ---
 class MarqueeText extends StatelessWidget {
   final AnimationController controller;
   const MarqueeText({super.key, required this.controller});
@@ -459,7 +440,7 @@ class MarqueeText extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, child) {
-        final double slide = -controller.value * 200; // Adjust speed
+        final double slide = -controller.value * 200;
         return Stack(
           children: [
             Transform.translate(
@@ -491,7 +472,6 @@ class MarqueeText extends StatelessWidget {
   }
 }
 
-// --- HELPER: Dotted Background ---
 class DottedBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -501,11 +481,10 @@ class DottedBackgroundPainter extends CustomPainter {
           ..strokeWidth = 2
           ..style = PaintingStyle.fill;
 
-    const double step = 40; // Grid spacing
+    const double step = 40;
     for (double y = 0; y < size.height; y += step) {
       for (double x = 0; x < size.width; x += step) {
         if (x % (step * 2) == 0 && y % (step * 2) == 0) {
-          // Sparse dots
           canvas.drawCircle(Offset(x, y), 1.5, paint);
         }
       }
@@ -516,7 +495,6 @@ class DottedBackgroundPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- HELPER: Squiggly Line ---
 class SquigglyLinePainter extends CustomPainter {
   final Color color;
   SquigglyLinePainter({required this.color});
@@ -546,7 +524,6 @@ class SquigglyLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// --- CUSTOM WIDGET: Neo-Brutalist Button ---
 class NeoBrutalistButton extends StatefulWidget {
   final String text;
   final VoidCallback onPressed;

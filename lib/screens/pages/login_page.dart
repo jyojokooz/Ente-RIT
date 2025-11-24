@@ -6,7 +6,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+// Removed unused dart:math import
 import '../../auth/auth_service.dart';
+
+// Import the Welcome Page so we can reuse helper widgets like FloatingShape & DottedBackgroundPainter
+import 'welcome_page.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onSignupTapped;
@@ -16,26 +20,57 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _auth = FirebaseAuth.instance;
   final AuthService _authService = AuthService();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
   bool _isLoading = false;
   bool _isGoogleLoading = false;
 
-  // Styles
-  final Color brandPurple = const Color(0xFF9983F3);
-  final Color darkButtonColor = const Color(0xFF1F2937);
-  final OutlineInputBorder _borderStyle = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(14),
-    borderSide: BorderSide(color: Colors.grey.shade200),
-  );
-  final OutlineInputBorder _focusedBorderStyle = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(14),
-    borderSide: const BorderSide(color: Color(0xFF9983F3), width: 1.5),
-  );
+  // Animation Controllers for Background
+  late AnimationController _floatingController;
+  late AnimationController _entranceController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    )..repeat(reverse: true);
+
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _entranceController, curve: Curves.easeOut),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
+    );
+
+    _entranceController.forward();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _floatingController.dispose();
+    _entranceController.dispose();
+    super.dispose();
+  }
 
   Future<void> _loginWithEmailPassword() async {
     if (_formKey.currentState!.validate()) {
@@ -104,235 +139,293 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandBlack = Colors.black;
+    const Color accentYellow = Color(0xFFFFD700);
+    const Color accentPink = Color(0xFFFF6B6B);
+    const Color accentPurple = Color(0xFF9983F3);
+
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    "Welcome Back",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Sign in to your account",
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
+      body: Stack(
+        children: [
+          // --- 0. DOTTED BACKGROUND ---
+          CustomPaint(size: Size.infinite, painter: DottedBackgroundPainter()),
 
-                  // Email
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      color: Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Email',
-                      hintStyle: GoogleFonts.poppins(
-                        color: Colors.grey.shade400,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.all(20),
-                      enabledBorder: _borderStyle,
-                      focusedBorder: _focusedBorderStyle,
-                      prefixIcon: Icon(
-                        Icons.email_outlined,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                    validator:
-                        (val) =>
-                            val!.contains('@') ? null : 'Enter valid email',
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      color: Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      hintStyle: GoogleFonts.poppins(
-                        color: Colors.grey.shade400,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.all(20),
-                      enabledBorder: _borderStyle,
-                      focusedBorder: _focusedBorderStyle,
-                      prefixIcon: Icon(
-                        Icons.lock_outline,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                    validator:
-                        (val) => val!.length >= 6 ? null : 'Min 6 characters',
-                  ),
-
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _forgotPassword,
-                      child: Text(
-                        "Forgot Password?",
-                        style: GoogleFonts.poppins(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  SizedBox(
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _loginWithEmailPassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: darkButtonColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child:
-                          _isLoading
-                              ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                              : Text(
-                                "Log In",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Colors.grey.shade200)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "Or continue with",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: Colors.grey.shade200)),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  SizedBox(
-                    height: 56,
-                    child: OutlinedButton(
-                      onPressed: _isGoogleLoading ? null : _loginWithGoogle,
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.grey.shade200),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child:
-                          _isGoogleLoading
-                              ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                              : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(
-                                    'assets/google_logo.png',
-                                    height: 24,
-                                    errorBuilder:
-                                        (c, e, s) => const Icon(
-                                          Icons.public,
-                                          color: Colors.blue,
-                                        ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    "Google",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: const Color(0xFF111827),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account?",
-                        style: GoogleFonts.poppins(color: Colors.grey.shade600),
-                      ),
-                      TextButton(
-                        onPressed: widget.onSignupTapped,
-                        child: Text(
-                          "Sign Up",
-                          style: GoogleFonts.poppins(
-                            color: brandPurple,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          // --- BACKGROUND SHAPES ---
+          Positioned(
+            top: -20,
+            right: -20,
+            child: FloatingShape(
+              controller: _floatingController,
+              delay: 0.0,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: accentYellow, width: 4),
+                ),
               ),
             ),
           ),
+          Positioned(
+            bottom: 100,
+            left: -30,
+            child: FloatingShape(
+              controller: _floatingController,
+              delay: 0.5,
+              child: Transform.rotate(
+                angle: 0.2,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: accentPink,
+                    border: Border.all(color: brandBlack, width: 3),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 200,
+            left: 20,
+            child: FloatingShape(
+              controller: _floatingController,
+              delay: 0.2,
+              child: const Icon(Icons.star, size: 40, color: accentPurple),
+            ),
+          ),
+
+          // --- MAIN CONTENT ---
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // --- HEADER ---
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: brandBlack, width: 3),
+                              borderRadius: BorderRadius.circular(
+                                0,
+                              ), // Hard edges for brutalism
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: brandBlack,
+                                  offset: Offset(6, 6),
+                                  blurRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  "WELCOME BACK",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.archivoBlack(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w900,
+                                    color: brandBlack,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  "Log in to your account.",
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.spaceMono(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 40),
+
+                          // --- EMAIL INPUT ---
+                          NeoBrutalistTextField(
+                            controller: _emailController,
+                            hintText: 'Email Address',
+                            icon: Icons.email_outlined,
+                            validator:
+                                (val) =>
+                                    val!.contains('@')
+                                        ? null
+                                        : 'Enter valid email',
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // --- PASSWORD INPUT ---
+                          NeoBrutalistTextField(
+                            controller: _passwordController,
+                            hintText: 'Password',
+                            icon: Icons.lock_outline,
+                            obscureText: true,
+                            validator:
+                                (val) =>
+                                    val!.length >= 6
+                                        ? null
+                                        : 'Min 6 characters',
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _forgotPassword,
+                              child: Text(
+                                "Forgot Password?",
+                                style: GoogleFonts.spaceMono(
+                                  color: brandBlack,
+                                  fontWeight: FontWeight.bold,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // --- LOG IN BUTTON ---
+                          NeoBrutalistButton(
+                            text: _isLoading ? "LOGGING IN..." : "LOG IN",
+                            onPressed:
+                                _isLoading ? () {} : _loginWithEmailPassword,
+                            bgColor: brandBlack,
+                            textColor: Colors.white,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Divider(color: brandBlack, thickness: 2),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Text(
+                                  "OR",
+                                  style: GoogleFonts.archivoBlack(fontSize: 14),
+                                ),
+                              ),
+                              const Expanded(
+                                child: Divider(color: brandBlack, thickness: 2),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // --- GOOGLE BUTTON ---
+                          NeoBrutalistButton(
+                            text: "GOOGLE",
+                            onPressed:
+                                _isGoogleLoading ? () {} : _loginWithGoogle,
+                            bgColor: Colors.white,
+                            textColor: brandBlack,
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // --- SIGN UP LINK ---
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "New here?",
+                                style: GoogleFonts.spaceMono(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: widget.onSignupTapped,
+                                child: Text(
+                                  "Create Account",
+                                  style: GoogleFonts.spaceMono(
+                                    color: accentPurple,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- REUSABLE: Neo-Brutalist Text Field ---
+class NeoBrutalistTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final IconData icon;
+  final bool obscureText;
+  final String? Function(String?)? validator;
+
+  const NeoBrutalistTextField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.icon,
+    this.obscureText = false,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black, width: 2.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscureText,
+        style: GoogleFonts.spaceMono(fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: GoogleFonts.spaceMono(color: Colors.grey),
+          prefixIcon: Icon(icon, color: Colors.black),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 16,
+            horizontal: 16,
+          ),
         ),
+        validator: validator,
       ),
     );
   }
