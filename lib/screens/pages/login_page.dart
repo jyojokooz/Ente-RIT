@@ -6,15 +6,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// Removed unused dart:math import
 import '../../auth/auth_service.dart';
-
-// Import the Welcome Page so we can reuse helper widgets like FloatingShape & DottedBackgroundPainter
-import 'welcome_page.dart';
+import 'welcome_page.dart'; // Reusing shared widgets
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onSignupTapped;
-  const LoginPage({super.key, required this.onSignupTapped});
+  final VoidCallback onBackTapped;
+
+  const LoginPage({
+    super.key,
+    required this.onSignupTapped,
+    required this.onBackTapped,
+  });
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -30,11 +33,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
 
-  // Animation Controllers for Background
+  // Animation Controllers
   late AnimationController _floatingController;
   late AnimationController _entranceController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+
+  // Staggered Animations
+  late Animation<Offset> _headerSlide;
+  late Animation<double> _headerFade;
+  late Animation<Offset> _emailSlide;
+  late Animation<double> _emailFade;
+  late Animation<Offset> _passwordSlide;
+  late Animation<double> _passwordFade;
+  late Animation<Offset> _forgotSlide;
+  late Animation<double> _forgotFade;
+  late Animation<Offset> _buttonSlide;
+  late Animation<double> _buttonFade;
+  late Animation<Offset> _dividerSlide;
+  late Animation<double> _dividerFade;
+  late Animation<Offset> _googleSlide;
+  late Animation<double> _googleFade;
+  late Animation<Offset> _footerSlide;
+  late Animation<double> _footerFade;
 
   @override
   void initState() {
@@ -46,19 +65,56 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1200),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _entranceController, curve: Curves.easeOut),
-    );
+    // Helper for slide
+    Animation<Offset> createSlide(double start, double end) {
+      return Tween<Offset>(
+        begin: const Offset(0, 0.5),
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _entranceController,
+          curve: Interval(start, end, curve: Curves.easeOutCubic),
+        ),
+      );
+    }
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
-    );
+    // Helper for fade
+    Animation<double> createFade(double start, double end) {
+      return Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _entranceController,
+          curve: Interval(start, end, curve: Curves.easeOut),
+        ),
+      );
+    }
+
+    // Define Staggered Timings
+    _headerSlide = createSlide(0.0, 0.5);
+    _headerFade = createFade(0.0, 0.4);
+
+    _emailSlide = createSlide(0.1, 0.6);
+    _emailFade = createFade(0.1, 0.5);
+
+    _passwordSlide = createSlide(0.2, 0.7);
+    _passwordFade = createFade(0.2, 0.6);
+
+    _forgotSlide = createSlide(0.3, 0.8);
+    _forgotFade = createFade(0.3, 0.7);
+
+    _buttonSlide = createSlide(0.4, 0.9);
+    _buttonFade = createFade(0.4, 0.8);
+
+    _dividerSlide = createSlide(0.5, 0.95);
+    _dividerFade = createFade(0.5, 0.85);
+
+    _googleSlide = createSlide(0.55, 1.0);
+    _googleFade = createFade(0.55, 0.9);
+
+    _footerSlide = createSlide(0.6, 1.0);
+    _footerFade = createFade(0.6, 0.95);
 
     _entranceController.forward();
   }
@@ -148,10 +204,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // --- 0. DOTTED BACKGROUND ---
           CustomPaint(size: Size.infinite, painter: DottedBackgroundPainter()),
 
-          // --- BACKGROUND SHAPES ---
+          // Floating Shapes
           Positioned(
             top: -20,
             right: -20,
@@ -197,184 +252,261 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
           ),
 
-          // --- MAIN CONTENT ---
           SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // --- HEADER ---
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: brandBlack, width: 3),
-                              borderRadius: BorderRadius.circular(
-                                0,
-                              ), // Hard edges for brutalism
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: brandBlack,
-                                  offset: Offset(6, 6),
-                                  blurRadius: 0,
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  "WELCOME BACK",
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.archivoBlack(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w900,
-                                    color: brandBlack,
+            child: Column(
+              children: [
+                // Back Button
+                Padding(
+                  padding: const EdgeInsets.only(left: 20, top: 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: NeoBrutalistButton(
+                      text: "BACK",
+                      onPressed: widget.onBackTapped,
+                      bgColor: Colors.white,
+                      textColor: brandBlack,
+                      isSmall: true,
+                    ),
+                  ),
+                ),
+
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // 1. HEADER
+                            FadeTransition(
+                              opacity: _headerFade,
+                              child: SlideTransition(
+                                position: _headerSlide,
+                                child: Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(
+                                      color: brandBlack,
+                                      width: 3,
+                                    ),
+                                    borderRadius: BorderRadius.circular(0),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: brandBlack,
+                                        offset: Offset(6, 6),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  "Log in to your account.",
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.spaceMono(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 40),
-
-                          // --- EMAIL INPUT ---
-                          NeoBrutalistTextField(
-                            controller: _emailController,
-                            hintText: 'Email Address',
-                            icon: Icons.email_outlined,
-                            validator:
-                                (val) =>
-                                    val!.contains('@')
-                                        ? null
-                                        : 'Enter valid email',
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // --- PASSWORD INPUT ---
-                          NeoBrutalistTextField(
-                            controller: _passwordController,
-                            hintText: 'Password',
-                            icon: Icons.lock_outline,
-                            obscureText: true,
-                            validator:
-                                (val) =>
-                                    val!.length >= 6
-                                        ? null
-                                        : 'Min 6 characters',
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _forgotPassword,
-                              child: Text(
-                                "Forgot Password?",
-                                style: GoogleFonts.spaceMono(
-                                  color: brandBlack,
-                                  fontWeight: FontWeight.bold,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // --- LOG IN BUTTON ---
-                          NeoBrutalistButton(
-                            text: _isLoading ? "LOGGING IN..." : "LOG IN",
-                            onPressed:
-                                _isLoading ? () {} : _loginWithEmailPassword,
-                            bgColor: brandBlack,
-                            textColor: Colors.white,
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Divider(color: brandBlack, thickness: 2),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Text(
-                                  "OR",
-                                  style: GoogleFonts.archivoBlack(fontSize: 14),
-                                ),
-                              ),
-                              const Expanded(
-                                child: Divider(color: brandBlack, thickness: 2),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // --- GOOGLE BUTTON ---
-                          NeoBrutalistButton(
-                            text: "GOOGLE",
-                            onPressed:
-                                _isGoogleLoading ? () {} : _loginWithGoogle,
-                            bgColor: Colors.white,
-                            textColor: brandBlack,
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // --- SIGN UP LINK ---
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "New here?",
-                                style: GoogleFonts.spaceMono(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: widget.onSignupTapped,
-                                child: Text(
-                                  "Create Account",
-                                  style: GoogleFonts.spaceMono(
-                                    color: accentPurple,
-                                    fontWeight: FontWeight.w900,
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        "WELCOME BACK",
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.archivoBlack(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w900,
+                                          color: brandBlack,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        "Log in to your account.",
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.spaceMono(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+
+                            const SizedBox(height: 40),
+
+                            // 2. EMAIL
+                            FadeTransition(
+                              opacity: _emailFade,
+                              child: SlideTransition(
+                                position: _emailSlide,
+                                child: NeoBrutalistTextField(
+                                  controller: _emailController,
+                                  hintText: 'Email Address',
+                                  icon: Icons.email_outlined,
+                                  validator:
+                                      (val) =>
+                                          val!.contains('@')
+                                              ? null
+                                              : 'Enter valid email',
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // 3. PASSWORD
+                            FadeTransition(
+                              opacity: _passwordFade,
+                              child: SlideTransition(
+                                position: _passwordSlide,
+                                child: NeoBrutalistTextField(
+                                  controller: _passwordController,
+                                  hintText: 'Password',
+                                  icon: Icons.lock_outline,
+                                  obscureText: true,
+                                  validator:
+                                      (val) =>
+                                          val!.length >= 6
+                                              ? null
+                                              : 'Min 6 characters',
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // 4. FORGOT PASSWORD
+                            FadeTransition(
+                              opacity: _forgotFade,
+                              child: SlideTransition(
+                                position: _forgotSlide,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _forgotPassword,
+                                    child: Text(
+                                      "Forgot Password?",
+                                      style: GoogleFonts.spaceMono(
+                                        color: brandBlack,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // 5. LOGIN BUTTON
+                            FadeTransition(
+                              opacity: _buttonFade,
+                              child: SlideTransition(
+                                position: _buttonSlide,
+                                child: NeoBrutalistButton(
+                                  text: _isLoading ? "LOGGING IN..." : "LOG IN",
+                                  onPressed:
+                                      _isLoading
+                                          ? () {}
+                                          : _loginWithEmailPassword,
+                                  bgColor: brandBlack,
+                                  textColor: Colors.white,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // 6. DIVIDER
+                            FadeTransition(
+                              opacity: _dividerFade,
+                              child: SlideTransition(
+                                position: _dividerSlide,
+                                child: Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Divider(
+                                        color: brandBlack,
+                                        thickness: 2,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                      child: Text(
+                                        "OR",
+                                        style: GoogleFonts.archivoBlack(
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                    const Expanded(
+                                      child: Divider(
+                                        color: brandBlack,
+                                        thickness: 2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // 7. GOOGLE BUTTON
+                            FadeTransition(
+                              opacity: _googleFade,
+                              child: SlideTransition(
+                                position: _googleSlide,
+                                child: NeoBrutalistButton(
+                                  text: "GOOGLE",
+                                  onPressed:
+                                      _isGoogleLoading
+                                          ? () {}
+                                          : _loginWithGoogle,
+                                  bgColor: Colors.white,
+                                  textColor: brandBlack,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 32),
+
+                            // 8. FOOTER
+                            FadeTransition(
+                              opacity: _footerFade,
+                              child: SlideTransition(
+                                position: _footerSlide,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      "New here?",
+                                      style: GoogleFonts.spaceMono(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: widget.onSignupTapped,
+                                      child: Text(
+                                        "Create Account",
+                                        style: GoogleFonts.spaceMono(
+                                          color: accentPurple,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -383,7 +515,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 }
 
-// --- REUSABLE: Neo-Brutalist Text Field ---
+// --- REUSABLE WIDGET: Neo-Brutalist Text Field ---
 class NeoBrutalistTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;

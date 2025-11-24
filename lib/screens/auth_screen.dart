@@ -4,8 +4,6 @@
 // ===============================
 
 import 'package:flutter/material.dart';
-import 'package:animations/animations.dart';
-
 import 'pages/welcome_page.dart';
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
@@ -19,19 +17,13 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   int _currentPageIndex = 0;
-  bool _reverse = false;
   bool _areImagesPrecached = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Pre-cache images to prevent lag/jitter on first load
     if (!_areImagesPrecached) {
-      precacheImage(const AssetImage('assets/rocket_person.png'), context);
-      precacheImage(
-        const AssetImage('assets/kampus_konnect_logo_wide.png'),
-        context,
-      );
+      precacheImage(const AssetImage('assets/app_icon.png'), context);
       precacheImage(const AssetImage('assets/google_logo.png'), context);
       _areImagesPrecached = true;
     }
@@ -39,7 +31,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _goToPage(int pageIndex) {
     setState(() {
-      _reverse = pageIndex < _currentPageIndex;
       _currentPageIndex = pageIndex;
     });
   }
@@ -48,38 +39,14 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // Only show AppBar on Login/Signup to allow going back
-      appBar:
-          _currentPageIndex == 0
-              ? null
-              : AppBar(
-                backgroundColor: Colors.white,
-                elevation: 0,
-                scrolledUnderElevation: 0, // Prevents color change on scroll
-                leading: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.black,
-                  ),
-                  onPressed: () => _goToPage(0),
-                ),
-              ),
-      body: PageTransitionSwitcher(
-        duration: const Duration(milliseconds: 500),
-        reverse: _reverse,
-        transitionBuilder: (
-          Widget child,
-          Animation<double> primaryAnimation,
-          Animation<double> secondaryAnimation,
-        ) {
-          return SharedAxisTransition(
-            animation: primaryAnimation,
-            secondaryAnimation: secondaryAnimation,
-            transitionType:
-                SharedAxisTransitionType.horizontal, // Smooth side-slide
-            fillColor: Colors.white,
-            child: child,
-          );
+      body: AnimatedSwitcher(
+        // Using a simple fade allows the internal staggered animations
+        // of the new page to be the main visual focus.
+        duration: const Duration(milliseconds: 400),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return FadeTransition(opacity: animation, child: child);
         },
         child: _buildCurrentPage(),
       ),
@@ -87,17 +54,19 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildCurrentPage() {
-    // Wrap pages in Keys to ensure state is preserved/reset correctly during transition
+    // Keys are critical for AnimatedSwitcher to detect page changes
     switch (_currentPageIndex) {
       case 1:
         return LoginPage(
           key: const ValueKey<int>(1),
           onSignupTapped: () => _goToPage(2),
+          onBackTapped: () => _goToPage(0),
         );
       case 2:
         return SignupPage(
           key: const ValueKey<int>(2),
           onLoginTapped: () => _goToPage(1),
+          onBackTapped: () => _goToPage(0),
         );
       case 0:
       default:
