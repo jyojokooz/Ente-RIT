@@ -31,14 +31,6 @@
           }
         },
         {
-          "client_id": "267885782991-u84vujdvn8au89mnuu1hpe85nqni2f0q.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.my_project",
-            "certificate_hash": "5356ba46f97b88ea6630af9c7797d92ee997c1a3"
-          }
-        },
-        {
           "client_id": "267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com",
           "client_type": 3
         }

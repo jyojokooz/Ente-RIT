@@ -19,10 +19,7 @@ class AuthService {
   // Initialize GoogleSignIn with the Web Client ID.
   // This is essential for release builds to work correctly.
   // Replace the placeholder with your actual Web Client ID from the Google Cloud Console.
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId:
-        '267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   /// Signs a new user up with their Email & Password.
   /// Enforces RIT email and auto-creates the user profile with a username.
