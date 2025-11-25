@@ -31,10 +31,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
-    final currentFocus = FocusScope.of(context);
-    if (currentFocus.hasFocus) {
-      currentFocus.unfocus();
-    }
+    // Clear input IMMEDIATELY for better UX
+    _commentController.clear();
+    FocusScope.of(context).unfocus();
 
     final postRef = FirebaseFirestore.instance
         .collection('posts')
@@ -44,60 +43,59 @@ class _CommentsScreenState extends State<CommentsScreen> {
       'notifications',
     );
 
-    final userDoc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUser.uid)
-            .get();
-    if (!userDoc.exists) return;
+    try {
+      // Get current user details ONCE to stamp onto the comment
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser.uid)
+              .get();
+      final userData = userDoc.data() ?? {};
 
-    final userData = userDoc.data() as Map<String, dynamic>;
+      final newCommentData = {
+        'text': text,
+        'userName': userData['displayName'] ?? 'A User',
+        'userImageUrl': userData['profilePhotoUrl'] ?? '',
+        'userId': _currentUser.uid,
+        'timestamp': FieldValue.serverTimestamp(),
+      };
 
-    final newCommentData = {
-      'text': text,
-      'userName': userData['displayName'] ?? 'A User',
-      'userImageUrl': userData['profilePhotoUrl'] ?? '',
-      'userId': _currentUser.uid,
-      'timestamp': FieldValue.serverTimestamp(),
-    };
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final postSnapshot = await transaction.get(postRef);
+        if (!postSnapshot.exists) throw Exception("Post does not exist!");
 
-    _commentController.clear();
+        final postData = postSnapshot.data() as Map<String, dynamic>;
+        final postAuthorId = postData['userId'];
 
-    await FirebaseFirestore.instance
-        .runTransaction((transaction) async {
-          final postSnapshot = await transaction.get(postRef);
-          if (!postSnapshot.exists) throw Exception("Post does not exist!");
+        // Update comment count
+        transaction.update(postRef, {'comments': FieldValue.increment(1)});
 
-          final postData = postSnapshot.data() as Map<String, dynamic>;
-          final postAuthorId = postData['userId'];
-          final currentCommentCount = postData['comments'] ?? 0;
+        // Add comment
+        final newCommentDocRef = commentCollectionRef.doc();
+        transaction.set(newCommentDocRef, newCommentData);
 
-          transaction.update(postRef, {'comments': currentCommentCount + 1});
-
-          final newCommentDocRef = commentCollectionRef.doc();
-          transaction.set(newCommentDocRef, newCommentData);
-
-          if (postAuthorId != null && postAuthorId != _currentUser.uid) {
-            final newNotificationDocRef = notificationsCollectionRef.doc();
-            transaction.set(newNotificationDocRef, {
-              'userId': postAuthorId,
-              'title': 'New Comment',
-              'body':
-                  '${userData['displayName'] ?? 'Someone'} commented: "$text"',
-              'type': 'comment',
-              'relatedDocId': widget.postId,
-              'isRead': false,
-              'timestamp': FieldValue.serverTimestamp(),
-            });
-          }
-        })
-        .catchError((error) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Failed to post comment: $error")),
-            );
-          }
-        });
+        // Add Notification
+        if (postAuthorId != null && postAuthorId != _currentUser.uid) {
+          final newNotificationDocRef = notificationsCollectionRef.doc();
+          transaction.set(newNotificationDocRef, {
+            'userId': postAuthorId,
+            'title': 'New Comment',
+            'body':
+                '${userData['displayName'] ?? 'Someone'} commented: "$text"',
+            'type': 'comment',
+            'relatedDocId': widget.postId,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to post comment: $error")),
+        );
+      }
+    }
   }
 
   Future<void> _deleteComment(String commentId) async {
@@ -156,30 +154,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
     }
   }
 
-  Future<List<QueryDocumentSnapshot>> _filterComments(
-    List<QueryDocumentSnapshot> rawComments,
-  ) async {
-    if (rawComments.isEmpty) return [];
-    final userIds =
-        rawComments.map((doc) => doc['userId'] as String).toSet().toList();
-    final userFutures =
-        userIds
-            .map(
-              (id) =>
-                  FirebaseFirestore.instance.collection('users').doc(id).get(),
-            )
-            .toList();
-    final userSnapshots = await Future.wait(userFutures);
-    final existingUserIds =
-        userSnapshots
-            .where((snap) => snap.exists)
-            .map((snap) => snap.id)
-            .toSet();
-    return rawComments
-        .where((comment) => existingUserIds.contains(comment['userId']))
-        .toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     const Color brandBlack = Colors.black;
@@ -204,6 +178,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
+              // Fetch comments directly. No extra filtering needed as user data is inside the comment.
               stream:
                   FirebaseFirestore.instance
                       .collection('posts')
@@ -212,11 +187,16 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text("Error loading comments"));
+                }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: brandPurple),
                   );
                 }
+
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
                     child: Text(
@@ -227,130 +207,110 @@ class _CommentsScreenState extends State<CommentsScreen> {
                   );
                 }
 
-                final rawComments = snapshot.data!.docs;
+                final comments = snapshot.data!.docs;
 
-                return FutureBuilder<List<QueryDocumentSnapshot>>(
-                  future: _filterComments(rawComments),
-                  builder: (context, filteredSnapshot) {
-                    if (filteredSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const SizedBox.shrink(); // Avoid flicker
-                    }
-                    if (!filteredSnapshot.hasData ||
-                        filteredSnapshot.data!.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No comments to display.',
-                          style: GoogleFonts.spaceMono(color: Colors.grey),
-                        ),
-                      );
-                    }
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = comments[index];
+                    final commentData = comment.data() as Map<String, dynamic>;
 
-                    final comments = filteredSnapshot.data!;
+                    // Use data directly from the comment document
+                    final userImage = commentData['userImageUrl'] ?? '';
+                    final userName = commentData['userName'] ?? 'User';
+                    final timestamp =
+                        (commentData['timestamp'] as Timestamp?)?.toDate();
+                    final commentAuthorId = commentData['userId'];
+                    final bool isAuthor = _currentUser.uid == commentAuthorId;
 
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(16.0),
-                      itemCount: comments.length,
-                      itemBuilder: (context, index) {
-                        final comment = comments[index];
-                        final commentData =
-                            comment.data() as Map<String, dynamic>;
-                        final userImage = commentData['userImageUrl'] ?? '';
-                        final timestamp =
-                            (commentData['timestamp'] as Timestamp?)?.toDate();
-                        final commentAuthorId = commentData['userId'];
-                        final bool isAuthor =
-                            _currentUser.uid == commentAuthorId;
-
-                        // --- NEO-BRUTALIST COMMENT CARD ---
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: brandBlack, width: 2),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: brandBlack,
-                                offset: Offset(4, 4),
-                                blurRadius: 0,
-                              ),
-                            ],
+                    // --- NEO-BRUTALIST COMMENT CARD ---
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: brandBlack, width: 2),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: brandBlack,
+                            offset: Offset(4, 4),
+                            blurRadius: 0,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: Colors.grey.shade200,
-                                    backgroundImage:
-                                        userImage.isNotEmpty
-                                            ? NetworkImage(userImage)
-                                            : null,
-                                    child:
-                                        userImage.isEmpty
-                                            ? const Icon(
-                                              Icons.person,
-                                              size: 20,
-                                              color: brandBlack,
-                                            )
-                                            : null,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    commentData['userName'] ?? 'User',
-                                    style: GoogleFonts.archivoBlack(
-                                      fontSize: 14,
-                                      color: brandBlack,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    timestamp != null
-                                        ? timeago.format(
-                                          timestamp,
-                                          locale: 'en_short',
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.grey.shade200,
+                                backgroundImage:
+                                    userImage.isNotEmpty
+                                        ? NetworkImage(userImage)
+                                        : null,
+                                child:
+                                    userImage.isEmpty
+                                        ? const Icon(
+                                          Icons.person,
+                                          size: 20,
+                                          color: brandBlack,
                                         )
-                                        : '',
-                                    style: GoogleFonts.spaceMono(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  if (isAuthor)
-                                    GestureDetector(
-                                      onTap: () => _deleteComment(comment.id),
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 8.0),
-                                        child: Icon(
-                                          Icons.delete_outline,
-                                          color: Colors.red,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                        : null,
                               ),
-                              const SizedBox(height: 8),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 42.0,
-                                ), // Indent text under name
-                                child: Text(
-                                  commentData['text'] ?? '',
-                                  style: GoogleFonts.poppins(
-                                    color: brandBlack,
-                                    fontSize: 14,
-                                  ),
+                              const SizedBox(width: 10),
+                              Text(
+                                userName,
+                                style: GoogleFonts.archivoBlack(
+                                  fontSize: 14,
+                                  color: brandBlack,
                                 ),
                               ),
+                              const Spacer(),
+                              Text(
+                                timestamp != null
+                                    ? timeago.format(
+                                      timestamp,
+                                      locale: 'en_short',
+                                    )
+                                    : 'Just now',
+                                style: GoogleFonts.spaceMono(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              if (isAuthor)
+                                GestureDetector(
+                                  onTap: () => _deleteComment(comment.id),
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 8.0),
+                                    child: Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
-                        );
-                      },
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 42.0,
+                            ), // Indent text under name
+                            child: Text(
+                              commentData['text'] ?? '',
+                              style: GoogleFonts.poppins(
+                                color: brandBlack,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 );

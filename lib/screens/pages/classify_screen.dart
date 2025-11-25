@@ -1,4 +1,7 @@
-// lib/pages/classify_screen.dart
+// ===============================
+// FILE NAME: classify_screen.dart
+// FILE PATH: lib/screens/pages/classify_screen.dart
+// ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -25,9 +28,6 @@ import '../youtube_summarizer_screen.dart';
 import '../cafeteria_screen.dart';
 import '../bus_list_screen.dart';
 
-// --- Widget Imports ---
-import '../../widgets/feature_card.dart';
-
 class ClassifyScreen extends StatefulWidget {
   const ClassifyScreen({super.key});
 
@@ -35,17 +35,171 @@ class ClassifyScreen extends StatefulWidget {
   State<ClassifyScreen> createState() => _ClassifyScreenState();
 }
 
-class _ClassifyScreenState extends State<ClassifyScreen> {
+class _ClassifyScreenState extends State<ClassifyScreen>
+    with SingleTickerProviderStateMixin {
   Map<String, String> _cardBackgrounds = {};
   bool _isLoading = true;
+
+  // FIX: Make nullable to prevent LateInitializationError during hot reloads/async gaps
+  AnimationController? _controller;
+
+  final List<Map<String, dynamic>> _features = [
+    {
+      'id': 'department_notes',
+      'label': 'Notes',
+      'icon': Icons.school_outlined,
+      'color': Color(0xFF2E86DE),
+      'screen': const DepartmentsScreen(),
+    },
+    {
+      'id': 'events',
+      'label': 'Events',
+      'icon': Icons.calendar_today_outlined,
+      'color': Color(0xFFE040FB),
+      'screen': const EventListScreen(),
+    },
+    {
+      'id': 'lost_and_found',
+      'label': 'Lost & Found',
+      'icon': Icons.find_in_page_outlined,
+      'color': Color(0xFFF48C06),
+      'screen': const LostAndFoundScreen(),
+    },
+    {
+      'id': 'marketplace',
+      'label': 'Market',
+      'icon': Icons.storefront_outlined,
+      'color': Color(0xFF38B000),
+      'screen': const MarketplaceScreen(),
+    },
+    {
+      'id': 'cafeteria',
+      'label': 'Cafeteria',
+      'icon': Icons.restaurant_menu_outlined,
+      'color': Color(0xFFD98E04),
+      'screen': const CafeteriaScreen(),
+    },
+    {
+      'id': 'bus_tracker',
+      'label': 'Bus',
+      'icon': Icons.directions_bus_outlined,
+      'color': Colors.blue,
+      'screen': const BusListScreen(),
+    },
+    {
+      'id': 'connect_ai',
+      'label': 'AI Chat',
+      'icon': Icons.auto_awesome_outlined,
+      'color': Color(0xFF6A00F4),
+      'screen': const AiChatHistoryScreen(),
+    },
+    {
+      'id': 'peer_rooms',
+      'label': 'Rooms',
+      'icon': Icons.group_outlined,
+      'color': Color(0xFF00B4D8),
+      'screen': const PeerRoomsScreen(),
+    },
+    {
+      'id': 'digital_id',
+      'label': 'ID Card',
+      'icon': Icons.badge_outlined,
+      'color': Colors.green,
+      'screen': const IdCardScreen(),
+    },
+    {
+      'id': 'code_playground',
+      'label': 'Code',
+      'icon': Icons.code_outlined,
+      'color': Colors.indigo,
+      'screen': const CodePlaygroundScreen(),
+    },
+    {
+      'id': 'dev_community',
+      'label': 'Stack Overflow',
+      'icon': Icons.question_answer_outlined,
+      'color': Colors.orange,
+      'screen': const DevCommunityScreen(),
+    },
+    {
+      'id': 'quiz',
+      'label': 'Quiz',
+      'icon': Icons.quiz_outlined,
+      'color': Colors.deepOrange,
+      'screen': const QuizCategoriesScreen(),
+    },
+    {
+      'id': 'pdf_buddy',
+      'label': 'PDF Buddy',
+      'icon': Icons.picture_as_pdf_outlined,
+      'color': Colors.indigoAccent,
+      'screen': const PdfBuddyScreen(),
+    },
+    {
+      'id': 'resume_analyzer',
+      'label': 'Resume AI',
+      'icon': Icons.document_scanner_outlined,
+      'color': Colors.teal,
+      'screen': const ResumeAnalyzerScreen(),
+    },
+    {
+      'id': 'youtube_summarizer',
+      'label': 'YT Summary',
+      'icon': Icons.ondemand_video_outlined,
+      'color': Colors.red,
+      'screen': const YouTubeSummarizerScreen(),
+    },
+    {
+      'id': 'tech_news',
+      'label': 'Tech News',
+      'icon': Icons.newspaper_outlined,
+      'color': Colors.grey,
+      'screen': const TechNewsScreen(),
+    },
+    {
+      'id': 'games',
+      'label': 'Games',
+      'icon': Icons.gamepad_outlined,
+      'color': Colors.tealAccent,
+      'screen': const GameViewScreen(
+        title: 'Smash Karts',
+        url: 'https://poki.com/en/g/smash-karts',
+      ),
+    },
+    {
+      'id': 'etlab',
+      'label': 'ETLab',
+      'icon': Icons.computer_outlined,
+      'color': Colors.lightBlue,
+      'screen': const EtlabWebviewScreen(),
+    },
+    {
+      'id': 'nonote',
+      'label': 'No-Note',
+      'icon': Icons.note_alt_outlined,
+      'color': Color(0xFFD00000),
+      'url': 'https://nonote.tech',
+    },
+  ];
 
   @override
   void initState() {
     super.initState();
+    // Initialize immediately
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
     _fetchBackgroundImages();
   }
 
-  // This method correctly fetches all image URLs from Firestore.
+  @override
+  void dispose() {
+    // Safe dispose
+    _controller?.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchBackgroundImages() async {
     try {
       final snapshot =
@@ -64,313 +218,276 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
           _cardBackgrounds = loadedImages;
           _isLoading = false;
         });
+        _controller?.forward();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Couldn't load card images: $e")),
-        );
+        _controller?.forward();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Couldn't load images: $e")));
       }
     }
   }
 
-  Future<void> _launchURLInBrowser(BuildContext context, String url) async {
-    final uri = Uri.parse(url);
-    if (!await canLaunchUrl(uri)) {
-      if (context.mounted) {
+  Future<void> _launchURL(String url) async {
+    if (!await canLaunchUrl(Uri.parse(url))) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
-      }
       return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
-    // This feature list is the source of truth for the screen's content.
-    final List<Map<String, dynamic>> features = [
-      {
-        'id': 'department_notes',
-        'label': 'Department Notes',
-        'icon': Icons.school_outlined,
-        'color': const Color(0xFF2E86DE),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DepartmentsScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'events',
-        'label': 'Events',
-        'icon': Icons.calendar_today_outlined,
-        'color': const Color(0xFFE040FB),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const EventListScreen()),
-            ),
-      },
-      {
-        'id': 'lost_and_found',
-        'label': 'Lost & Found',
-        'icon': Icons.find_in_page_outlined,
-        'color': const Color(0xFFF48C06),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const LostAndFoundScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'marketplace',
-        'label': 'Marketplace',
-        'icon': Icons.storefront_outlined,
-        'color': const Color(0xFF38B000),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MarketplaceScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'cafeteria',
-        'label': 'Cafeteria',
-        'icon': Icons.restaurant_menu_outlined,
-        'color': const Color(0xFFD98E04),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CafeteriaScreen()),
-            ),
-      },
-      {
-        'id': 'bus_tracker',
-        'label': 'Bus Tracker',
-        'icon': Icons.directions_bus_outlined,
-        'color': Colors.blue.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const BusListScreen()),
-            ),
-      },
-      {
-        'id': 'connect_ai',
-        'label': 'Connect AI',
-        'icon': Icons.auto_awesome_outlined,
-        'color': const Color(0xFF6A00F4),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const AiChatHistoryScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'peer_rooms',
-        'label': 'Peer Rooms',
-        'icon': Icons.group_outlined,
-        'color': const Color(0xFF00B4D8),
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PeerRoomsScreen()),
-            ),
-      },
-      {
-        'id': 'nonote',
-        'label': 'No-Note',
-        'icon': Icons.note_alt_outlined,
-        'color': const Color(0xFFD00000),
-        'action': () => _launchURLInBrowser(context, 'https://nonote.tech'),
-      },
-      {
-        'id': 'digital_id',
-        'label': 'Digital ID',
-        'icon': Icons.badge_outlined,
-        'color': Colors.green.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const IdCardScreen()),
-            ),
-      },
-      {
-        'id': 'code_playground',
-        'label': 'Code Playground',
-        'icon': Icons.code_outlined,
-        'color': Colors.indigo.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CodePlaygroundScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'dev_community',
-        'label': 'Stack Overflow',
-        'icon': Icons.question_answer_outlined,
-        'color': Colors.orange.shade700,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DevCommunityScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'quiz',
-        'label': 'Programming Quiz',
-        'icon': Icons.quiz_outlined,
-        'color': Colors.deepOrange.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const QuizCategoriesScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'pdf_buddy',
-        'label': 'PDF Study Buddy',
-        'icon': Icons.picture_as_pdf_outlined,
-        'color': Colors.indigo.shade300,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PdfBuddyScreen()),
-            ),
-      },
-      {
-        'id': 'resume_analyzer',
-        'label': 'AI Resume Analyzer',
-        'icon': Icons.document_scanner_outlined,
-        'color': Colors.teal.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ResumeAnalyzerScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'youtube_summarizer',
-        'label': 'YouTube Summarizer',
-        'icon': Icons.ondemand_video_outlined,
-        'color': Colors.red.shade700,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const YouTubeSummarizerScreen(),
-              ),
-            ),
-      },
-      {
-        'id': 'tech_news',
-        'label': 'Tech News',
-        'icon': Icons.newspaper_outlined,
-        'color': Colors.grey.shade600,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TechNewsScreen()),
-            ),
-      },
-      {
-        'id': 'games',
-        'label': 'Games',
-        'icon': Icons.gamepad_outlined,
-        'color': Colors.teal.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (context) => const GameViewScreen(
-                      title: 'Smash Karts',
-                      url: 'https://poki.com/en/g/smash-karts',
-                    ),
-              ),
-            ),
-      },
-      {
-        'id': 'etlab',
-        'label': 'RIT ETLab',
-        'icon': Icons.computer_outlined,
-        'color': Colors.lightBlue.shade400,
-        'action':
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const EtlabWebviewScreen(),
-              ),
-            ),
-      },
-    ];
+    const Color brandBlack = Colors.black;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+    // FIX: Safety check. If controller is null (during hot reload edge case), show loader.
+    if (_controller == null) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator(color: brandBlack)),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 16),
-            Text(
-              'Campus Connect',
-              style: GoogleFonts.poppins(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+            // --- HEADER ---
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'CAMPUS TOOLS',
+                    style: GoogleFonts.archivoBlack(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: brandBlack,
+                      letterSpacing: -1.5,
+                    ),
+                  ),
+                  Container(
+                    width: 80,
+                    height: 6,
+                    color: const Color(0xFF9983F3),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Everything you need in one place.',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Explore tools and resources',
-              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
-            ),
-            const SizedBox(height: 24),
+
+            // --- GRID ---
             Expanded(
               child:
                   _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        itemCount: features.length,
+                      ? const Center(
+                        child: CircularProgressIndicator(color: Colors.black),
+                      )
+                      : GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 1.1,
+                            ),
+                        itemCount: _features.length,
                         itemBuilder: (context, index) {
-                          final feature = features[index];
-                          final featureId = feature['id'];
-                          // This line correctly finds the URL from the map we fetched.
-                          final imageUrl = _cardBackgrounds[featureId];
+                          final feature = _features[index];
+                          final imageUrl = _cardBackgrounds[feature['id']];
 
-                          // Now we pass the URL to our updated FeatureCard.
-                          return FeatureCard(
-                            label: feature['label'],
-                            icon: feature['icon'],
-                            color: feature['color'],
-                            imageUrl: imageUrl,
-                            onTap: feature['action'],
+                          // Use ! because we checked for null at top of build
+                          final Animation<double> animation = CurvedAnimation(
+                            parent: _controller!,
+                            curve: Interval(
+                              (index / _features.length) * 0.5,
+                              1.0,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          );
+
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.2),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: _NeoFeatureCard(
+                                label: feature['label'],
+                                icon: feature['icon'],
+                                color: feature['color'],
+                                imageUrl: imageUrl,
+                                onTap: () {
+                                  if (feature.containsKey('url')) {
+                                    _launchURL(feature['url']);
+                                  } else {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => feature['screen'],
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
                           );
                         },
                       ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- CUSTOM WIDGET: Neo-Brutalist Feature Card ---
+class _NeoFeatureCard extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final String? imageUrl;
+  final VoidCallback onTap;
+
+  const _NeoFeatureCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.imageUrl,
+    required this.onTap,
+  });
+
+  @override
+  State<_NeoFeatureCard> createState() => _NeoFeatureCardState();
+}
+
+class _NeoFeatureCardState extends State<_NeoFeatureCard> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    const Color brandBlack = Colors.black;
+    final bool hasImage =
+        widget.imageUrl != null && widget.imageUrl!.isNotEmpty;
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        transform:
+            _isPressed
+                ? Matrix4.translationValues(4, 4, 0)
+                : Matrix4.identity(),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: brandBlack, width: 3),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow:
+              _isPressed
+                  ? []
+                  : [
+                    BoxShadow(
+                      color: brandBlack,
+                      offset: const Offset(6, 6),
+                      blurRadius: 0,
+                    ),
+                  ],
+          image:
+              hasImage
+                  ? DecorationImage(
+                    image: NetworkImage(widget.imageUrl!),
+                    fit: BoxFit.cover,
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withOpacity(0.3),
+                      BlendMode.darken,
+                    ),
+                  )
+                  : null,
+        ),
+        child: Stack(
+          children: [
+            if (!hasImage)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Icon(
+                  Icons.bolt,
+                  color: widget.color.withOpacity(0.2),
+                  size: 60,
+                ),
+              ),
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color:
+                          hasImage
+                              ? Colors.white.withOpacity(0.9)
+                              : widget.color.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: brandBlack, width: 2),
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      color: hasImage ? brandBlack : widget.color,
+                      size: 28,
+                    ),
+                  ),
+
+                  Text(
+                    widget.label.toUpperCase(),
+                    style: GoogleFonts.archivoBlack(
+                      fontSize: 16,
+                      color: hasImage ? Colors.white : brandBlack,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                      shadows:
+                          hasImage
+                              ? [
+                                const Shadow(
+                                  color: Colors.black,
+                                  offset: Offset(2, 2),
+                                  blurRadius: 0,
+                                ),
+                              ]
+                              : [],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

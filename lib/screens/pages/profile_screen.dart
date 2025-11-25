@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: profile_screen.dart
+// FILE PATH: lib/screens/pages/profile_screen.dart
+// ===============================
+
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,8 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-import 'package:shimmer/shimmer.dart';
-
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -41,7 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final bool isCurrentUser;
   final ImagePicker _picker = ImagePicker();
 
-  bool _isLoading = true;
+  bool _isInitialLoad = true;
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
@@ -75,7 +78,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       tempDir.path,
       '${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
-
     final XFile? result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
@@ -86,13 +88,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return result == null ? null : File(result.path);
   }
 
-  // --- THIS METHOD IS NOW FIXED ---
   Future<void> _loadAllData() async {
-    if (mounted && !_isLoading) {
-      await Future.delayed(const Duration(milliseconds: 300));
+    if (_isInitialLoad) {
+      setState(() => _isInitialLoad = true);
     }
-    if (!mounted) return;
-    setState(() => _isLoading = true);
 
     try {
       final targetUserDocFuture =
@@ -132,18 +131,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _username = data['username'] ?? 'username';
           _bio = data['bio'] ?? '';
           _department = data['department'] ?? '';
-          _role = data['role'] ?? 'user';
+          _role = data['role'] ?? 'student';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
 
-          // --- START: FIX FOR CONNECTION COUNT ---
-
-          // 1. Get the raw list of connection IDs from the user document.
           final List<dynamic> rawConnections = data['connections'] ?? [];
-
           if (rawConnections.isNotEmpty) {
-            // 2. Create a list of Futures to fetch each connection's document.
             final List<Future<DocumentSnapshot>> connectionFutures =
                 rawConnections
                     .map(
@@ -154,25 +148,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               .get(),
                     )
                     .toList();
-
-            // 3. Wait for all the fetches to complete in parallel.
             final List<DocumentSnapshot> connectionSnapshots =
                 await Future.wait(connectionFutures);
-
-            // 4. Filter the results, keeping only the IDs of users that actually exist.
-            //    This creates a clean list of valid, existing connections.
             _connections =
                 connectionSnapshots
                     .where((snapshot) => snapshot.exists)
                     .map((snapshot) => snapshot.id)
                     .toList();
           } else {
-            // If there are no connections, just set an empty list.
             _connections = [];
           }
-
-          // --- END: FIX FOR CONNECTION COUNT ---
-
           _determineConnectionStatus(
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
@@ -183,14 +168,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error loading data: ${e.toString()}")),
         );
-      }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isInitialLoad = false);
       }
     }
   }
@@ -228,13 +212,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     final File? compressedImage = await _compressImage(imageFile);
-    if (compressedImage == null) {
-      scaffoldMessenger.hideCurrentSnackBar();
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Image compression failed.')),
-      );
-      return;
-    }
+    if (compressedImage == null) return;
+
     scaffoldMessenger.hideCurrentSnackBar();
     scaffoldMessenger.showSnackBar(
       SnackBar(content: Text('Uploading $imageType image...')),
@@ -266,7 +245,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
         scaffoldMessenger.hideCurrentSnackBar();
         scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Image uploaded successfully!')),
+          const SnackBar(
+            content: Text('Image uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -281,17 +263,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickProfileImage() async {
     if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
+    if (pickedFile != null)
       await _uploadImage(File(pickedFile.path), 'profile');
-    }
   }
 
   Future<void> _pickCoverImage() async {
     if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      await _uploadImage(File(pickedFile.path), 'cover');
-    }
+    if (pickedFile != null) await _uploadImage(File(pickedFile.path), 'cover');
   }
 
   Future<void> _logout() async {
@@ -338,893 +317,677 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _sendConnectionRequest() async {
-    final currentUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUser.uid);
-    final targetUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(targetUserId);
     final batch = FirebaseFirestore.instance.batch();
-
-    batch.update(currentUserRef, {
-      'sentRequests': FieldValue.arrayUnion([targetUserId]),
-    });
-    batch.update(targetUserRef, {
-      'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
-    });
-
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
+      {
+        'sentRequests': FieldValue.arrayUnion([targetUserId]),
+      },
+    );
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(targetUserId),
+      {
+        'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
+      },
+    );
     await batch.commit();
     _loadAllData();
   }
 
   Future<void> _acceptConnectionRequest() async {
-    final currentUserRef = FirebaseFirestore.instance
+    final batch = FirebaseFirestore.instance.batch();
+    final me = FirebaseFirestore.instance
         .collection('users')
         .doc(_currentUser.uid);
-    final targetUserRef = FirebaseFirestore.instance
+    final them = FirebaseFirestore.instance
         .collection('users')
         .doc(targetUserId);
-    final batch = FirebaseFirestore.instance.batch();
-
-    batch.update(currentUserRef, {
+    batch.update(me, {
       'connections': FieldValue.arrayUnion([targetUserId]),
-    });
-    batch.update(targetUserRef, {
-      'connections': FieldValue.arrayUnion([_currentUser.uid]),
-    });
-    batch.update(currentUserRef, {
       'receivedRequests': FieldValue.arrayRemove([targetUserId]),
     });
-    batch.update(targetUserRef, {
+    batch.update(them, {
+      'connections': FieldValue.arrayUnion([_currentUser.uid]),
       'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
-
     await batch.commit();
     _loadAllData();
   }
 
   Future<void> _cancelConnectionRequest() async {
-    final currentUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUser.uid);
-    final targetUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(targetUserId);
     final batch = FirebaseFirestore.instance.batch();
-
-    batch.update(currentUserRef, {
-      'sentRequests': FieldValue.arrayRemove([targetUserId]),
-    });
-    batch.update(targetUserRef, {
-      'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
-    });
-
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
+      {
+        'sentRequests': FieldValue.arrayRemove([targetUserId]),
+      },
+    );
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(targetUserId),
+      {
+        'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
+      },
+    );
     await batch.commit();
     _loadAllData();
   }
 
   Future<void> _removeConnection() async {
-    final currentUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUser.uid);
-    final targetUserRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(targetUserId);
     final batch = FirebaseFirestore.instance.batch();
-
-    batch.update(currentUserRef, {
-      'connections': FieldValue.arrayRemove([targetUserId]),
-    });
-    batch.update(targetUserRef, {
-      'connections': FieldValue.arrayRemove([_currentUser.uid]),
-    });
-
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
+      {
+        'connections': FieldValue.arrayRemove([targetUserId]),
+      },
+    );
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(targetUserId),
+      {
+        'connections': FieldValue.arrayRemove([_currentUser.uid]),
+      },
+    );
     await batch.commit();
     _loadAllData();
   }
 
-  Widget _buildRoleIcon(String role) {
-    IconData? icon;
-    Color? color;
-
-    switch (role) {
-      case 'admin':
-        icon = Icons.admin_panel_settings;
-        color = Colors.yellow;
-        break;
-      case 'driver':
-        icon = Icons.local_shipping;
-        color = Colors.cyan;
-        break;
-      case 'teacher':
-        icon = Icons.school;
-        color = Colors.green;
-        break;
-      case 'cafeteria_admin':
-        icon = Icons.restaurant_menu;
-        color = Colors.orange;
-        break;
-    }
-
-    if (icon != null) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 8.0),
-        child: Icon(icon, color: color, size: 24),
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const ProfileScreenPlaceholder();
-    }
+    if (_isInitialLoad)
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator(color: Colors.black)),
+      );
 
-    final Color cardBackgroundColor = Colors.grey.shade900;
-    return RefreshIndicator(
-      onRefresh: _loadAllData,
-      color: Colors.yellow,
-      backgroundColor: cardBackgroundColor,
-      child: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            expandedHeight: 240,
-            pinned: true,
-            leading:
-                isCurrentUser
-                    ? null
-                    : Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: CircleAvatar(
-                        backgroundColor: Colors.black.withAlpha(128),
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.white,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
+    const Color brandPurple = Color(0xFF9983F3);
+    const Color brandBlack = Colors.black;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: RefreshIndicator(
+        onRefresh: _loadAllData,
+        color: brandPurple,
+        backgroundColor: Colors.white,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
+                children: [
+                  // Cover Image
+                  GestureDetector(
+                    onTap: _pickCoverImage,
+                    child: Container(
+                      height: 220,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        border: const Border(
+                          bottom: BorderSide(color: brandBlack, width: 3),
                         ),
+                        image:
+                            _coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty
+                                ? DecorationImage(
+                                  image: NetworkImage(_coverPhotoUrl!),
+                                  fit: BoxFit.cover,
+                                )
+                                : null,
+                      ),
+                      child:
+                          _coverPhotoUrl == null
+                              ? const Center(
+                                child: Icon(
+                                  Icons.add_a_photo,
+                                  color: Colors.black54,
+                                ),
+                              )
+                              : null,
+                    ),
+                  ),
+
+                  // Action Buttons (Back/Logout)
+                  Positioned(
+                    top: 40,
+                    left: 16,
+                    right: 16,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (!isCurrentUser)
+                          CircleAvatar(
+                            backgroundColor: Colors.white,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: brandBlack,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          )
+                        else
+                          const SizedBox(),
+
+                        if (isCurrentUser)
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: Colors.white,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.group_add,
+                                    color: brandBlack,
+                                  ),
+                                  onPressed:
+                                      () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder:
+                                              (_) => const RequestsScreen(),
+                                        ),
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              CircleAvatar(
+                                backgroundColor: Colors.white,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.logout,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: _logout,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Profile Card
+                  Container(
+                    margin: const EdgeInsets.only(
+                      top: 160,
+                      left: 20,
+                      right: 20,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: brandBlack, width: 3),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: brandBlack,
+                          offset: Offset(6, 6),
+                          blurRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _displayName,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.archivoBlack(
+                            fontSize: 24,
+                            color: brandBlack,
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '@$_username',
+                              style: GoogleFonts.spaceMono(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            if (_role != 'student') ...[
+                              const SizedBox(width: 8),
+                              _buildRoleBadge(_role),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _bio.isNotEmpty ? _bio : "No bio yet.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: brandBlack,
+                          ),
+                        ),
+                        if (_department.isNotEmpty)
+                          // FIX: Changed EdgeInsets.top to EdgeInsets.only(top: 8)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Chip(
+                              label: Text(
+                                _department,
+                                style: GoogleFonts.spaceMono(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              backgroundColor: Colors.grey.shade100,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(color: brandBlack),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            GestureDetector(
+                              onTap: _viewConnections,
+                              child: _buildStatItem(
+                                "Connections",
+                                _connections.length.toString(),
+                              ),
+                            ),
+                            Container(
+                              width: 2,
+                              height: 40,
+                              color: Colors.grey.shade300,
+                            ),
+                            _buildStatItem(
+                              "Posts",
+                              _userPosts.length.toString(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        _buildActionButtons(),
+                      ],
+                    ),
+                  ),
+
+                  // Avatar
+                  Positioned(
+                    top: 110,
+                    child: GestureDetector(
+                      onTap: _pickProfileImage,
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: brandBlack, width: 4),
+                          image:
+                              _profilePhotoUrl != null &&
+                                      _profilePhotoUrl!.isNotEmpty
+                                  ? DecorationImage(
+                                    image: NetworkImage(_profilePhotoUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                  : null,
+                        ),
+                        child:
+                            _profilePhotoUrl == null
+                                ? const Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: brandBlack,
+                                )
+                                : null,
                       ),
                     ),
-            actions:
-                isCurrentUser
-                    ? [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: CircleAvatar(
-                          backgroundColor: Colors.black.withAlpha(128),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.group_add_outlined,
-                              color: Colors.white,
-                            ),
-                            onPressed:
-                                () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => const RequestsScreen(),
-                                  ),
-                                ),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          top: 8,
-                          bottom: 8,
-                          right: 8,
-                        ),
-                        child: CircleAvatar(
-                          backgroundColor: Colors.black.withAlpha(128),
-                          child: IconButton(
-                            icon: const Icon(Icons.logout, color: Colors.white),
-                            onPressed: _logout,
-                          ),
-                        ),
-                      ),
-                    ]
-                    : null,
-            flexibleSpace: FlexibleSpaceBar(
-              background: GestureDetector(
-                onTap: _pickCoverImage,
-                child: _buildHeaderImage(),
+                  ),
+                ],
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: _buildProfileHeaderAndInfo(cardBackgroundColor),
-          ),
-          _buildPhotoGallery(),
-        ],
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: brandBlack, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTabButton("All", ProfileTab.all),
+                      _buildTabButton("Photos", ProfileTab.photos),
+                      _buildTabButton("Videos", ProfileTab.videos),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+            _buildPhotoGallery(),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildProfileHeaderAndInfo(Color cardColor) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 60),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0),
-            padding: const EdgeInsets.only(
-              top: 70,
-              left: 20,
-              right: 20,
-              bottom: 20,
-            ),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: _buildProfileInfo(),
-          ),
+  Widget _buildRoleBadge(String role) {
+    Color color;
+    switch (role) {
+      case 'admin':
+        color = Colors.red;
+        break;
+      case 'driver':
+        color = Colors.orange;
+        break;
+      case 'teacher':
+        color = Colors.green;
+        break;
+      case 'cafeteria_admin':
+        color = Colors.purple;
+        break;
+      default:
+        color = Colors.blue;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        role.toUpperCase(),
+        style: GoogleFonts.spaceMono(
+          fontSize: 10,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
         ),
-        Positioned(
-          top: 0,
-          child: GestureDetector(
-            onTap: _pickProfileImage,
-            child: _buildProfilePicture(),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String count) {
+    return Column(
+      children: [
+        Text(
+          count,
+          style: GoogleFonts.archivoBlack(fontSize: 22, color: Colors.black),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.spaceMono(
+            fontSize: 12,
+            color: Colors.grey.shade600,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildProfileInfo() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: _viewConnections,
-              child: _buildStatsColumn(
-                _connections.length.toString(),
-                "Connections",
-                Colors.white,
-                Colors.white70,
-              ),
+  Widget _buildTabButton(String label, ProfileTab tab) {
+    final bool isSelected = _selectedTab == tab;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedTab = tab),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF9983F3) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceMono(
+              color: isSelected ? Colors.white : Colors.black,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(width: 40),
-            _buildStatsColumn(
-              _userPosts.length.toString(),
-              "Posts",
-              Colors.white,
-              Colors.white70,
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                _displayName,
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                  color: Colors.white,
-                  decoration: TextDecoration.none,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            _buildRoleIcon(_role),
-          ],
-        ),
-        Text(
-          '@$_username',
-          style: GoogleFonts.poppins(
-            color: Colors.white70,
-            fontSize: 16,
-            decoration: TextDecoration.none,
           ),
         ),
-        if (_department.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.school_outlined,
-                  size: 16,
-                  color: Colors.white70,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _department,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 12),
-        Text(
-          _bio.isEmpty ? 'This user has no bio yet.' : _bio,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            color: _bio.isEmpty ? Colors.grey : Colors.white70,
-            fontSize: 14,
-            decoration: TextDecoration.none,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _buildActionButtons(),
-        const SizedBox(height: 24),
-        _buildTabs(Colors.yellow, Colors.white, Colors.white70),
-      ],
+      ),
     );
   }
 
   Widget _buildActionButtons() {
+    const Color brandBlack = Colors.black;
+    const Color brandPurple = Color(0xFF9983F3);
+
     if (isCurrentUser) {
       return Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // DRIVER BUTTON
-          if (_role == 'driver') ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const DriverTrackingScreen(),
-                      ),
-                    ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyan,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: const Icon(Icons.drive_eta_outlined),
-                label: Text(
-                  'Driver Mode',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+          if (_role == 'driver')
+            _buildWideButton(
+              "Driver Mode",
+              Icons.local_shipping,
+              Colors.orange,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DriverTrackingScreen()),
+              ),
+            ),
+          if (_role == 'cafeteria_admin')
+            _buildWideButton(
+              "Manage Cafe",
+              Icons.restaurant,
+              Colors.teal,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CafeteriaDashboardScreen(),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-          ],
+          if (_isAdmin)
+            _buildWideButton(
+              "Admin Panel",
+              Icons.admin_panel_settings,
+              Colors.indigo,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+              ),
+            ),
 
-          // CAFETERIA ADMIN BUTTON
-          if (_role == 'cafeteria_admin') ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CafeteriaDashboardScreen(),
-                      ),
-                    ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: const Icon(Icons.restaurant_menu_outlined),
-                label: Text(
-                  'Manage Cafeteria',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          // MAIN ADMIN BUTTON
-          if (_isAdmin) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AdminPanelScreen(),
-                      ),
-                    ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: const Icon(Icons.admin_panel_settings_outlined),
-                label: Text(
-                  'Admin Panel',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          // EDIT PROFILE BUTTON (Always shows if it's the current user)
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const EditProfileScreen(),
-                  ),
-                );
-                _loadAllData();
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.yellow,
-                side: const BorderSide(color: Colors.yellow),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: Text(
-                'Edit Profile',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+          const SizedBox(height: 8),
+          _buildWideButton("Edit Profile", Icons.edit, brandPurple, () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+            );
+            _loadAllData();
+          }),
         ],
       );
     }
-    // Logic for viewing other users' profiles
+
     switch (_connectionStatus) {
       case ConnectionStatus.connected:
         return Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => ChatScreen(
-                              receiverId: targetUserId,
-                              receiverName: _displayName,
-                              receiverImageUrl: _profilePhotoUrl ?? '',
-                            ),
-                      ),
-                    ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade700,
+              child: _buildWideButton(
+                "Message",
+                Icons.chat,
+                brandBlack,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (_) => ChatScreen(
+                          receiverId: targetUserId,
+                          receiverName: _displayName,
+                          receiverImageUrl: _profilePhotoUrl ?? '',
+                        ),
+                  ),
                 ),
-                icon: const Icon(Icons.message_outlined),
-                label: const Text('Message'),
               ),
             ),
-            const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: _removeConnection,
-              child: const Text('Unconnect'),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildWideButton(
+                "Disconnect",
+                Icons.person_remove,
+                Colors.white,
+                _removeConnection,
+                isOutlined: true,
+              ),
             ),
           ],
         );
       case ConnectionStatus.sent:
-        return SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: _cancelConnectionRequest,
-            child: const Text('Cancel Request'),
-          ),
+        return _buildWideButton(
+          "Cancel Request",
+          Icons.close,
+          Colors.grey,
+          _cancelConnectionRequest,
         );
       case ConnectionStatus.received:
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _acceptConnectionRequest,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Accept Request'),
-          ),
+        return _buildWideButton(
+          "Accept Request",
+          Icons.check,
+          Colors.green,
+          _acceptConnectionRequest,
         );
       case ConnectionStatus.none:
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _sendConnectionRequest,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.yellow,
-              foregroundColor: Colors.black,
-            ),
-            icon: const Icon(Icons.person_add_alt_1_outlined),
-            label: Text(
-              'Connect',
-              style: GoogleFonts.poppins(decoration: TextDecoration.none),
-            ),
-          ),
+        return _buildWideButton(
+          "Connect",
+          Icons.person_add,
+          brandPurple,
+          _sendConnectionRequest,
         );
     }
   }
 
-  Widget _buildHeaderImage() {
-    ImageProvider imageProvider;
-    if (_coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty) {
-      imageProvider = NetworkImage(_coverPhotoUrl!);
-    } else {
-      imageProvider = const NetworkImage(
-        'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1470',
-      );
-    }
-    return Container(
-      height: 240,
-      decoration: BoxDecoration(
-        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-      ),
-    );
-  }
-
-  Widget _buildProfilePicture() {
-    final cardColor = Colors.grey.shade900;
-    ImageProvider imageProvider;
-    if (_profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty) {
-      imageProvider = NetworkImage(_profilePhotoUrl!);
-    } else {
-      imageProvider = const NetworkImage('https://i.pravatar.cc/150?img=31');
-    }
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: cardColor, width: 5),
-      ),
-      child: CircleAvatar(radius: 45, backgroundImage: imageProvider),
-    );
-  }
-
-  Widget _buildStatsColumn(
-    String value,
-    String label,
-    Color textColor,
-    Color secondaryColor,
-  ) => Column(
-    children: [
-      Text(
-        value,
-        style: GoogleFonts.poppins(
-          fontWeight: FontWeight.bold,
-          fontSize: 18,
-          color: textColor,
-          decoration: TextDecoration.none,
-        ),
-      ),
-      const SizedBox(height: 2),
-      Text(
-        label,
-        style: GoogleFonts.poppins(
-          color: secondaryColor,
-          fontSize: 14,
-          decoration: TextDecoration.none,
-        ),
-      ),
-    ],
-  );
-
-  Widget _buildTabs(
-    Color activeColor,
-    Color activeTextColor,
-    Color inactiveTextColor,
-  ) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceAround,
-    children: [
-      _buildTabItem('All', ProfileTab.all, activeColor, inactiveTextColor),
-      _buildTabItem(
-        'Photos',
-        ProfileTab.photos,
-        activeColor,
-        inactiveTextColor,
-      ),
-      _buildTabItem(
-        'Videos',
-        ProfileTab.videos,
-        activeColor,
-        inactiveTextColor,
-      ),
-    ],
-  );
-
-  Widget _buildTabItem(
-    String title,
-    ProfileTab tab,
-    Color activeColor,
-    Color inactiveTextColor,
-  ) {
-    final bool isActive = _selectedTab == tab;
+  Widget _buildWideButton(
+    String text,
+    IconData icon,
+    Color color,
+    VoidCallback onTap, {
+    bool isOutlined = false,
+  }) {
     return GestureDetector(
-      onTap: () => setState(() => _selectedTab = tab),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              fontSize: 16,
-              color: isActive ? activeColor : inactiveTextColor,
-              decoration: TextDecoration.none,
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isOutlined ? Colors.white : color,
+          border: Border.all(color: Colors.black, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(color: Colors.black, offset: Offset(2, 2), blurRadius: 0),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isOutlined ? Colors.black : Colors.white,
+              size: 20,
             ),
-          ),
-          const SizedBox(height: 4),
-          if (isActive) Container(width: 25, height: 3, color: activeColor),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: GoogleFonts.spaceMono(
+                color: isOutlined ? Colors.black : Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildPhotoGallery() {
-    final cardColor = Colors.grey.shade900;
     final List<DocumentSnapshot> filteredPosts;
-    switch (_selectedTab) {
-      case ProfileTab.photos:
-        filteredPosts =
-            _userPosts.where((post) {
-              final data = post.data() as Map<String, dynamic>;
-              return (data['postType'] == 'image') ||
-                  (data['postType'] == null && data['postImageUrl'] != null);
-            }).toList();
-        break;
-      case ProfileTab.videos:
-        filteredPosts =
-            _userPosts.where((post) {
-              final data = post.data() as Map<String, dynamic>;
-              return data['postType'] == 'video';
-            }).toList();
-        break;
-      case ProfileTab.all:
-        filteredPosts = _userPosts;
-        break;
+    if (_selectedTab == ProfileTab.photos) {
+      filteredPosts =
+          _userPosts.where((post) {
+            final d = post.data() as Map<String, dynamic>;
+            return d['postType'] == 'image' || d['postType'] == null;
+          }).toList();
+    } else if (_selectedTab == ProfileTab.videos) {
+      filteredPosts =
+          _userPosts.where((post) {
+            final d = post.data() as Map<String, dynamic>;
+            return d['postType'] == 'video';
+          }).toList();
+    } else {
+      filteredPosts = _userPosts;
     }
+
     if (filteredPosts.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.all(50.0),
+          padding: const EdgeInsets.all(40.0),
           child: Center(
             child: Text(
-              'This user has no ${_selectedTab.name} yet.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+              "No posts yet.",
+              style: GoogleFonts.spaceMono(color: Colors.grey),
             ),
           ),
         ),
       );
     }
+
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          crossAxisSpacing: 8.0,
-          mainAxisSpacing: 8.0,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
           childAspectRatio: 1.0,
         ),
-        delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
+        delegate: SliverChildBuilderDelegate((context, index) {
           final postSnapshot = filteredPosts[index];
           final postData = postSnapshot.data() as Map<String, dynamic>;
-          final postType = postData['postType'];
-          final String? mediaUrl =
-              postType == 'video'
+          final mediaUrl =
+              postData['postType'] == 'video'
                   ? postData['postThumbnailUrl']
-                  : postData['postMediaUrl'] ?? postData['postImageUrl'];
-          if (mediaUrl == null || mediaUrl.isEmpty) {
-            return Container(
-              color: cardColor,
-              child: const Icon(
-                Icons.no_photography_outlined,
-                color: Colors.white30,
-              ),
-            );
-          }
+                  : (postData['postMediaUrl'] ?? postData['postImageUrl']);
+
+          if (mediaUrl == null) return Container(color: Colors.grey.shade200);
+
           return GestureDetector(
             onTap:
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) => PostDetailScreen(postId: postSnapshot.id),
+                    builder: (_) => PostDetailScreen(postId: postSnapshot.id),
                   ),
                 ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(15.0),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.network(
-                    mediaUrl,
-                    fit: BoxFit.cover,
-                    loadingBuilder:
-                        (context, child, progress) =>
-                            progress == null
-                                ? child
-                                : Container(
-                                  color: Colors.grey.shade800,
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.yellow,
-                                    ),
-                                  ),
-                                ),
-                    errorBuilder:
-                        (context, error, stackTrace) => Container(
-                          color: Colors.grey.shade800,
-                          child: const Icon(
-                            Icons.broken_image,
-                            color: Colors.white54,
-                          ),
-                        ),
-                  ),
-                  if (postType == 'video')
-                    const Center(
-                      child: Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.white70,
-                        size: 40,
-                      ),
-                    ),
-                ],
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.black, width: 2),
+                image: DecorationImage(
+                  image: NetworkImage(mediaUrl),
+                  fit: BoxFit.cover,
+                ),
               ),
+              child:
+                  postData['postType'] == 'video'
+                      ? const Center(
+                        child: Icon(
+                          Icons.play_circle_fill,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      )
+                      : null,
             ),
           );
         }, childCount: filteredPosts.length),
-      ),
-    );
-  }
-}
-
-class ProfileScreenPlaceholder extends StatelessWidget {
-  const ProfileScreenPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cardBackgroundColor = Colors.grey.shade900;
-    final shimmerBaseColor = Colors.grey.shade800;
-    final shimmerHighlightColor = Colors.grey.shade700;
-
-    return Shimmer.fromColors(
-      baseColor: shimmerBaseColor,
-      highlightColor: shimmerHighlightColor,
-      child: CustomScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.transparent,
-            expandedHeight: 240,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(color: shimmerBaseColor),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 60),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                    padding: const EdgeInsets.only(
-                      top: 70,
-                      left: 20,
-                      right: 20,
-                      bottom: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cardBackgroundColor,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildPlaceholderContainer(width: 50, height: 30),
-                            const SizedBox(width: 40),
-                            _buildPlaceholderContainer(width: 50, height: 30),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _buildPlaceholderContainer(width: 150, height: 22),
-                        const SizedBox(height: 4),
-                        _buildPlaceholderContainer(width: 100, height: 16),
-                        const SizedBox(height: 12),
-                        _buildPlaceholderContainer(
-                          width: double.infinity,
-                          height: 14,
-                        ),
-                        const SizedBox(height: 4),
-                        _buildPlaceholderContainer(width: 200, height: 14),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: cardBackgroundColor, width: 5),
-                    ),
-                    child: const CircleAvatar(
-                      radius: 45,
-                      backgroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8.0,
-                mainAxisSpacing: 8.0,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15.0),
-                  ),
-                ),
-                childCount: 9,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderContainer({
-    required double width,
-    required double height,
-  }) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

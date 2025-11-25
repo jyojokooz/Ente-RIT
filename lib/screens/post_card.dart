@@ -30,13 +30,11 @@ class PostCard extends StatelessWidget {
     required this.onEditPressed,
   });
 
-  // --- FIX 1: BETTER QUALITY URL ---
-  // Increased width to 1280 and set quality to best to fix blurriness
   String getOptimizedCloudinaryUrl(String originalUrl) {
     if (!originalUrl.contains('res.cloudinary.com')) {
       return originalUrl;
     }
-    const transformations = 'w_1280,q_auto:best,f_auto'; // Higher Res
+    const transformations = 'w_1280,q_auto:best,f_auto';
     final parts = originalUrl.split('/upload/');
     if (parts.length == 2) {
       return '${parts[0]}/upload/$transformations/${parts[1]}';
@@ -50,18 +48,19 @@ class PostCard extends StatelessWidget {
     if (postData == null) return const SizedBox.shrink();
 
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-    
+
     const Color brandBlack = Colors.black;
     const Color brandWhite = Colors.white;
     const Color brandPurple = Color(0xFF9983F3);
 
     final authorData = {
-      'displayName': postData['userName'] ?? 'Unknown User',
+      'displayName': postData['userName'] ?? 'UNKNOWN_USER',
       'username': postData['username'] ?? '',
       'profilePhotoUrl': postData['userImageUrl'] ?? '',
     };
 
-    final String originalMediaUrl = postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
+    final String originalMediaUrl =
+        postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
     final String? originalThumbnailUrl = postData['postThumbnailUrl'];
     final String postType = postData['postType'] ?? 'image';
     final String caption = postData['caption'] ?? '';
@@ -70,283 +69,441 @@ class PostCard extends StatelessWidget {
     final String heroTag = 'postImage-${postSnapshot.id}';
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       decoration: BoxDecoration(
         color: brandWhite,
-        borderRadius: BorderRadius.circular(16), 
-        border: Border.all(color: brandBlack, width: 3), 
+        // FIX: More rounded corners (24 instead of 0 or 16)
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: brandBlack, width: 3),
         boxShadow: const [
-          BoxShadow(
-            color: brandBlack,
-            offset: Offset(6, 6), 
-            blurRadius: 0,
-          ),
+          BoxShadow(color: brandBlack, offset: Offset(8, 8), blurRadius: 0),
         ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias, // Ensures content clips to rounded corners
+      child: Stack(
         children: [
-          // --- 1. HEADER ---
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: onProfileTapped,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: brandBlack, width: 2),
-                    ),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: authorData['profilePhotoUrl'].isNotEmpty 
-                          ? NetworkImage(authorData['profilePhotoUrl']) 
-                          : null,
-                      child: authorData['profilePhotoUrl'].isEmpty 
-                          ? const Icon(Icons.person, color: brandBlack) 
-                          : null,
-                    ),
+          // --- DECORATIVE CORNER BOLTS (Adjusted for curves) ---
+          Positioned(top: 12, left: 12, child: _buildBolt(brandBlack)),
+          Positioned(top: 12, right: 12, child: _buildBolt(brandBlack)),
+          Positioned(bottom: 12, left: 12, child: _buildBolt(brandBlack)),
+          Positioned(bottom: 12, right: 12, child: _buildBolt(brandBlack)),
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- 1. TECH HEADER ---
+              Container(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  12,
+                ), // More padding for curves
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: brandBlack, width: 2),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        authorData['displayName'],
-                        style: GoogleFonts.archivoBlack(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: brandBlack,
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: onProfileTapped,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape:
+                              BoxShape
+                                  .circle, // Circular avatar fits rounded theme better
+                          border: Border.all(color: brandBlack, width: 2),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage:
+                              authorData['profilePhotoUrl'].isNotEmpty
+                                  ? NetworkImage(authorData['profilePhotoUrl'])
+                                  : null,
+                          child:
+                              authorData['profilePhotoUrl'].isEmpty
+                                  ? const Icon(
+                                    Icons.person,
+                                    color: brandBlack,
+                                    size: 20,
+                                  )
+                                  : null,
+                        ),
                       ),
-                      if (authorData['username'].isNotEmpty)
-                        Text(
-                          '@${authorData['username']}',
-                          style: GoogleFonts.spaceMono(
-                            color: Colors.grey.shade700,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            authorData['displayName'].toUpperCase(),
+                            style: GoogleFonts.spaceMono(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: brandBlack,
+                              letterSpacing: -0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (isAuthor)
-                  IconButton(
-                    icon: const Icon(Icons.more_horiz, color: brandBlack),
-                    onPressed: () => onEditPressed(),
-                  ),
-              ],
-            ),
-          ),
-
-          // --- 2. MEDIA CONTENT (NO CROPPING FIX) ---
-          if (originalMediaUrl.isNotEmpty)
-            Container(
-              width: double.infinity,
-              // Border only on top and bottom of image
-              decoration: const BoxDecoration(
-                border: Border.symmetric(horizontal: BorderSide(color: brandBlack, width: 3)),
-                color: Colors.black, // Background for letterboxing if needed
-              ),
-              // Use ConstrainedBox instead of fixed height
-              // This allows image to be its natural height, up to 550px
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minHeight: 200, 
-                  maxHeight: 550, // Taller max height to prevent cropping vertical photos
-                ),
-                child: (postType == 'video')
-                    ? _buildVideoPlayer(context, originalMediaUrl, originalThumbnailUrl)
-                    : _buildImageViewer(context, originalMediaUrl, heroTag),
-              ),
-            ),
-
-          // --- 3. ACTIONS & CAPTION ---
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                StreamBuilder<DocumentSnapshot>(
-                  stream: FirebaseFirestore.instance.collection('posts').doc(postSnapshot.id).snapshots(),
-                  builder: (context, postStreamSnapshot) {
-                    final likesData = postStreamSnapshot.hasData ? postStreamSnapshot.data!.data() as Map<String, dynamic> : postData;
-                    final rtLikes = likesData['likes'] ?? [];
-                    final bool isLiked = rtLikes.contains(currentUserId);
-
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('posts').doc(postSnapshot.id).collection('comments').snapshots(),
-                      builder: (context, commentStreamSnapshot) {
-                        final commentCount = commentStreamSnapshot.hasData ? commentStreamSnapshot.data!.docs.length : (postData['comments'] ?? 0);
-
-                        return Row(
-                          children: [
-                            // LIKE BUTTON
-                            GestureDetector(
-                              onTap: onLikePressed,
-                              child: Container(
-                                width: 80, 
-                                height: 45,
-                                decoration: BoxDecoration(
-                                  color: isLiked ? brandPurple : Colors.white, 
-                                  border: Border.all(color: brandBlack, width: 2.5),
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: const [BoxShadow(color: brandBlack, offset: Offset(3, 3), blurRadius: 0)],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.favorite, 
-                                      color: isLiked ? Colors.white : brandBlack, 
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "${rtLikes.length}",
-                                      style: GoogleFonts.archivoBlack(
-                                        fontWeight: FontWeight.bold,
-                                        color: isLiked ? Colors.white : brandBlack,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 16), 
-
-                            // COMMENT BUTTON
-                            GestureDetector(
-                              onTap: onCommentPressed,
-                              child: Container(
-                                width: 80,
-                                height: 45,
-                                decoration: BoxDecoration(
-                                  color: Colors.black, 
-                                  border: Border.all(color: brandBlack, width: 2.5),
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: const [BoxShadow(color: Colors.grey, offset: Offset(3, 3), blurRadius: 0)],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.chat_bubble, color: Colors.white, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "$commentCount",
-                                      style: GoogleFonts.archivoBlack(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            const Spacer(),
-                            
+                          if (authorData['username'].isNotEmpty)
                             Text(
-                              timestamp != null ? DateFormat('MMM d').format(timestamp) : '',
-                              style: GoogleFonts.spaceMono(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                              '// @${authorData['username']}',
+                              style: GoogleFonts.firaCode(
+                                color: Colors.grey.shade700,
+                                fontSize: 11,
+                              ),
                             ),
-                          ],
+                        ],
+                      ),
+                    ),
+                    if (isAuthor)
+                      GestureDetector(
+                        onTap: onEditPressed,
+                        child: const Icon(
+                          Icons.settings_outlined,
+                          color: brandBlack,
+                          size: 22,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // --- 2. MEDIA DISPLAY ---
+              if (originalMediaUrl.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(color: Colors.black),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: 200,
+                      maxHeight: 550,
+                    ),
+                    child:
+                        (postType == 'video')
+                            ? _buildVideoPlayer(
+                              context,
+                              originalMediaUrl,
+                              originalThumbnailUrl,
+                            )
+                            : _buildImageViewer(
+                              context,
+                              originalMediaUrl,
+                              heroTag,
+                            ),
+                  ),
+                ),
+
+              // --- 3. TECH FOOTER & ACTIONS ---
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: brandBlack, width: 2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    StreamBuilder<DocumentSnapshot>(
+                      stream:
+                          FirebaseFirestore.instance
+                              .collection('posts')
+                              .doc(postSnapshot.id)
+                              .snapshots(),
+                      builder: (context, postStreamSnapshot) {
+                        final likesData =
+                            postStreamSnapshot.hasData
+                                ? postStreamSnapshot.data!.data()
+                                    as Map<String, dynamic>
+                                : postData;
+                        final rtLikes = likesData['likes'] ?? [];
+                        final bool isLiked = rtLikes.contains(currentUserId);
+
+                        return StreamBuilder<QuerySnapshot>(
+                          stream:
+                              FirebaseFirestore.instance
+                                  .collection('posts')
+                                  .doc(postSnapshot.id)
+                                  .collection('comments')
+                                  .snapshots(),
+                          builder: (context, commentStreamSnapshot) {
+                            final commentCount =
+                                commentStreamSnapshot.hasData
+                                    ? commentStreamSnapshot.data!.docs.length
+                                    : (postData['comments'] ?? 0);
+
+                            return Row(
+                              children: [
+                                // TECH LIKE BUTTON (Rounded)
+                                GestureDetector(
+                                  onTap: onLikePressed,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          isLiked ? brandPurple : Colors.white,
+                                      border: Border.all(
+                                        color: brandBlack,
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        20,
+                                      ), // Rounded pill
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: brandBlack,
+                                          offset: Offset(2, 2),
+                                          blurRadius: 0,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isLiked
+                                              ? Icons.favorite
+                                              : Icons.favorite_border,
+                                          size: 18,
+                                          color:
+                                              isLiked
+                                                  ? Colors.white
+                                                  : brandBlack,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          "${rtLikes.length}",
+                                          style: GoogleFonts.spaceMono(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color:
+                                                isLiked
+                                                    ? Colors.white
+                                                    : brandBlack,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(width: 12),
+
+                                // TECH COMMENT BUTTON (Rounded)
+                                GestureDetector(
+                                  onTap: onCommentPressed,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      border: Border.all(
+                                        color: brandBlack,
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        20,
+                                      ), // Rounded pill
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.grey,
+                                          offset: Offset(2, 2),
+                                          blurRadius: 0,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.chat_bubble_outline,
+                                          size: 18,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          "$commentCount",
+                                          style: GoogleFonts.spaceMono(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                ),
-                
-                if (caption.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    caption,
-                    style: GoogleFonts.spaceMono(
-                      color: brandBlack,
-                      fontSize: 14,
-                      height: 1.4,
-                      fontWeight: FontWeight.w500,
                     ),
-                  ),
-                ],
-              ],
-            ),
+
+                    if (caption.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.only(left: 10),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: brandPurple, width: 4),
+                          ),
+                        ),
+                        child: Text(
+                          caption,
+                          style: GoogleFonts.spaceMono(
+                            color: brandBlack,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // DATE STAMP
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Text(
+                        timestamp != null
+                            ? "LOG: ${DateFormat('yyyy-MM-dd HH:mm').format(timestamp)}"
+                            : "LOG: UNKNOWN",
+                        style: GoogleFonts.firaCode(
+                          fontSize: 10,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildImageViewer(BuildContext context, String originalImageUrl, String heroTag) {
+  Widget _buildBolt(Color color) {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle, // Changed to circle for rounded theme
+      ),
+    );
+  }
+
+  Widget _buildImageViewer(
+    BuildContext context,
+    String originalImageUrl,
+    String heroTag,
+  ) {
     final String optimizedUrl = getOptimizedCloudinaryUrl(originalImageUrl);
-    
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => FullScreenImageViewer(imageUrl: originalImageUrl, heroTag: heroTag)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) => FullScreenImageViewer(
+                  imageUrl: originalImageUrl,
+                  heroTag: heroTag,
+                ),
+          ),
+        );
       },
       child: Hero(
         tag: heroTag,
         child: Image.network(
           optimizedUrl,
-          // FIX 2: Changed from cover to fitWidth to prevent cropping
-          // It will span the width, and the container height will adjust naturally
-          fit: BoxFit.cover, 
+          fit: BoxFit.fitWidth,
           loadingBuilder: (context, child, progress) {
             if (progress == null) return child;
             return Container(
-              height: 300, // Placeholder height while loading
-              color: Colors.grey.shade100,
-              child: const Center(child: Icon(Icons.image, color: Colors.grey)),
+              height: 200,
+              color: Colors.grey.shade900,
+              child: const Center(
+                child: Icon(Icons.image_search, color: Colors.white54),
+              ),
             );
           },
-          errorBuilder: (context, error, stackTrace) => Container(
-            height: 300, 
-            color: Colors.grey.shade200, 
-            child: const Icon(Icons.broken_image)
-          ),
+          errorBuilder:
+              (context, error, stackTrace) => Container(
+                height: 200,
+                color: Colors.grey.shade900,
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.broken_image, color: Colors.white),
+                    SizedBox(height: 8),
+                    Text(
+                      "IMG_ERR",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Courier',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
         ),
       ),
     );
   }
 
-  Widget _buildVideoPlayer(BuildContext context, String originalVideoUrl, String? originalThumbnailUrl) {
-    final String optimizedThumbnailUrl = originalThumbnailUrl != null ? getOptimizedCloudinaryUrl(originalThumbnailUrl) : 'https://via.placeholder.com/600x600/000000/FFFFFF/?text=Video';
-    
+  Widget _buildVideoPlayer(
+    BuildContext context,
+    String originalVideoUrl,
+    String? originalThumbnailUrl,
+  ) {
+    final String optimizedThumbnailUrl =
+        originalThumbnailUrl != null
+            ? getOptimizedCloudinaryUrl(originalThumbnailUrl)
+            : 'https://via.placeholder.com/600x600/000000/FFFFFF/?text=NO_SIGNAL';
     return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => FullScreenVideoPlayer(videoUrl: originalVideoUrl)));
-      },
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) =>
+                      FullScreenVideoPlayer(videoUrl: originalVideoUrl),
+            ),
+          ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Video Thumbnail
           Image.network(
             optimizedThumbnailUrl,
-            fit: BoxFit.cover, // Thumbnails are usually ok to cover
+            fit: BoxFit.cover,
             width: double.infinity,
-            // FIX 3: Let height adjust, but keep reasonable constraints via parent
-            errorBuilder: (context, error, stackTrace) => Container(height: 300, color: Colors.grey.shade200),
+            errorBuilder:
+                (context, error, stackTrace) =>
+                    Container(height: 200, color: Colors.grey.shade900),
           ),
-          
-          // Play Button
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.black, width: 2),
-              boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(2, 2), blurRadius: 0)],
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black,
+                  offset: Offset(2, 2),
+                  blurRadius: 0,
+                ),
+              ],
             ),
             child: const Icon(Icons.play_arrow, color: Colors.black, size: 30),
           ),
