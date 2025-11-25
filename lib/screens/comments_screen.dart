@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: comments_screen.dart
+// FILE PATH: lib/screens/comments_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -38,13 +43,13 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final notificationsCollectionRef = FirebaseFirestore.instance.collection(
       'notifications',
     );
+
     final userDoc =
         await FirebaseFirestore.instance
             .collection('users')
             .doc(_currentUser.uid)
             .get();
-
-    if (!userDoc.exists) return; // Guard against missing user data
+    if (!userDoc.exists) return;
 
     final userData = userDoc.data() as Map<String, dynamic>;
 
@@ -56,46 +61,37 @@ class _CommentsScreenState extends State<CommentsScreen> {
       'timestamp': FieldValue.serverTimestamp(),
     };
 
-    // Clear the input field immediately for better UX
     _commentController.clear();
 
-    // Use a transaction to ensure atomicity of all operations.
     await FirebaseFirestore.instance
         .runTransaction((transaction) async {
-          // Step 1: Read the post document.
           final postSnapshot = await transaction.get(postRef);
+          if (!postSnapshot.exists) throw Exception("Post does not exist!");
 
-          if (!postSnapshot.exists) {
-            throw Exception("Post does not exist!");
-          }
           final postData = postSnapshot.data() as Map<String, dynamic>;
           final postAuthorId = postData['userId'];
-
-          // Step 2: Safely update the comment count.
           final currentCommentCount = postData['comments'] ?? 0;
+
           transaction.update(postRef, {'comments': currentCommentCount + 1});
 
-          // Step 3: Add the new comment document.
           final newCommentDocRef = commentCollectionRef.doc();
           transaction.set(newCommentDocRef, newCommentData);
 
-          // Only create a notification if the commenter is not the post author.
           if (postAuthorId != null && postAuthorId != _currentUser.uid) {
             final newNotificationDocRef = notificationsCollectionRef.doc();
             transaction.set(newNotificationDocRef, {
-              'userId': postAuthorId, // The ID of the user to be notified
+              'userId': postAuthorId,
               'title': 'New Comment',
               'body':
                   '${userData['displayName'] ?? 'Someone'} commented: "$text"',
-              'type': 'comment', // Helps in displaying the right icon
-              'relatedDocId': widget.postId, // To navigate to the post
+              'type': 'comment',
+              'relatedDocId': widget.postId,
               'isRead': false,
               'timestamp': FieldValue.serverTimestamp(),
             });
           }
         })
         .catchError((error) {
-          // Handle any errors during the transaction
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text("Failed to post comment: $error")),
@@ -114,21 +110,37 @@ class _CommentsScreenState extends State<CommentsScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Colors.grey.shade900,
-          title: const Text('Delete Comment?'),
-          content: const Text(
-            'Are you sure you want to delete this comment? This action cannot be undone.',
+          backgroundColor: Colors.white,
+          shape: const RoundedRectangleBorder(
+            side: BorderSide(color: Colors.black, width: 2),
+          ),
+          title: Text(
+            'Delete Comment?',
+            style: GoogleFonts.archivoBlack(fontSize: 20),
+          ),
+          content: Text(
+            'Are you sure?',
+            style: GoogleFonts.spaceMono(fontSize: 14),
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text(
+              child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white70),
+                style: GoogleFonts.spaceMono(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child: Text(
+                'Delete',
+                style: GoogleFonts.spaceMono(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
@@ -144,19 +156,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
     }
   }
 
-  // --- NEW: ASYNC FUNCTION TO FILTER COMMENTS ---
   Future<List<QueryDocumentSnapshot>> _filterComments(
     List<QueryDocumentSnapshot> rawComments,
   ) async {
-    if (rawComments.isEmpty) {
-      return [];
-    }
-
-    // 1. Get all unique user IDs from the comments
+    if (rawComments.isEmpty) return [];
     final userIds =
         rawComments.map((doc) => doc['userId'] as String).toSet().toList();
-
-    // 2. Fetch user documents for all those IDs in parallel
     final userFutures =
         userIds
             .map(
@@ -164,17 +169,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
                   FirebaseFirestore.instance.collection('users').doc(id).get(),
             )
             .toList();
-
     final userSnapshots = await Future.wait(userFutures);
-
-    // 3. Create a Set of user IDs that actually exist
     final existingUserIds =
         userSnapshots
             .where((snap) => snap.exists)
             .map((snap) => snap.id)
             .toSet();
-
-    // 4. Return only the comments where the author's ID is in the existing set
     return rawComments
         .where((comment) => existingUserIds.contains(comment['userId']))
         .toList();
@@ -182,19 +182,27 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandBlack = Colors.black;
+    const Color brandPurple = Color(0xFF9983F3);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           'Comments',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          style: GoogleFonts.archivoBlack(color: brandBlack, fontSize: 22),
         ),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: brandBlack),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(color: brandBlack, height: 2),
+        ),
       ),
       body: Column(
         children: [
           Expanded(
-            // --- UPDATED WIDGET STRUCTURE ---
             child: StreamBuilder<QuerySnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -206,50 +214,42 @@ class _CommentsScreenState extends State<CommentsScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: Colors.yellow),
+                    child: CircularProgressIndicator(color: brandPurple),
                   );
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
                     child: Text(
-                      'No comments yet.\nBe the first to comment!',
+                      'No comments yet.\nBe the first!',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(color: Colors.white70),
+                      style: GoogleFonts.spaceMono(color: Colors.grey),
                     ),
                   );
                 }
 
-                // The raw list of comments from the stream
                 final rawComments = snapshot.data!.docs;
 
-                // Use a FutureBuilder to wait for our filtering to complete
                 return FutureBuilder<List<QueryDocumentSnapshot>>(
                   future: _filterComments(rawComments),
                   builder: (context, filteredSnapshot) {
                     if (filteredSnapshot.connectionState ==
                         ConnectionState.waiting) {
-                      // While filtering, you can show a loader or the old list.
-                      // A loader is better to avoid flicker.
-                      return const Center(
-                        child: CircularProgressIndicator(color: Colors.yellow),
-                      );
+                      return const SizedBox.shrink(); // Avoid flicker
                     }
                     if (!filteredSnapshot.hasData ||
                         filteredSnapshot.data!.isEmpty) {
                       return Center(
                         child: Text(
                           'No comments to display.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(color: Colors.white70),
+                          style: GoogleFonts.spaceMono(color: Colors.grey),
                         ),
                       );
                     }
 
-                    // The clean, filtered list of comments
                     final comments = filteredSnapshot.data!;
 
                     return ListView.builder(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.all(16.0),
                       itemCount: comments.length,
                       itemBuilder: (context, index) {
                         final comment = comments[index];
@@ -262,62 +262,93 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         final bool isAuthor =
                             _currentUser.uid == commentAuthorId;
 
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage:
-                                userImage.isNotEmpty
-                                    ? NetworkImage(userImage)
-                                    : null,
-                            child:
-                                userImage.isEmpty
-                                    ? const Icon(Icons.person_outline)
-                                    : null,
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                commentData['userName'] ?? 'User',
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
+                        // --- NEO-BRUTALIST COMMENT CARD ---
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: brandBlack, width: 2),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: brandBlack,
+                                offset: Offset(4, 4),
+                                blurRadius: 0,
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                timestamp != null
-                                    ? timeago.format(
-                                      timestamp,
-                                      locale: 'en_short',
-                                    )
-                                    : '',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Colors.grey.shade200,
+                                    backgroundImage:
+                                        userImage.isNotEmpty
+                                            ? NetworkImage(userImage)
+                                            : null,
+                                    child:
+                                        userImage.isEmpty
+                                            ? const Icon(
+                                              Icons.person,
+                                              size: 20,
+                                              color: brandBlack,
+                                            )
+                                            : null,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    commentData['userName'] ?? 'User',
+                                    style: GoogleFonts.archivoBlack(
+                                      fontSize: 14,
+                                      color: brandBlack,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    timestamp != null
+                                        ? timeago.format(
+                                          timestamp,
+                                          locale: 'en_short',
+                                        )
+                                        : '',
+                                    style: GoogleFonts.spaceMono(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  if (isAuthor)
+                                    GestureDetector(
+                                      onTap: () => _deleteComment(comment.id),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 8.0),
+                                        child: Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.red,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 42.0,
+                                ), // Indent text under name
+                                child: Text(
+                                  commentData['text'] ?? '',
+                                  style: GoogleFonts.poppins(
+                                    color: brandBlack,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 2.0),
-                            child: Text(
-                              commentData['text'] ?? '',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white.withAlpha(220),
-                              ),
-                            ),
-                          ),
-                          trailing:
-                              isAuthor
-                                  ? IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.redAccent,
-                                      size: 20,
-                                    ),
-                                    onPressed: () => _deleteComment(comment.id),
-                                  )
-                                  : null,
                         );
                       },
                     );
@@ -326,42 +357,69 @@ class _CommentsScreenState extends State<CommentsScreen> {
               },
             ),
           ),
-          _buildCommentInputField(),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildCommentInputField() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade800, width: 0.5),
-        ),
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _commentController,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Add a comment...',
-                  hintStyle: TextStyle(color: Colors.white70),
-                  border: InputBorder.none,
+          // --- INPUT AREA ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: brandBlack, width: 2)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: brandBlack, width: 2),
+                    ),
+                    child: TextField(
+                      controller: _commentController,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: GoogleFonts.poppins(color: brandBlack),
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment...',
+                        hintStyle: GoogleFonts.spaceMono(
+                          color: Colors.grey.shade500,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: _postComment,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: brandPurple,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: brandBlack, width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: brandBlack,
+                          offset: Offset(2, 2),
+                          blurRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.send, color: Colors.yellow),
-              onPressed: _postComment,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
