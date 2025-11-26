@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: chat_list_screen.dart
+// FILE PATH: lib/screens/chat_list_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +17,32 @@ class ChatListScreen extends StatefulWidget {
   State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen> {
+class _ChatListScreenState extends State<ChatListScreen>
+    with SingleTickerProviderStateMixin {
   final _currentUser = FirebaseAuth.instance.currentUser!;
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _deleteConversation(String chatRoomId) async {
-    final chatDocRef = FirebaseFirestore.instance
+    await FirebaseFirestore.instance
         .collection('chats')
-        .doc(chatRoomId);
-    await chatDocRef.delete();
+        .doc(chatRoomId)
+        .delete();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -32,14 +55,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandBlack = Colors.black;
+    const Color brandPurple = Color(0xFF9983F3);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          'Messages',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          'MESSAGES',
+          style: GoogleFonts.archivoBlack(color: brandBlack, fontSize: 22),
         ),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: brandBlack),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: Container(color: brandBlack, height: 2),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream:
@@ -51,14 +83,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.yellow),
+              child: CircularProgressIndicator(color: brandBlack),
             );
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
-              child: Text(
-                'No active chats.',
-                style: GoogleFonts.poppins(color: Colors.white70),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 60,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No active chats.',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
             );
           }
@@ -66,6 +112,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           final conversations = snapshot.data!.docs;
 
           return ListView.builder(
+            padding: const EdgeInsets.all(16),
             itemCount: conversations.length,
             itemBuilder: (context, index) {
               final chatDoc = conversations[index];
@@ -81,8 +128,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 (id) => id != _currentUser.uid,
                 orElse: () => '',
               );
-
-              // Handle case where other user might not be found
               if (otherUserId.isEmpty) return const SizedBox.shrink();
 
               final otherUserName =
@@ -93,93 +138,163 @@ class _ChatListScreenState extends State<ChatListScreen> {
               final timestamp =
                   (chatData['lastMessageTimestamp'] as Timestamp?)?.toDate();
 
-              return Dismissible(
-                key: Key(chatRoomId),
-                background: Container(
-                  color: Colors.red.shade800,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  child: const Icon(Icons.delete_forever, color: Colors.white),
+              // Staggered Animation
+              final Animation<double> animation = CurvedAnimation(
+                parent: _controller,
+                curve: Interval(
+                  (index / conversations.length) * 0.5,
+                  1.0,
+                  curve: Curves.easeOutCubic,
                 ),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  _deleteConversation(chatRoomId);
-                },
-                child: ListTile(
-                  leading: CircleAvatar(
-                    radius: 28,
-                    backgroundImage:
-                        otherUserImage.isNotEmpty
-                            ? NetworkImage(otherUserImage)
-                            : null,
-                    child:
-                        otherUserImage.isEmpty
-                            ? const Icon(Icons.person)
-                            : null,
-                  ),
-                  title: Text(
-                    otherUserName,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Text(
-                    lastMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: unreadCount > 0 ? Colors.white : Colors.white70,
-                      fontWeight:
-                          unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+              );
+
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.2),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: Dismissible(
+                    key: Key(chatRoomId),
+                    background: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20.0),
+                      child: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.white,
+                      ),
+                    ),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (direction) => _deleteConversation(chatRoomId),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (context) => ChatScreen(
+                                  receiverId: otherUserId,
+                                  receiverName: otherUserName,
+                                  receiverImageUrl: otherUserImage,
+                                ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: brandBlack, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: brandBlack,
+                              offset: Offset(4, 4),
+                              blurRadius: 0,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: brandBlack, width: 2),
+                              ),
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Colors.grey.shade200,
+                                backgroundImage:
+                                    otherUserImage.isNotEmpty
+                                        ? NetworkImage(otherUserImage)
+                                        : null,
+                                child:
+                                    otherUserImage.isEmpty
+                                        ? const Icon(
+                                          Icons.person,
+                                          color: brandBlack,
+                                        )
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    otherUserName,
+                                    style: GoogleFonts.archivoBlack(
+                                      fontSize: 16,
+                                      color: brandBlack,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    lastMessage,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.spaceMono(
+                                      color:
+                                          unreadCount > 0
+                                              ? brandBlack
+                                              : Colors.grey.shade600,
+                                      fontWeight:
+                                          unreadCount > 0
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (timestamp != null)
+                                  Text(
+                                    DateFormat('h:mm a').format(timestamp),
+                                    style: GoogleFonts.spaceMono(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                const SizedBox(height: 6),
+                                if (unreadCount > 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: brandPurple,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: brandBlack),
+                                    ),
+                                    child: Text(
+                                      unreadCount.toString(),
+                                      style: GoogleFonts.spaceMono(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (timestamp != null)
-                        Text(
-                          DateFormat('h:mm a').format(timestamp),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      if (unreadCount > 0)
-                        Chip(
-                          label: Text(
-                            unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                          backgroundColor: Colors.yellow.shade700,
-                          padding: EdgeInsets.zero,
-                          labelPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        )
-                      else
-                        const SizedBox(height: 24),
-                    ],
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => ChatScreen(
-                              receiverId: otherUserId,
-                              receiverName: otherUserName,
-                              receiverImageUrl: otherUserImage,
-                            ),
-                      ),
-                    );
-                  },
                 ),
               );
             },

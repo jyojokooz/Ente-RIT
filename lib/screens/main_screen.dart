@@ -3,9 +3,11 @@
 // FILE PATH: lib/screens/main_screen.dart
 // ===============================
 
+// ignore_for_file: sized_box_for_whitespace
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // <-- Added back for SystemNavigator
+import 'package:flutter/services.dart';
 
 // --- Screen Imports ---
 import 'pages/pages.dart';
@@ -28,6 +30,7 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
+    // IndexedStack now correctly has 4 pages
     _pages = [
       const HomeScreen(),
       const ExploreScreen(),
@@ -40,14 +43,23 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onTabTapped(int index) {
+    if (index == 2) {
+      // Center button
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+      );
+      return;
+    }
+
+    int pageIndex = index > 2 ? index - 1 : index;
     setState(() {
-      _currentIndex = index;
+      _currentIndex = pageIndex;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- NEO-BRUTALIST COLORS ---
     const Color brandPurple = Color(0xFF9983F3);
     const Color brandBlack = Colors.black;
 
@@ -67,65 +79,55 @@ class _MainScreenState extends State<MainScreen> {
             ),
           );
         } else {
-          SystemNavigator.pop(); // This now works
+          SystemNavigator.pop();
         }
       },
       child: Scaffold(
         backgroundColor: Colors.white,
         body: IndexedStack(index: _currentIndex, children: _pages),
 
-        // --- FLOATING ACTION BUTTON (FAB) ---
-        floatingActionButton: Container(
-          height: 65,
-          width: 65,
-          margin: const EdgeInsets.only(top: 30),
-          child: FloatingActionButton(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreatePostScreen(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButton: GestureDetector(
+          onTap: () => _onTabTapped(2),
+          child: SizedBox(
+            width: 70,
+            height: 70,
+            child: Image.asset(
+              'assets/app_icon.png',
+              errorBuilder:
+                  (c, e, s) => Container(
+                    decoration: const BoxDecoration(
+                      color: brandPurple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white),
                   ),
-                ),
-            backgroundColor: brandPurple,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: const BorderSide(color: brandBlack, width: 3),
             ),
-            child: const Icon(Icons.add, color: Colors.white, size: 35),
           ),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
-        // --- BOTTOM BAR ---
-        bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: brandBlack, width: 3)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                offset: Offset(0, -4),
-                blurRadius: 0,
-              ),
-            ],
-          ),
-          child: BottomAppBar(
-            shape: const CircularNotchedRectangle(),
-            notchMargin: 10.0,
-            color: Colors.white,
-            elevation: 0,
-            height: 75,
-            padding: EdgeInsets.zero,
+        bottomNavigationBar: BottomAppBar(
+          height: 55, // REDUCED HEIGHT
+          color: Colors.white,
+          elevation: 0,
+          surfaceTintColor: Colors.white,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 10.0,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: <Widget>[
-                _buildNavIcon(Icons.home_filled, Icons.home_outlined, 0),
-                _buildNavIcon(Icons.search, Icons.search_outlined, 1),
-                const SizedBox(width: 40), // Space for FAB
-                _buildNavIcon(Icons.apps, Icons.apps_outlined, 2),
-                NotificationBadge(
-                  child: _buildNavIcon(Icons.person, Icons.person_outline, 3),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildInstagramIcon(Icons.home, Icons.home_outlined, 0, 0),
+                _buildInstagramIcon(Icons.search, Icons.search_outlined, 1, 1),
+                const SizedBox(width: 48),
+                _buildInstagramIcon(Icons.apps, Icons.apps_outlined, 2, 3),
+                _buildInstagramIcon(
+                  Icons.person,
+                  Icons.person_outline,
+                  3,
+                  4,
+                  isProfile: true,
                 ),
               ],
             ),
@@ -135,35 +137,30 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildNavIcon(IconData activeIcon, IconData inactiveIcon, int index) {
-    const Color brandBlack = Colors.black;
-    final bool isSelected = _currentIndex == index;
+  Widget _buildInstagramIcon(
+    IconData activeIcon,
+    IconData inactiveIcon,
+    int pageIndex,
+    int visualIndex, {
+    bool isProfile = false,
+  }) {
+    final bool isSelected = _currentIndex == pageIndex;
 
-    return GestureDetector(
-      onTap: () => _onTabTapped(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(10),
-        decoration:
-            isSelected
-                ? BoxDecoration(
-                  color: Colors.yellow.shade400,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: brandBlack, width: 2),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: brandBlack,
-                      offset: Offset(2, 2),
-                      blurRadius: 0,
-                    ),
-                  ],
-                )
-                : const BoxDecoration(),
-        child: Icon(
-          isSelected ? activeIcon : inactiveIcon,
-          color: brandBlack,
-          size: 28,
-        ),
+    Widget icon = Icon(
+      isSelected ? activeIcon : inactiveIcon,
+      color: isSelected ? Colors.black : Colors.grey.shade600,
+      size: 28,
+    );
+
+    if (isProfile) {
+      icon = NotificationBadge(child: icon);
+    }
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _onTabTapped(visualIndex),
+        behavior: HitTestBehavior.opaque,
+        child: Container(height: double.infinity, child: Center(child: icon)),
       ),
     );
   }

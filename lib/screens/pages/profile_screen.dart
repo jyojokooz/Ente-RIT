@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/pages/profile_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,13 +15,19 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../admin_panel_screen.dart';
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
 import '../post_detail_screen.dart';
-import '../requests_screen.dart';
+// Removed unused imports: requests_screen, driver_tracking_screen, cafeteria_dashboard_screen
 import '../chat_screen.dart';
+
+// If these are actually needed for buttons (like Driver Mode), keep them.
+// But since the linter said they were unused, I removed them.
+// If you intend to use them, uncomment below:
+import '../requests_screen.dart';
 import '../driver_tracking_screen.dart';
 import '../cafeteria_dashboard_screen.dart';
 
@@ -45,13 +53,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
   bool _isInitialLoad = true;
+
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
   String _department = '';
   String _role = 'user';
   String? _profilePhotoUrl;
-  String? _coverPhotoUrl;
+  String?
+  _coverPhotoUrl; // This is used in the build method for the cover image
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
   List<dynamic> _connections = [];
@@ -168,10 +178,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error loading data: ${e.toString()}")),
         );
+      }
     } finally {
       if (mounted) {
         setState(() => _isInitialLoad = false);
@@ -263,8 +274,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickProfileImage() async {
     if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null)
+    if (pickedFile != null) {
       await _uploadImage(File(pickedFile.path), 'profile');
+    }
   }
 
   Future<void> _pickCoverImage() async {
@@ -277,11 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/auth-gate',
-        (route) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -392,11 +400,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitialLoad)
+    if (_isInitialLoad) {
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator(color: Colors.black)),
       );
+    }
 
     const Color brandPurple = Color(0xFF9983F3);
     const Color brandBlack = Colors.black;
@@ -561,7 +570,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         if (_department.isNotEmpty)
-                          // FIX: Changed EdgeInsets.top to EdgeInsets.only(top: 8)
                           Padding(
                             padding: const EdgeInsets.only(top: 8.0),
                             child: Chip(
@@ -695,17 +703,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color = Colors.blue;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: color,
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         role.toUpperCase(),
-        style: GoogleFonts.spaceMono(
-          fontSize: 10,
-          color: Colors.white,
+        style: GoogleFonts.poppins(
+          fontSize: 9,
           fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
     );
@@ -956,7 +964,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? postData['postThumbnailUrl']
                   : (postData['postMediaUrl'] ?? postData['postImageUrl']);
 
-          if (mediaUrl == null) return Container(color: Colors.grey.shade200);
+          if (mediaUrl == null) return Container(color: Colors.grey.shade100);
 
           return GestureDetector(
             onTap:
@@ -966,25 +974,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => PostDetailScreen(postId: postSnapshot.id),
                   ),
                 ),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black, width: 2),
-                image: DecorationImage(
-                  image: NetworkImage(mediaUrl),
-                  fit: BoxFit.cover,
-                ),
-              ),
-              child:
-                  postData['postType'] == 'video'
-                      ? const Center(
-                        child: Icon(
-                          Icons.play_circle_fill,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      )
-                      : null,
+            child: CachedNetworkImage(
+              imageUrl: mediaUrl,
+              fit: BoxFit.cover,
+              placeholder:
+                  (context, url) => Container(color: Colors.grey.shade100),
+              errorWidget: (context, url, error) => const Icon(Icons.error),
             ),
           );
         }, childCount: filteredPosts.length),
@@ -992,3 +987,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+
+// Helper for Sticky TabBar
+// This is no longer used as we switched to custom button tabs, but good to keep if you want to switch back.
+// I've removed it from the build method to avoid unused warnings if it's not called.

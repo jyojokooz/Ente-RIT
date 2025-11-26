@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/pages/classify_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -235,10 +237,11 @@ class _ClassifyScreenState extends State<ClassifyScreen>
 
   Future<void> _launchURL(String url) async {
     if (!await canLaunchUrl(Uri.parse(url))) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not launch $url')));
+      }
       return;
     }
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
@@ -425,6 +428,8 @@ class _NeoFeatureCardState extends State<_NeoFeatureCard> {
                     image: NetworkImage(widget.imageUrl!),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
+                      // ignore: duplicate_ignore
+                      // ignore: deprecated_member_use
                       Colors.black.withOpacity(0.3),
                       BlendMode.darken,
                     ),

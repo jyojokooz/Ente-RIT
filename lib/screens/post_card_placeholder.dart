@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: post_card_placeholder.dart
+// FILE PATH: lib/screens/post_card_placeholder.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -6,86 +11,124 @@ class PostCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color cardBackgroundColor = Colors.grey.shade900;
-    final Color shimmerBaseColor = Colors.grey.shade800;
-    final Color shimmerHighlightColor = Colors.grey.shade700;
+    // Define Shimmer Colors (Subtle Grey)
+    final Color baseColor = Colors.grey[300]!;
+    final Color highlightColor = Colors.grey[100]!;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+    return Container(
+      color: Colors.white, // Clean white background
+      margin: const EdgeInsets.only(bottom: 1.0), // Match feed spacing
       child: Shimmer.fromColors(
-        baseColor: shimmerBaseColor,
-        highlightColor: shimmerHighlightColor,
-        child: Container(
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
-            color: cardBackgroundColor,
-            borderRadius: BorderRadius.circular(25.0),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Placeholder
-              Row(
+        baseColor: baseColor,
+        highlightColor: highlightColor,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. HEADER (Avatar + Name)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 10.0,
+              ),
+              child: Row(
                 children: [
-                  const CircleAvatar(radius: 20, backgroundColor: Colors.white),
+                  // Avatar Circle
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 16,
-                          width: 120,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          height: 12,
-                          width: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ],
+                  // Name Line
+                  Container(
+                    width: 120,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              // Caption Placeholder
-              Container(
-                height: 14,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+            ),
+
+            // 2. MEDIA CONTENT (Big block)
+            Container(
+              width: double.infinity,
+              height: 400, // Fixed height for placeholder look
+              color: Colors.white,
+            ),
+
+            // 3. ACTIONS ROW
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 12.0,
               ),
-              const SizedBox(height: 4),
-              Container(
-                height: 14,
-                width: 200,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              child: Row(
+                children: [
+                  // Icon Placeholders
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              // Image Placeholder
-              Container(
-                height: 300,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15.0),
-                ),
+            ),
+
+            // 4. TEXT LINES (Caption)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 200,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 20), // Bottom spacing
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

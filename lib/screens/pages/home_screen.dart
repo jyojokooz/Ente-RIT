@@ -1,7 +1,9 @@
-// ===============================
+// =
 // FILE NAME: home_screen.dart
 // FILE PATH: lib/screens/pages/home_screen.dart
-// ===============================
+// =
+
+// ignore_for_file: curly_braces_in_flow_control_structures, duplicate_ignore
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -71,20 +73,46 @@ class _HomeScreenState extends State<HomeScreen>
     final isLiked = currentLikes.contains(user.uid);
 
     if (isLiked) {
+      // Unlike the post
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
     } else {
+      // Like the post
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
+
+      // --- NEW NOTIFICATION LOGIC ---
       if (postAuthorId != user.uid) {
+        // Fetch details of the current user (who liked the post)
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get();
+
+        // Fetch the post to get its thumbnail
+        final postDoc =
+            await FirebaseFirestore.instance
+                .collection('posts')
+                .doc(postId)
+                .get();
+
         await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId,
-          'title': 'New Like',
-          'body': '${user.displayName ?? 'Someone'} liked your post.',
+          'userId': postAuthorId, // The user who will receive the notification
+          'title': 'New Like', // Replaced with dynamic body
+          'body':
+              '${userDoc.data()?['displayName'] ?? 'Someone'} liked your post.',
           'type': 'like',
           'relatedDocId': postId,
+          'triggeringUserId': user.uid,
+          'triggeringUserName': userDoc.data()?['displayName'] ?? 'Someone',
+          'triggeringUserAvatarUrl': userDoc.data()?['profilePhotoUrl'] ?? '',
+          'postThumbnailUrl':
+              postDoc.data()?['postThumbnailUrl'] ??
+              postDoc.data()?['postMediaUrl'] ??
+              '',
           'isRead': false,
           'timestamp': FieldValue.serverTimestamp(),
         });
@@ -118,31 +146,22 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           title: Text(
             'Delete Post?',
-            style: GoogleFonts.archivoBlack(color: Colors.black, fontSize: 20),
+            style: GoogleFonts.poppins(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           content: Text(
-            'Are you sure you want to permanently delete this post?',
-            style: GoogleFonts.spaceMono(color: Colors.grey[800], fontSize: 14),
+            'Are you sure?',
+            style: GoogleFonts.poppins(color: Colors.grey[800]),
           ),
           actions: <Widget>[
             TextButton(
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.spaceMono(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
-              child: Text(
-                'Delete',
-                style: GoogleFonts.spaceMono(
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
               onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
@@ -156,20 +175,19 @@ class _HomeScreenState extends State<HomeScreen>
             .collection('posts')
             .doc(postId)
             .delete();
-        if (mounted) {
+        if (mounted)
+          // ignore: curly_braces_in_flow_control_structures
           scaffoldMessenger.showSnackBar(
             const SnackBar(
               content: Text('Post deleted.'),
               backgroundColor: Colors.green,
             ),
           );
-        }
       } catch (e) {
-        if (scaffoldMessenger.mounted) {
+        if (scaffoldMessenger.mounted)
           scaffoldMessenger.showSnackBar(
             SnackBar(content: Text('Failed to delete: ${e.toString()}')),
           );
-        }
       }
     }
   }
@@ -178,11 +196,11 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     const Color brandPurple = Color(0xFF9983F3);
 
-    if (_bgController == null) {
+    if (_bgController == null)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           Container(color: Colors.white),
@@ -254,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen>
                 slivers: [
                   SliverToBoxAdapter(child: _buildTopBar()),
 
-                  // STREAM BUILDER FOR POSTS
                   StreamBuilder<QuerySnapshot>(
                     stream:
                         FirebaseFirestore.instance
@@ -284,8 +301,8 @@ class _HomeScreenState extends State<HomeScreen>
                                 const SizedBox(height: 16),
                                 Text(
                                   'No posts yet.',
-                                  style: GoogleFonts.spaceMono(
-                                    color: Colors.grey[600],
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey[500],
                                     fontSize: 16,
                                   ),
                                 ),
@@ -306,23 +323,13 @@ class _HomeScreenState extends State<HomeScreen>
                           final currentLikes = postData['likes'] ?? [];
                           final currentCaption = postData['caption'] ?? '';
 
-                          // Custom Staggered Animation Implementation (Standard Flutter)
                           return TweenAnimationBuilder<double>(
                             tween: Tween(begin: 0.0, end: 1.0),
-                            // Stagger duration based on index to create wave effect
-                            duration: Duration(
-                              milliseconds: 400 + (index * 100),
-                            ),
+                            duration: const Duration(milliseconds: 300),
                             curve: Curves.easeOut,
-                            builder: (context, value, child) {
-                              return Transform.translate(
-                                offset: Offset(
-                                  0,
-                                  50 * (1 - value),
-                                ), // Slide up effect
-                                child: Opacity(opacity: value, child: child),
-                              );
-                            },
+                            builder:
+                                (context, value, child) =>
+                                    Opacity(opacity: value, child: child),
                             child: PostCard(
                               postSnapshot: postSnapshot,
                               onCommentPressed:
@@ -360,16 +367,17 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Explore',
-            style: GoogleFonts.archivoBlack(
-              fontSize: 28,
+            'Kampus Konnect',
+            style: GoogleFonts.poppins(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
               color: Colors.black,
-              letterSpacing: -1,
+              letterSpacing: -0.5,
             ),
           ),
           Row(
@@ -384,13 +392,13 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                       ),
                   icon: const Icon(
-                    Icons.notifications_outlined,
+                    Icons.favorite_border,
                     color: Colors.black,
                     size: 28,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed:
                     () => Navigator.push(
@@ -400,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
                 icon: const Icon(
-                  Icons.mark_chat_unread_outlined,
+                  Icons.chat_bubble_outline,
                   color: Colors.black,
                   size: 26,
                 ),

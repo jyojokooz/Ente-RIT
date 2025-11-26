@@ -1,13 +1,18 @@
+// ===============================
+// FILE NAME: notifications_screen.dart
+// FILE PATH: lib/screens/notifications_screen.dart
+// ===============================
+
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// FIX 1: Corrected typo from 'package.' to 'package:'
-import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
-// Import the screen for posts
 import 'post_detail_screen.dart';
-// FIX 2: This import should now work correctly after fixing the other errors
 import 'pages/profile_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -22,39 +27,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _handleNotificationTap(DocumentSnapshot notificationDoc) async {
     final data = notificationDoc.data() as Map<String, dynamic>;
-
-    // First, mark the notification as read if it isn't already
     if (data['isRead'] == false) {
       await notificationDoc.reference.update({'isRead': true});
     }
 
-    // Get the notification type and the related document ID
     final String? type = data['type'];
     final String? relatedDocId = data['relatedDocId'];
 
-    // If there's no related ID, we can't navigate anywhere
-    if (relatedDocId == null || relatedDocId.isEmpty) {
-      return;
-    }
-
-    // Ensure the widget is still mounted before navigating
+    if (relatedDocId == null || relatedDocId.isEmpty) return;
     if (!mounted) return;
 
-    // Navigate based on the notification type
     switch (type) {
       case 'like':
       case 'comment':
-        // These types relate to a post
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PostDetailScreen(postId: relatedDocId),
-          ),
-        );
+        // FIX: Check if post exists before navigating
+        final postDoc =
+            await FirebaseFirestore.instance
+                .collection('posts')
+                .doc(relatedDocId)
+                .get();
+        if (postDoc.exists) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(postId: relatedDocId),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("This post has been deleted.")),
+          );
+        }
         break;
+      case 'follow':
       case 'connection_accepted':
-      case 'follow': // You can handle 'follow' and 'connection' types here
-        // These types relate to a user
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -62,18 +68,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         );
         break;
-      default:
-        // FIX 3: Removed the 'print' statement to resolve the lint warning.
-        break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    const Color brandBlack = Colors.black;
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text('Notifications', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        title: Text(
+          'Activity',
+          style: GoogleFonts.poppins(
+            color: brandBlack,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: brandBlack),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(color: Colors.grey.shade200, height: 1.0),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream:
@@ -84,18 +103,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(color: brandBlack),
+            );
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               child: Text(
-                'You have no notifications.',
-                style: GoogleFonts.poppins(color: Colors.white70),
+                'No notifications yet.',
+                style: GoogleFonts.poppins(color: Colors.grey),
               ),
             );
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('Something went wrong.'));
           }
 
           final notifications = snapshot.data!.docs;
@@ -104,47 +122,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notification = notifications[index];
-              final data = notification.data() as Map<String, dynamic>;
-              final bool isRead = data['isRead'] ?? false;
-              final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
-
-              return Card(
-                color:
-                    isRead
-                        ? Colors.grey.shade900
-                        : const Color.fromARGB(38, 255, 235, 59),
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ListTile(
-                  // The onTap now calls our updated handler
-                  onTap: () => _handleNotificationTap(notification),
-                  leading: Icon(
-                    _getIconForType(data['type']),
-                    color: isRead ? Colors.white54 : Colors.yellow,
-                  ),
-                  title: Text(
-                    data['title'] ?? 'Notification',
-                    style: GoogleFonts.poppins(
-                      fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
-                    ),
-                  ),
-                  subtitle: Text(
-                    data['body'] ?? '',
-                    style: TextStyle(
-                      color: isRead ? Colors.white60 : Colors.white,
-                    ),
-                  ),
-                  trailing:
-                      timestamp != null
-                          ? Text(
-                            // This will now work correctly
-                            DateFormat.yMd().add_jm().format(timestamp),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.white54,
-                            ),
-                          )
-                          : null,
-                ),
+              return _NotificationTile(
+                notificationDoc: notification,
+                onTap: () => _handleNotificationTap(notification),
               );
             },
           );
@@ -152,18 +132,105 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
     );
   }
+}
 
-  IconData _getIconForType(String? type) {
-    switch (type) {
-      case 'like':
-        return Icons.favorite;
-      case 'comment':
-        return Icons.comment;
-      case 'follow':
-      case 'connection_accepted':
-        return Icons.person_add;
-      default:
-        return Icons.notifications;
+// --- NEW WIDGET: Modern Notification Tile ---
+class _NotificationTile extends StatelessWidget {
+  final DocumentSnapshot notificationDoc;
+  final VoidCallback onTap;
+
+  const _NotificationTile({required this.notificationDoc, required this.onTap});
+
+  // Future to check if the related post exists.
+  Future<DocumentSnapshot?> _getRelatedPost(String type, String? docId) {
+    if (docId != null && (type == 'like' || type == 'comment')) {
+      return FirebaseFirestore.instance.collection('posts').doc(docId).get();
     }
+    return Future.value(null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = notificationDoc.data() as Map<String, dynamic>;
+    final String type = data['type'] ?? '';
+    final String body = data['body'] ?? '...';
+    final String? relatedDocId = data['relatedDocId'];
+    final String triggeringUserAvatarUrl =
+        data['triggeringUserAvatarUrl'] ?? '';
+    final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // User Avatar
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.grey.shade200,
+              backgroundImage:
+                  triggeringUserAvatarUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(triggeringUserAvatarUrl)
+                      : null,
+            ),
+            const SizedBox(width: 12),
+
+            // Notification Text
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: GoogleFonts.poppins(color: Colors.black, fontSize: 14),
+                  children: [
+                    TextSpan(text: body),
+                    if (timestamp != null)
+                      TextSpan(
+                        text:
+                            ' ${timeago.format(timestamp, locale: 'en_short')}',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Post Thumbnail (if it exists)
+            FutureBuilder<DocumentSnapshot?>(
+              future: _getRelatedPost(type, relatedDocId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done &&
+                    snapshot.hasData &&
+                    snapshot.data!.exists) {
+                  final postData =
+                      snapshot.data!.data() as Map<String, dynamic>;
+                  final thumbnailUrl =
+                      postData['postThumbnailUrl'] ?? postData['postMediaUrl'];
+                  if (thumbnailUrl != null) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: CachedNetworkImage(
+                        imageUrl: thumbnailUrl,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        errorWidget:
+                            (c, u, e) => Container(color: Colors.grey.shade200),
+                      ),
+                    );
+                  }
+                }
+                // Return an empty box if no post or no thumbnail
+                return const SizedBox(width: 44, height: 44);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
