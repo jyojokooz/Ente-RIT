@@ -1,3 +1,10 @@
+// ===============================
+// FILE NAME: create_post_screen.dart
+// FILE PATH: lib/screens/create_post_screen.dart
+// ===============================
+
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+
 import 'dart:io';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -33,9 +40,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   bool _isUploading = false;
   String _uploadStatus = '';
 
-  // --- IMAGE COMPRESSION HELPER ---
+  // --- HELPER METHODS ---
   Future<File?> _compressImage(File file) async {
-    if (mounted) setState(() => _uploadStatus = 'Compressing image...');
+    setState(() => _uploadStatus = 'Compressing...');
     final tempDir = await getTemporaryDirectory();
     final targetPath = p.join(
       tempDir.path,
@@ -53,7 +60,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return result == null ? null : File(result.path);
   }
 
-  // --- VIDEO COMPRESSION HELPERS ---
   Future<void> _generateThumbnail(String videoPath) async {
     final thumbnailPath = await VideoThumbnail.thumbnailFile(
       video: videoPath,
@@ -68,7 +74,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<File?> _compressVideo(File file) async {
-    if (mounted) setState(() => _uploadStatus = 'Compressing video...');
+    setState(() => _uploadStatus = 'Compressing video...');
     final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
       file.path,
       quality: VideoQuality.MediumQuality,
@@ -77,9 +83,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return mediaInfo?.file;
   }
 
-  // --- MEDIA PICKER METHODS ---
   Future<void> _pickImage() async {
-    Navigator.of(context).pop();
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null && mounted) {
       setState(() {
@@ -91,7 +95,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _pickVideo() async {
-    Navigator.of(context).pop();
     final pickedFile = await _picker.pickVideo(
       source: ImageSource.gallery,
       maxDuration: const Duration(seconds: 60),
@@ -106,28 +109,69 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   void _showPickOptions() {
+    // Dismiss keyboard before showing bottom sheet
+    FocusScope.of(context).unfocus();
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder:
           (context) => SafeArea(
             child: Wrap(
               children: <Widget>[
                 ListTile(
-                  leading: const Icon(Icons.photo_library, color: Colors.white),
-                  title: const Text(
-                    'Pick Image from Gallery',
-                    style: TextStyle(color: Colors.white),
+                  leading: const Icon(
+                    Icons.photo_library_outlined,
+                    color: Colors.black,
                   ),
-                  onTap: _pickImage,
+                  title: Text(
+                    'Photo Library',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage();
+                  },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.video_library, color: Colors.white),
-                  title: const Text(
-                    'Pick Video from Gallery',
-                    style: TextStyle(color: Colors.white),
+                  leading: const Icon(
+                    Icons.videocam_outlined,
+                    color: Colors.black,
                   ),
-                  onTap: _pickVideo,
+                  title: Text(
+                    'Video Library',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickVideo();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.camera_alt_outlined,
+                    color: Colors.black,
+                  ),
+                  title: Text(
+                    'Take Photo',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final pickedFile = await _picker.pickImage(
+                      source: ImageSource.camera,
+                    );
+                    if (pickedFile != null && mounted) {
+                      setState(() {
+                        _mediaFile = File(pickedFile.path);
+                        _postType = PostType.image;
+                        _thumbnailFile = null;
+                      });
+                    }
+                  },
                 ),
               ],
             ),
@@ -135,17 +179,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  // --- MAIN POST CREATION LOGIC ---
   Future<void> _createPost() async {
-    if (_mediaFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an image or video.')),
-      );
-      return;
-    }
+    if (_mediaFile == null) return;
     if (_isUploading) return;
 
-    if (mounted) setState(() => _isUploading = true);
+    // Dismiss keyboard
+    FocusScope.of(context).unfocus();
+
+    setState(() => _isUploading = true);
 
     try {
       final user = FirebaseAuth.instance.currentUser!;
@@ -159,17 +200,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       String postTypeString;
       File fileToUpload;
 
-      // --- VIDEO PATH ---
       if (_postType == PostType.video) {
         postTypeString = 'video';
         final compressedVideo = await _compressVideo(_mediaFile!);
-        if (compressedVideo == null) {
+        if (compressedVideo == null)
           throw Exception("Video compression failed");
-        }
         fileToUpload = compressedVideo;
 
         if (_thumbnailFile != null) {
-          if (mounted) setState(() => _uploadStatus = 'Uploading thumbnail...');
+          setState(() => _uploadStatus = 'Uploading thumb...');
           CloudinaryResponse thumbResponse = await cloudinary.uploadFile(
             CloudinaryFile.fromFile(
               _thumbnailFile!.path,
@@ -180,7 +219,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           thumbnailUrl = thumbResponse.secureUrl;
         }
 
-        if (mounted) setState(() => _uploadStatus = 'Uploading video...');
+        setState(() => _uploadStatus = 'Uploading video...');
         CloudinaryResponse videoResponse = await cloudinary.uploadFile(
           CloudinaryFile.fromFile(
             fileToUpload.path,
@@ -189,17 +228,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         );
         mediaUrl = videoResponse.secureUrl;
-
-        // --- IMAGE PATH ---
       } else {
         postTypeString = 'image';
         final compressedImage = await _compressImage(_mediaFile!);
-        if (compressedImage == null) {
+        if (compressedImage == null)
           throw Exception("Image compression failed");
-        }
         fileToUpload = compressedImage;
 
-        if (mounted) setState(() => _uploadStatus = 'Uploading image...');
+        setState(() => _uploadStatus = 'Uploading photo...');
         CloudinaryResponse imageResponse = await cloudinary.uploadFile(
           CloudinaryFile.fromFile(
             fileToUpload.path,
@@ -210,21 +246,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         mediaUrl = imageResponse.secureUrl;
       }
 
-      // Save post data to Firestore (common for both types)
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
       final userData = userDoc.data() as Map<String, dynamic>;
+
       final postData = {
         'postType': postTypeString,
         'postMediaUrl': mediaUrl,
         'postThumbnailUrl': thumbnailUrl,
         'caption': _captionController.text.trim(),
         'userId': user.uid,
-        // --- NOTE: This user data is embedded directly into the post document ---
-        // --- This makes loading the feed faster and fixes the "wrong user" bug ---
         'userName': userData['displayName'] ?? 'A User',
         'username': userData['username'] ?? '',
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
@@ -233,39 +267,23 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'comments': 0,
       };
 
-      // ***************************************************************
-      // --- START OF THE FIX ---
-      // ***************************************************************
-
-      // 1. Add the data to Firestore and get the DocumentReference
       final DocumentReference docRef = await FirebaseFirestore.instance
           .collection('posts')
           .add(postData);
 
-      // 2. Create a new map with the data we want to return to the feed screen
       final Map<String, dynamic> resultData = Map<String, dynamic>.from(
         postData,
       );
-
-      // 3. Add the new post's ID, which is essential for liking/commenting later
       resultData['id'] = docRef.id;
-
-      // 4. Replace the server timestamp with a local one for immediate display
       resultData['timestamp'] = Timestamp.now();
 
       if (!mounted) return;
-
-      // 5. Pop the screen and pass the complete post data back to the home screen
       Navigator.of(context).pop(resultData);
-
-      // ***************************************************************
-      // --- END OF THE FIX ---
-      // ***************************************************************
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create post: ${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -280,34 +298,39 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const Color brandPurple = Color(0xFF9983F3);
+    final bool hasMedia = _mediaFile != null;
+
+    // KEY FIX: Disable automatic resizing. We will handle padding manually.
+    // This stops the screen from "jumping" when the keyboard appears.
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false, // <--- CRITICAL FIX
+
       appBar: AppBar(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(
-          'Create New Post',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          'New Post',
+          style: GoogleFonts.poppins(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
         actions: [
-          if (_isUploading)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 3,
-                ),
-              ),
-            )
-          else
+          if (!_isUploading)
             TextButton(
-              onPressed: _createPost,
+              onPressed: hasMedia ? _createPost : null,
               child: Text(
-                'Post',
+                'Share',
                 style: GoogleFonts.poppins(
-                  color: Colors.yellow,
+                  color: hasMedia ? brandPurple : Colors.grey.shade400,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -315,80 +338,199 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            GestureDetector(
-              onTap: _showPickOptions,
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade900,
-                    borderRadius: BorderRadius.circular(15),
-                    image:
-                        _mediaFile != null &&
-                                (_postType == PostType.image ||
-                                    _thumbnailFile != null)
-                            ? DecorationImage(
-                              image: FileImage(
-                                _postType == PostType.video
-                                    ? _thumbnailFile!
-                                    : _mediaFile!,
+
+      body: Stack(
+        children: [
+          // KEY FIX: Wrap scroll view in Padding that listens to viewInsets (keyboard height)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              // Use simple physics to avoid spring-back jitter
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                children: [
+                  // 1. Media Preview
+                  GestureDetector(
+                    onTap: _showPickOptions,
+                    child: Container(
+                      width: double.infinity,
+                      height: MediaQuery.of(context).size.width, // Square
+                      color: Colors.grey.shade100,
+                      child:
+                          _mediaFile != null
+                              ? _postType == PostType.image ||
+                                      _thumbnailFile != null
+                                  ? Image.file(
+                                    _postType == PostType.video
+                                        ? _thumbnailFile!
+                                        : _mediaFile!,
+                                    fit: BoxFit.cover,
+                                  )
+                                  : const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                              : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    size: 64,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    "Tap to select media",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              fit: BoxFit.cover,
-                            )
-                            : null,
+                    ),
                   ),
-                  child:
-                      _mediaFile == null
-                          ? const Center(
-                            child: Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 60,
-                              color: Colors.white70,
+
+                  if (_mediaFile != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _showPickOptions,
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text("Change"),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey,
+                        ),
+                      ),
+                    ),
+
+                  // 2. Caption Input
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Avatar
+                        FutureBuilder<DocumentSnapshot>(
+                          future:
+                              FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(FirebaseAuth.instance.currentUser!.uid)
+                                  .get(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData && snapshot.data!.exists) {
+                              final data =
+                                  snapshot.data!.data() as Map<String, dynamic>;
+                              final url = data['profilePhotoUrl'];
+                              if (url != null && url.isNotEmpty) {
+                                return CircleAvatar(
+                                  backgroundImage: NetworkImage(url),
+                                  radius: 18,
+                                );
+                              }
+                            }
+                            return const CircleAvatar(
+                              child: Icon(Icons.person),
+                              radius: 18,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 12),
+
+                        // TextField
+                        // Removed Flexible/Expanded. Let TextField take natural width in Row context
+                        Expanded(
+                          child: TextField(
+                            controller: _captionController,
+                            style: GoogleFonts.poppins(
+                              color: Colors.black,
+                              fontSize: 15,
                             ),
-                          )
-                          : (_postType == PostType.video
-                              ? const Center(
-                                child: Icon(
-                                  Icons.play_circle_fill_outlined,
-                                  size: 80,
-                                  color: Colors.white70,
-                                ),
-                              )
-                              : null),
+                            maxLines: null, // Grow automatically
+                            minLines: 1,
+                            keyboardType: TextInputType.multiline,
+                            // Generous scroll padding ensures cursor stays visible
+                            scrollPadding: const EdgeInsets.all(20),
+                            decoration: InputDecoration(
+                              hintText: 'Write a caption...',
+                              hintStyle: GoogleFonts.poppins(
+                                color: Colors.grey.shade400,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.only(
+                                top: 8,
+                                bottom: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Divider(height: 1),
+
+                  // 3. Options
+                  ListTile(
+                    title: Text(
+                      "Add Location",
+                      style: GoogleFonts.poppins(fontSize: 15),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    onTap: () {},
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    title: Text(
+                      "Tag People",
+                      style: GoogleFonts.poppins(fontSize: 15),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    onTap: () {},
+                  ),
+
+                  // Extra spacing at bottom
+                  const SizedBox(height: 50),
+                ],
+              ),
+            ),
+          ),
+
+          // --- Loading Overlay ---
+          if (_isUploading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: brandPurple),
+                    const SizedBox(height: 16),
+                    Text(
+                      _uploadStatus,
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _captionController,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Write a caption...',
-                hintStyle: const TextStyle(color: Colors.white70),
-                fillColor: Colors.grey.shade900,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            if (_isUploading) ...[
-              const SizedBox(height: 20),
-              const CircularProgressIndicator(color: Colors.yellow),
-              const SizedBox(height: 10),
-              Text(
-                _uploadStatus,
-                style: const TextStyle(color: Colors.white70),
-              ),
-            ],
-          ],
-        ),
+        ],
       ),
     );
   }

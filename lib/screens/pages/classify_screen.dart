@@ -39,147 +39,127 @@ class ClassifyScreen extends StatefulWidget {
 
 class _ClassifyScreenState extends State<ClassifyScreen>
     with SingleTickerProviderStateMixin {
-  Map<String, String> _cardBackgrounds = {};
   bool _isLoading = true;
 
-  // FIX: Make nullable to prevent LateInitializationError during hot reloads/async gaps
-  AnimationController? _controller;
+  // We don't need to fetch card backgrounds anymore for this cleaner design,
+  // but we keep the loading state just in case you want to fetch dynamic features later.
 
   final List<Map<String, dynamic>> _features = [
     {
-      'id': 'department_notes',
-      'label': 'Notes',
-      'icon': Icons.school_outlined,
-      'color': Color(0xFF2E86DE),
+      'label': 'Departments',
+      'icon': Icons.school_rounded,
+      'color': Color(0xFF4FACFE), // Blue Gradient Start
       'screen': const DepartmentsScreen(),
     },
     {
-      'id': 'events',
       'label': 'Events',
-      'icon': Icons.calendar_today_outlined,
-      'color': Color(0xFFE040FB),
+      'icon': Icons.calendar_month_rounded,
+      'color': Color(0xFF43E97B), // Green Gradient Start
       'screen': const EventListScreen(),
     },
     {
-      'id': 'lost_and_found',
       'label': 'Lost & Found',
-      'icon': Icons.find_in_page_outlined,
-      'color': Color(0xFFF48C06),
+      'icon': Icons.search_rounded,
+      'color': Color(0xFFFA709A), // Pink Gradient Start
       'screen': const LostAndFoundScreen(),
     },
     {
-      'id': 'marketplace',
-      'label': 'Market',
-      'icon': Icons.storefront_outlined,
-      'color': Color(0xFF38B000),
+      'label': 'Marketplace',
+      'icon': Icons.storefront_rounded,
+      'color': Color(0xFFFFD200), // Yellow Gradient Start
       'screen': const MarketplaceScreen(),
     },
     {
-      'id': 'cafeteria',
       'label': 'Cafeteria',
-      'icon': Icons.restaurant_menu_outlined,
-      'color': Color(0xFFD98E04),
+      'icon': Icons.fastfood_rounded,
+      'color': Color(0xFFF7971E), // Orange Gradient Start
       'screen': const CafeteriaScreen(),
     },
     {
-      'id': 'bus_tracker',
-      'label': 'Bus',
-      'icon': Icons.directions_bus_outlined,
-      'color': Colors.blue,
+      'label': 'Bus Tracker',
+      'icon': Icons.directions_bus_rounded,
+      'color': Color(0xFF30CFD0), // Teal Gradient Start
       'screen': const BusListScreen(),
     },
     {
-      'id': 'connect_ai',
-      'label': 'AI Chat',
-      'icon': Icons.auto_awesome_outlined,
-      'color': Color(0xFF6A00F4),
+      'label': 'Connect AI',
+      'icon': Icons.auto_awesome_rounded,
+      'color': Color(0xFF667EEA), // Indigo Gradient Start
       'screen': const AiChatHistoryScreen(),
     },
     {
-      'id': 'peer_rooms',
-      'label': 'Rooms',
-      'icon': Icons.group_outlined,
-      'color': Color(0xFF00B4D8),
+      'label': 'Peer Rooms',
+      'icon': Icons.groups_rounded,
+      'color': Color(0xFF00C6FB), // Light Blue
       'screen': const PeerRoomsScreen(),
     },
     {
-      'id': 'digital_id',
-      'label': 'ID Card',
-      'icon': Icons.badge_outlined,
-      'color': Colors.green,
+      'label': 'Digital ID',
+      'icon': Icons.badge_rounded,
+      'color': Color(0xFF89F7FE), // Cyan
       'screen': const IdCardScreen(),
     },
     {
-      'id': 'code_playground',
-      'label': 'Code',
-      'icon': Icons.code_outlined,
-      'color': Colors.indigo,
+      'label': 'Code Lab',
+      'icon': Icons.code_rounded,
+      'color': Color(0xFF13547A), // Dark Blue
       'screen': const CodePlaygroundScreen(),
     },
     {
-      'id': 'dev_community',
-      'label': 'Stack Overflow',
-      'icon': Icons.question_answer_outlined,
-      'color': Colors.orange,
+      'label': 'Dev Community',
+      'icon': Icons.forum_rounded,
+      'color': Color(0xFFF83600), // Orange/Red
       'screen': const DevCommunityScreen(),
     },
     {
-      'id': 'quiz',
       'label': 'Quiz',
-      'icon': Icons.quiz_outlined,
-      'color': Colors.deepOrange,
+      'icon': Icons.quiz_rounded,
+      'color': Color(0xFFB721FF), // Purple
       'screen': const QuizCategoriesScreen(),
     },
     {
-      'id': 'pdf_buddy',
       'label': 'PDF Buddy',
-      'icon': Icons.picture_as_pdf_outlined,
-      'color': Colors.indigoAccent,
+      'icon': Icons.picture_as_pdf_rounded,
+      'color': Color(0xFFF5576C), // Pinkish Red
       'screen': const PdfBuddyScreen(),
     },
     {
-      'id': 'resume_analyzer',
       'label': 'Resume AI',
-      'icon': Icons.document_scanner_outlined,
-      'color': Colors.teal,
+      'icon': Icons.description_rounded,
+      'color': Color(0xFF0BA360), // Green
       'screen': const ResumeAnalyzerScreen(),
     },
     {
-      'id': 'youtube_summarizer',
       'label': 'YT Summary',
-      'icon': Icons.ondemand_video_outlined,
-      'color': Colors.red,
+      'icon': Icons.play_circle_filled_rounded,
+      'color': Color(0xFFFF0844), // Red
       'screen': const YouTubeSummarizerScreen(),
     },
     {
-      'id': 'tech_news',
       'label': 'Tech News',
-      'icon': Icons.newspaper_outlined,
-      'color': Colors.grey,
+      'icon': Icons.newspaper_rounded,
+      'color': Color(0xFF203A43), // Dark Grey
       'screen': const TechNewsScreen(),
     },
     {
-      'id': 'games',
       'label': 'Games',
-      'icon': Icons.gamepad_outlined,
-      'color': Colors.tealAccent,
+      'icon': Icons.sports_esports_rounded,
+      'color': Color(0xFF00CDAC), // Greenish Teal
       'screen': const GameViewScreen(
         title: 'Smash Karts',
         url: 'https://poki.com/en/g/smash-karts',
       ),
     },
     {
-      'id': 'etlab',
       'label': 'ETLab',
-      'icon': Icons.computer_outlined,
-      'color': Colors.lightBlue,
+      'icon': Icons.computer_rounded,
+      'color': Color(0xFF3B2667), // Deep Purple
       'screen': const EtlabWebviewScreen(),
     },
     {
-      'id': 'nonote',
       'label': 'No-Note',
-      'icon': Icons.note_alt_outlined,
-      'color': Color(0xFFD00000),
+      'icon': Icons.note_alt_rounded,
+      'color': Color(0xFFDA22FF), // Magenta
       'url': 'https://nonote.tech',
     },
   ];
@@ -187,52 +167,10 @@ class _ClassifyScreenState extends State<ClassifyScreen>
   @override
   void initState() {
     super.initState();
-    // Initialize immediately
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _fetchBackgroundImages();
-  }
-
-  @override
-  void dispose() {
-    // Safe dispose
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _fetchBackgroundImages() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('card_backgrounds').get();
-      final Map<String, String> loadedImages = {};
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        if (data.containsKey('imageUrl') &&
-            data['imageUrl'] != null &&
-            data['imageUrl'].isNotEmpty) {
-          loadedImages[doc.id] = data['imageUrl'];
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _cardBackgrounds = loadedImages;
-          _isLoading = false;
-        });
-        _controller?.forward();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        _controller?.forward();
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Couldn't load images: $e")));
-      }
-    }
+    // Simulate a quick load for smooth transition feel
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
   }
 
   Future<void> _launchURL(String url) async {
@@ -251,54 +189,44 @@ class _ClassifyScreenState extends State<ClassifyScreen>
   Widget build(BuildContext context) {
     const Color brandBlack = Colors.black;
 
-    // FIX: Safety check. If controller is null (during hot reload edge case), show loader.
-    if (_controller == null) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator(color: brandBlack)),
-      );
-    }
-
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50], // Very light grey background
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // --- HEADER ---
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'CAMPUS TOOLS',
-                    style: GoogleFonts.archivoBlack(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      color: brandBlack,
-                      letterSpacing: -1.5,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tools & Utilities',
+                        style: GoogleFonts.poppins(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: brandBlack,
+                        ),
+                      ),
+                      Text(
+                        'Explore what\'s available',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ),
-                  Container(
-                    width: 80,
-                    height: 6,
-                    color: const Color(0xFF9983F3),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Everything you need in one place.',
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  // Optional: Profile Icon or Settings here
                 ],
               ),
             ),
 
-            // --- GRID ---
+            // --- GRID CONTENT ---
             Expanded(
               child:
                   _isLoading
@@ -306,55 +234,36 @@ class _ClassifyScreenState extends State<ClassifyScreen>
                         child: CircularProgressIndicator(color: Colors.black),
                       )
                       : GridView.builder(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
+                              crossAxisCount: 2, // 2 Columns
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
-                              childAspectRatio: 1.1,
+                              childAspectRatio: 1.3, // Wider cards
                             ),
                         itemCount: _features.length,
                         itemBuilder: (context, index) {
                           final feature = _features[index];
-                          final imageUrl = _cardBackgrounds[feature['id']];
-
-                          // Use ! because we checked for null at top of build
-                          final Animation<double> animation = CurvedAnimation(
-                            parent: _controller!,
-                            curve: Interval(
-                              (index / _features.length) * 0.5,
-                              1.0,
-                              curve: Curves.easeOutCubic,
-                            ),
-                          );
-
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.2),
-                                end: Offset.zero,
-                              ).animate(animation),
-                              child: _NeoFeatureCard(
-                                label: feature['label'],
-                                icon: feature['icon'],
-                                color: feature['color'],
-                                imageUrl: imageUrl,
-                                onTap: () {
-                                  if (feature.containsKey('url')) {
-                                    _launchURL(feature['url']);
-                                  } else {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => feature['screen'],
-                                      ),
-                                    );
-                                  }
-                                },
-                              ),
-                            ),
+                          return _ModernFeatureCard(
+                            label: feature['label'],
+                            icon: feature['icon'],
+                            color: feature['color'],
+                            onTap: () {
+                              if (feature.containsKey('url')) {
+                                _launchURL(feature['url']);
+                              } else {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => feature['screen'],
+                                  ),
+                                );
+                              }
+                            },
                           );
                         },
                       ),
@@ -366,132 +275,63 @@ class _ClassifyScreenState extends State<ClassifyScreen>
   }
 }
 
-// --- CUSTOM WIDGET: Neo-Brutalist Feature Card ---
-class _NeoFeatureCard extends StatefulWidget {
+// --- CUSTOM MODERN CARD WIDGET ---
+class _ModernFeatureCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final String? imageUrl;
   final VoidCallback onTap;
 
-  const _NeoFeatureCard({
+  const _ModernFeatureCard({
     required this.label,
     required this.icon,
     required this.color,
-    this.imageUrl,
     required this.onTap,
   });
 
   @override
-  State<_NeoFeatureCard> createState() => _NeoFeatureCardState();
-}
-
-class _NeoFeatureCardState extends State<_NeoFeatureCard> {
-  bool _isPressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    const Color brandBlack = Colors.black;
-    final bool hasImage =
-        widget.imageUrl != null && widget.imageUrl!.isNotEmpty;
-
     return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        transform:
-            _isPressed
-                ? Matrix4.translationValues(4, 4, 0)
-                : Matrix4.identity(),
+      onTap: onTap,
+      child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: brandBlack, width: 3),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow:
-              _isPressed
-                  ? []
-                  : [
-                    BoxShadow(
-                      color: brandBlack,
-                      offset: const Offset(6, 6),
-                      blurRadius: 0,
-                    ),
-                  ],
-          image:
-              hasImage
-                  ? DecorationImage(
-                    image: NetworkImage(widget.imageUrl!),
-                    fit: BoxFit.cover,
-                    colorFilter: ColorFilter.mode(
-                      // ignore: duplicate_ignore
-                      // ignore: deprecated_member_use
-                      Colors.black.withOpacity(0.3),
-                      BlendMode.darken,
-                    ),
-                  )
-                  : null,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 10,
+              offset: const Offset(0, 4), // changes position of shadow
+            ),
+          ],
         ),
-        child: Stack(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (!hasImage)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Icon(
-                  Icons.bolt,
-                  color: widget.color.withOpacity(0.2),
-                  size: 60,
-                ),
+            // Icon Container with subtle background
+            Container(
+              height: 50,
+              width: 50,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1), // Light pastel version of color
+                shape: BoxShape.circle,
               ),
-
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color:
-                          hasImage
-                              ? Colors.white.withOpacity(0.9)
-                              : widget.color.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: brandBlack, width: 2),
-                    ),
-                    child: Icon(
-                      widget.icon,
-                      color: hasImage ? brandBlack : widget.color,
-                      size: 28,
-                    ),
-                  ),
-
-                  Text(
-                    widget.label.toUpperCase(),
-                    style: GoogleFonts.archivoBlack(
-                      fontSize: 16,
-                      color: hasImage ? Colors.white : brandBlack,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                      shadows:
-                          hasImage
-                              ? [
-                                const Shadow(
-                                  color: Colors.black,
-                                  offset: Offset(2, 2),
-                                  blurRadius: 0,
-                                ),
-                              ]
-                              : [],
-                    ),
-                  ),
-                ],
+              child: Icon(
+                icon,
+                color: color, // The main vibrant color
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Label
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
             ),
           ],

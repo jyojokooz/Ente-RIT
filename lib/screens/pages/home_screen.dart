@@ -1,15 +1,14 @@
-// =
+// ===============================
 // FILE NAME: home_screen.dart
 // FILE PATH: lib/screens/pages/home_screen.dart
-// =
+// ===============================
 
-// ignore_for_file: curly_braces_in_flow_control_structures, duplicate_ignore
+// ignore_for_file: curly_braces_in_flow_control_structures
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:math' as math;
 
 // --- Screen Imports ---
 import '../comments_screen.dart';
@@ -28,23 +27,16 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
-  AnimationController? _bgController;
 
   @override
   void initState() {
     super.initState();
-    _bgController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _bgController?.dispose();
     super.dispose();
   }
 
@@ -73,26 +65,21 @@ class _HomeScreenState extends State<HomeScreen>
     final isLiked = currentLikes.contains(user.uid);
 
     if (isLiked) {
-      // Unlike the post
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
     } else {
-      // Like the post
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
 
-      // --- NEW NOTIFICATION LOGIC ---
       if (postAuthorId != user.uid) {
-        // Fetch details of the current user (who liked the post)
         final userDoc =
             await FirebaseFirestore.instance
                 .collection('users')
                 .doc(user.uid)
                 .get();
 
-        // Fetch the post to get its thumbnail
         final postDoc =
             await FirebaseFirestore.instance
                 .collection('posts')
@@ -100,8 +87,8 @@ class _HomeScreenState extends State<HomeScreen>
                 .get();
 
         await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId, // The user who will receive the notification
-          'title': 'New Like', // Replaced with dynamic body
+          'userId': postAuthorId,
+          'title': 'New Like',
           'body':
               '${userDoc.data()?['displayName'] ?? 'Someone'} liked your post.',
           'type': 'like',
@@ -176,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen>
             .doc(postId)
             .delete();
         if (mounted)
-          // ignore: curly_braces_in_flow_control_structures
           scaffoldMessenger.showSnackBar(
             const SnackBar(
               content: Text('Post deleted.'),
@@ -196,177 +182,106 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     const Color brandPurple = Color(0xFF9983F3);
 
-    if (_bgController == null)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Container(color: Colors.white),
+      backgroundColor: Colors.white, // Pure white background
+      body: RefreshIndicator(
+        onRefresh: _refreshPosts,
+        color: brandPurple,
+        backgroundColor: Colors.white,
+        child: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildTopBar()),
 
-          AnimatedBuilder(
-            animation: _bgController!,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  Positioned(
-                    top: -50 + (_bgController!.value * 20),
-                    left: -50,
-                    child: Container(
-                      width: 300,
-                      height: 300,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: brandPurple.withAlpha(60),
-                        boxShadow: [
-                          BoxShadow(
-                            color: brandPurple.withAlpha(60),
-                            blurRadius: 100,
-                            spreadRadius: 50,
-                          ),
-                        ],
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .orderBy('timestamp', descending: true)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => const PostCardPlaceholder(),
+                        childCount: 5,
                       ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 100 - (_bgController!.value * 30),
-                    right: -80,
-                    child: Container(
-                      width: 250,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.yellow.withAlpha(40),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.yellow.withAlpha(40),
-                            blurRadius: 80,
-                            spreadRadius: 40,
-                          ),
-                        ],
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.post_add,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No posts yet.',
+                              style: GoogleFonts.poppins(
+                                color: Colors.grey[500],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    );
+                  }
 
-          Positioned(top: 100, right: 20, child: _buildSquiggle(Colors.black)),
-          Positioned(
-            bottom: 200,
-            left: 20,
-            child: Transform.rotate(
-              angle: math.pi,
-              child: _buildSquiggle(Colors.black54),
-            ),
-          ),
+                  final posts = snapshot.data!.docs;
 
-          RefreshIndicator(
-            onRefresh: _refreshPosts,
-            color: brandPurple,
-            backgroundColor: Colors.white,
-            child: SafeArea(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: _buildTopBar()),
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final postSnapshot = posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
+                      final currentLikes = postData['likes'] ?? [];
+                      final currentCaption = postData['caption'] ?? '';
 
-                  StreamBuilder<QuerySnapshot>(
-                    stream:
-                        FirebaseFirestore.instance
-                            .collection('posts')
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) => const PostCardPlaceholder(),
-                            childCount: 5,
-                          ),
-                        );
-                      }
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return SliverFillRemaining(
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.post_add,
-                                  size: 64,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No posts yet.',
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.grey[500],
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
-                      final posts = snapshot.data!.docs;
-
-                      return SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final postSnapshot = posts[index];
-                          final postData =
-                              postSnapshot.data() as Map<String, dynamic>;
-                          final postAuthorId = postData['userId'] ?? '';
-                          final currentLikes = postData['likes'] ?? [];
-                          final currentCaption = postData['caption'] ?? '';
-
-                          return TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.0, end: 1.0),
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                            builder:
-                                (context, value, child) =>
-                                    Opacity(opacity: value, child: child),
-                            child: PostCard(
-                              postSnapshot: postSnapshot,
-                              onCommentPressed:
-                                  () => _onCommentTapped(postSnapshot.id),
-                              onDeletePressed:
-                                  () => _deletePost(postSnapshot.id),
-                              onProfileTapped:
-                                  () => _onProfileTapped(postAuthorId),
-                              onLikePressed:
-                                  () => _toggleLike(
-                                    postSnapshot.id,
-                                    currentLikes,
-                                    postAuthorId,
-                                  ),
-                              onEditPressed:
-                                  () => _editPost(
-                                    postSnapshot.id,
-                                    currentCaption,
-                                  ),
-                            ),
-                          );
-                        }, childCount: posts.length),
+                      return TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                        builder:
+                            (context, value, child) =>
+                                Opacity(opacity: value, child: child),
+                        child: PostCard(
+                          postSnapshot: postSnapshot,
+                          onCommentPressed:
+                              () => _onCommentTapped(postSnapshot.id),
+                          onDeletePressed: () => _deletePost(postSnapshot.id),
+                          onProfileTapped: () => _onProfileTapped(postAuthorId),
+                          onLikePressed:
+                              () => _toggleLike(
+                                postSnapshot.id,
+                                currentLikes,
+                                postAuthorId,
+                              ),
+                          onEditPressed:
+                              () => _editPost(postSnapshot.id, currentCaption),
+                        ),
                       );
-                    },
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                ],
+                    }, childCount: posts.length),
+                  );
+                },
               ),
-            ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildTopBar() {
-    return Padding(
+    return Container(
+      color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -419,44 +334,4 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
-  Widget _buildSquiggle(Color color) {
-    return SizedBox(
-      width: 60,
-      height: 20,
-      child: CustomPaint(painter: _SquigglePainter(color)),
-    );
-  }
-}
-
-class _SquigglePainter extends CustomPainter {
-  final Color color;
-  _SquigglePainter(this.color);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round;
-    final path = Path();
-    path.moveTo(0, size.height / 2);
-    path.quadraticBezierTo(
-      size.width * 0.25,
-      0,
-      size.width * 0.5,
-      size.height / 2,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
-      size.height,
-      size.width,
-      size.height / 2,
-    );
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

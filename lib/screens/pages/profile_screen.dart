@@ -3,7 +3,7 @@
 // FILE PATH: lib/screens/pages/profile_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,22 +21,18 @@ import '../admin_panel_screen.dart';
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
 import '../post_detail_screen.dart';
-// Removed unused imports: requests_screen, driver_tracking_screen, cafeteria_dashboard_screen
 import '../chat_screen.dart';
-
-// If these are actually needed for buttons (like Driver Mode), keep them.
-// But since the linter said they were unused, I removed them.
-// If you intend to use them, uncomment below:
 import '../requests_screen.dart';
 import '../driver_tracking_screen.dart';
 import '../cafeteria_dashboard_screen.dart';
+import '../marketplace_sold_history_screen.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 enum ConnectionStatus { none, sent, received, connected }
 
-enum ProfileTab { all, photos, videos }
+enum ProfileTab { posts, media, tagged }
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -46,13 +42,18 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String targetUserId;
   late final bool isCurrentUser;
   final ImagePicker _picker = ImagePicker();
 
-  bool _isInitialLoad = true;
+  // Brand Colors
+  final Color _brandPurple = const Color(0xFF9983F3);
+  final Color _bgGrey = const Color(0xFFF8F9FE);
+
+  bool _isLoading = true;
 
   String _displayName = 'User';
   String _username = 'username';
@@ -60,13 +61,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _department = '';
   String _role = 'user';
   String? _profilePhotoUrl;
-  String?
-  _coverPhotoUrl; // This is used in the build method for the cover image
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
   List<dynamic> _connections = [];
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
-  ProfileTab _selectedTab = ProfileTab.all;
+
+  late TabController _tabController;
 
   final cloudinary = CloudinaryPublic(
     cloudinaryCloudName,
@@ -77,9 +77,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     targetUserId = widget.userId ?? _currentUser.uid;
     isCurrentUser = targetUserId == _currentUser.uid;
     _loadAllData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<File?> _compressImage(File file) async {
@@ -99,9 +106,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadAllData() async {
-    if (_isInitialLoad) {
-      setState(() => _isInitialLoad = true);
-    }
+    if (_displayName == 'User') setState(() => _isLoading = true);
 
     try {
       final targetUserDocFuture =
@@ -128,6 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         postsQueryFuture,
         currentUserDocFuture,
       ]);
+
       final targetUserSnapshot =
           results[0] as DocumentSnapshot<Map<String, dynamic>>;
       final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
@@ -143,50 +149,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _department = data['department'] ?? '';
           _role = data['role'] ?? 'student';
           _profilePhotoUrl = data['profilePhotoUrl'];
-          _coverPhotoUrl = data['coverPhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
+          _connections = data['connections'] ?? [];
 
-          final List<dynamic> rawConnections = data['connections'] ?? [];
-          if (rawConnections.isNotEmpty) {
-            final List<Future<DocumentSnapshot>> connectionFutures =
-                rawConnections
-                    .map(
-                      (id) =>
-                          FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(id as String)
-                              .get(),
-                    )
-                    .toList();
-            final List<DocumentSnapshot> connectionSnapshots =
-                await Future.wait(connectionFutures);
-            _connections =
-                connectionSnapshots
-                    .where((snapshot) => snapshot.exists)
-                    .map((snapshot) => snapshot.id)
-                    .toList();
-          } else {
-            _connections = [];
-          }
           _determineConnectionStatus(
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
           );
-        } else {
-          _displayName = 'User Not Found';
         }
         _userPosts = postsSnapshot.docs;
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading data: ${e.toString()}")),
-        );
-      }
+      debugPrint("Error loading profile: $e");
     } finally {
-      if (mounted) {
-        setState(() => _isInitialLoad = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -215,20 +191,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {});
   }
 
-  Future<void> _uploadImage(File imageFile, String imageType) async {
+  Future<void> _uploadImage(File imageFile) async {
     if (!isCurrentUser) return;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    scaffoldMessenger.showSnackBar(
-      SnackBar(content: Text('Compressing $imageType image...')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Updating profile photo...')));
 
     final File? compressedImage = await _compressImage(imageFile);
     if (compressedImage == null) return;
-
-    scaffoldMessenger.hideCurrentSnackBar();
-    scaffoldMessenger.showSnackBar(
-      SnackBar(content: Text('Uploading $imageType image...')),
-    );
 
     try {
       CloudinaryResponse response = await cloudinary.uploadFile(
@@ -239,35 +209,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
       final downloadUrl = response.secureUrl;
-      final fieldToUpdate =
-          imageType == 'profile' ? 'profilePhotoUrl' : 'coverPhotoUrl';
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUser.uid)
-          .set({fieldToUpdate: downloadUrl}, SetOptions(merge: true));
+          .set({'profilePhotoUrl': downloadUrl}, SetOptions(merge: true));
 
       if (mounted) {
-        setState(() {
-          if (imageType == 'profile') {
-            _profilePhotoUrl = downloadUrl;
-          } else {
-            _coverPhotoUrl = downloadUrl;
-          }
-        });
-        scaffoldMessenger.hideCurrentSnackBar();
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Image uploaded successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        setState(() => _profilePhotoUrl = downloadUrl);
       }
     } catch (e) {
-      if (!mounted) return;
-      scaffoldMessenger.hideCurrentSnackBar();
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Upload failed: ${e.toString()}')),
-      );
+      // Error handling
     }
   }
 
@@ -275,14 +227,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!isCurrentUser) return;
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      await _uploadImage(File(pickedFile.path), 'profile');
+      await _uploadImage(File(pickedFile.path));
     }
-  }
-
-  Future<void> _pickCoverImage() async {
-    if (!isCurrentUser) return;
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) await _uploadImage(File(pickedFile.path), 'cover');
   }
 
   Future<void> _logout() async {
@@ -291,13 +237,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to log out: ${e.toString()}')),
-      );
+      /* Error */
     }
   }
 
+  // --- Actions Logic ---
   void _viewConnections() {
     if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
       Navigator.push(
@@ -315,34 +259,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'You must be connected with $_displayName to see their connections.',
-          ),
-        ),
+        SnackBar(content: Text('You must be connected to see connections.')),
       );
     }
   }
 
-  Future<void> _sendConnectionRequest() async {
-    final batch = FirebaseFirestore.instance.batch();
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
-      {
-        'sentRequests': FieldValue.arrayUnion([targetUserId]),
-      },
-    );
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(targetUserId),
-      {
-        'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
-      },
-    );
-    await batch.commit();
-    _loadAllData();
-  }
-
-  Future<void> _acceptConnectionRequest() async {
+  Future<void> _handleConnectionAction(String action) async {
     final batch = FirebaseFirestore.instance.batch();
     final me = FirebaseFirestore.instance
         .collection('users')
@@ -350,300 +272,169 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final them = FirebaseFirestore.instance
         .collection('users')
         .doc(targetUserId);
-    batch.update(me, {
-      'connections': FieldValue.arrayUnion([targetUserId]),
-      'receivedRequests': FieldValue.arrayRemove([targetUserId]),
-    });
-    batch.update(them, {
-      'connections': FieldValue.arrayUnion([_currentUser.uid]),
-      'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
-    });
-    await batch.commit();
-    _loadAllData();
-  }
 
-  Future<void> _cancelConnectionRequest() async {
-    final batch = FirebaseFirestore.instance.batch();
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
-      {
+    if (action == 'send') {
+      batch.update(me, {
+        'sentRequests': FieldValue.arrayUnion([targetUserId]),
+      });
+      batch.update(them, {
+        'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
+      });
+    } else if (action == 'accept') {
+      batch.update(me, {
+        'connections': FieldValue.arrayUnion([targetUserId]),
+        'receivedRequests': FieldValue.arrayRemove([targetUserId]),
+      });
+      batch.update(them, {
+        'connections': FieldValue.arrayUnion([_currentUser.uid]),
+        'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+      });
+    } else if (action == 'cancel' || action == 'decline') {
+      batch.update(me, {
         'sentRequests': FieldValue.arrayRemove([targetUserId]),
-      },
-    );
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(targetUserId),
-      {
+        'receivedRequests': FieldValue.arrayRemove([targetUserId]),
+      });
+      batch.update(them, {
         'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
-      },
-    );
-    await batch.commit();
-    _loadAllData();
-  }
-
-  Future<void> _removeConnection() async {
-    final batch = FirebaseFirestore.instance.batch();
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
-      {
+        'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+      });
+    } else if (action == 'remove') {
+      batch.update(me, {
         'connections': FieldValue.arrayRemove([targetUserId]),
-      },
-    );
-    batch.update(
-      FirebaseFirestore.instance.collection('users').doc(targetUserId),
-      {
+      });
+      batch.update(them, {
         'connections': FieldValue.arrayRemove([_currentUser.uid]),
-      },
-    );
+      });
+    }
     await batch.commit();
     _loadAllData();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitialLoad) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator(color: Colors.black)),
+    if (_isLoading && _displayName == 'User') {
+      return Scaffold(
+        backgroundColor: _bgGrey,
+        body: Center(child: CircularProgressIndicator(color: _brandPurple)),
       );
     }
 
-    const Color brandPurple = Color(0xFF9983F3);
-    const Color brandBlack = Colors.black;
-
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _bgGrey,
       body: RefreshIndicator(
         onRefresh: _loadAllData,
-        color: brandPurple,
-        backgroundColor: Colors.white,
+        color: _brandPurple,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            // 1. The Curved Header & Avatar
             SliverToBoxAdapter(
               child: Stack(
                 clipBehavior: Clip.none,
-                alignment: Alignment.topCenter,
+                alignment: Alignment.center,
                 children: [
-                  // Cover Image
-                  GestureDetector(
-                    onTap: _pickCoverImage,
-                    child: Container(
-                      height: 220,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        border: const Border(
-                          bottom: BorderSide(color: brandBlack, width: 3),
-                        ),
-                        image:
-                            _coverPhotoUrl != null && _coverPhotoUrl!.isNotEmpty
-                                ? DecorationImage(
-                                  image: NetworkImage(_coverPhotoUrl!),
-                                  fit: BoxFit.cover,
-                                )
-                                : null,
-                      ),
-                      child:
-                          _coverPhotoUrl == null
-                              ? const Center(
-                                child: Icon(
-                                  Icons.add_a_photo,
-                                  color: Colors.black54,
-                                ),
-                              )
-                              : null,
-                    ),
-                  ),
-
-                  // Action Buttons (Back/Logout)
-                  Positioned(
-                    top: 40,
-                    left: 16,
-                    right: 16,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (!isCurrentUser)
-                          CircleAvatar(
-                            backgroundColor: Colors.white,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: brandBlack,
-                              ),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          )
-                        else
-                          const SizedBox(),
-
-                        if (isCurrentUser)
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: Colors.white,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.group_add,
-                                    color: brandBlack,
-                                  ),
-                                  onPressed:
-                                      () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder:
-                                              (_) => const RequestsScreen(),
-                                        ),
-                                      ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              CircleAvatar(
-                                backgroundColor: Colors.white,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.logout,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: _logout,
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  // Profile Card
+                  // Header Background
                   Container(
-                    margin: const EdgeInsets.only(
-                      top: 160,
-                      left: 20,
-                      right: 20,
-                    ),
-                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                    height: 180,
+                    width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: brandBlack, width: 3),
-                      boxShadow: const [
+                      color: _brandPurple,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(40),
+                        bottomRight: Radius.circular(40),
+                      ),
+                      boxShadow: [
                         BoxShadow(
-                          color: brandBlack,
-                          offset: Offset(6, 6),
-                          blurRadius: 0,
+                          color: _brandPurple.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          _displayName,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.archivoBlack(
-                            fontSize: 24,
-                            color: brandBlack,
-                          ),
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              '@$_username',
-                              style: GoogleFonts.spaceMono(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            if (_role != 'student') ...[
-                              const SizedBox(width: 8),
-                              _buildRoleBadge(_role),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _bio.isNotEmpty ? _bio : "No bio yet.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: brandBlack,
-                          ),
-                        ),
-                        if (_department.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Chip(
-                              label: Text(
-                                _department,
-                                style: GoogleFonts.spaceMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                            if (!isCurrentUser)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.arrow_back_ios_new,
+                                  color: Colors.white,
                                 ),
-                              ),
-                              backgroundColor: Colors.grey.shade100,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(color: brandBlack),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            GestureDetector(
-                              onTap: _viewConnections,
-                              child: _buildStatItem(
-                                "Connections",
-                                _connections.length.toString(),
+                                onPressed: () => Navigator.pop(context),
+                              )
+                            else
+                              const SizedBox(width: 48), // Balancer
+                            // Top Title
+                            Text(
+                              "Profile",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 18,
                               ),
                             ),
-                            Container(
-                              width: 2,
-                              height: 40,
-                              color: Colors.grey.shade300,
-                            ),
-                            _buildStatItem(
-                              "Posts",
-                              _userPosts.length.toString(),
-                            ),
+
+                            if (isCurrentUser)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.settings_outlined,
+                                  color: Colors.white,
+                                ),
+                                onPressed:
+                                    () => _showSettingsBottomSheet(context),
+                              )
+                            else
+                              const SizedBox(width: 48),
                           ],
                         ),
-                        const SizedBox(height: 24),
-                        _buildActionButtons(),
-                      ],
+                      ),
                     ),
                   ),
 
-                  // Avatar
+                  // Floating Avatar Card
                   Positioned(
-                    top: 110,
+                    top: 110, // Overlap the header edge
                     child: GestureDetector(
                       onTap: _pickProfileImage,
                       child: Container(
-                        width: 100,
-                        height: 100,
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: Colors.white,
                           shape: BoxShape.circle,
-                          border: Border.all(color: brandBlack, width: 4),
-                          image:
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 60,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage:
                               _profilePhotoUrl != null &&
                                       _profilePhotoUrl!.isNotEmpty
-                                  ? DecorationImage(
-                                    image: NetworkImage(_profilePhotoUrl!),
-                                    fit: BoxFit.cover,
+                                  ? CachedNetworkImageProvider(
+                                    _profilePhotoUrl!,
+                                  )
+                                  : null,
+                          child:
+                              _profilePhotoUrl == null
+                                  ? Icon(
+                                    Icons.person,
+                                    size: 60,
+                                    color: Colors.grey.shade400,
                                   )
                                   : null,
                         ),
-                        child:
-                            _profilePhotoUrl == null
-                                ? const Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: brandBlack,
-                                )
-                                : null,
                       ),
                     ),
                   ),
@@ -651,35 +442,420 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
+            // 2. User Info (Name, Bio, Stats)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: brandBlack, width: 2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildTabButton("All", ProfileTab.all),
-                      _buildTabButton("Photos", ProfileTab.photos),
-                      _buildTabButton("Videos", ProfileTab.videos),
-                    ],
-                  ),
+                padding: const EdgeInsets.only(top: 65, left: 24, right: 24),
+                child: Column(
+                  children: [
+                    Text(
+                      _displayName,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '@$_username',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        if (_role != 'student') ...[
+                          const SizedBox(width: 6),
+                          _buildRoleBadge(_role),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_bio.isNotEmpty)
+                      Text(
+                        _bio,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.black54,
+                          height: 1.4,
+                        ),
+                      ),
+                    if (_department.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _department,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 24),
+
+                    // Dashboard Stats Cards
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildDashboardStat(
+                          "Posts",
+                          _userPosts.length.toString(),
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: _viewConnections,
+                          child: _buildDashboardStat(
+                            "Connections",
+                            _connections.length.toString(),
+                            isInteractive: true,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        _buildDashboardStat("Likes", "0"), // Placeholder
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Main Actions
+                    _buildMainActionButtons(),
+
+                    const SizedBox(height: 24),
+
+                    // "Dock" for Special Tools (Admin/Driver etc)
+                    if (isCurrentUser && (_isAdmin || _role != 'student'))
+                      _buildQuickAccessDock(),
+                  ],
                 ),
               ),
             ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            // 3. Sticky Tab Bar (Modern Text Style)
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SliverAppBarDelegate(
+                TabBar(
+                  controller: _tabController,
+                  labelColor: _brandPurple,
+                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: _brandPurple,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  indicatorWeight: 3,
+                  labelStyle: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                  tabs: const [
+                    Tab(text: "Posts"),
+                    Tab(text: "Media"),
+                    Tab(text: "Tagged"),
+                  ],
+                ),
+              ),
+            ),
 
-            _buildPhotoGallery(),
+            // 4. Content Grid (Masonry-ish look)
+            _buildContentGrid(),
 
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
+      ),
+    );
+  }
+
+  // --- HELPER WIDGETS ---
+
+  Widget _buildDashboardStat(
+    String label,
+    String count, {
+    bool isInteractive = false,
+  }) {
+    return Container(
+      width: 90,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border:
+            isInteractive
+                ? Border.all(color: _brandPurple.withOpacity(0.5), width: 1)
+                : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            count,
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainActionButtons() {
+    if (isCurrentUser) {
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                );
+                _loadAllData();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black87,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                "Edit Profile",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () {}, // Placeholder
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Other User Actions
+    String primaryLabel = "Connect";
+    VoidCallback? primaryAction = () => _handleConnectionAction('send');
+    Color primaryColor = _brandPurple;
+
+    if (_connectionStatus == ConnectionStatus.connected) {
+      primaryLabel = "Message";
+      primaryAction =
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChatScreen(
+                    receiverId: targetUserId,
+                    receiverName: _displayName,
+                    receiverImageUrl: _profilePhotoUrl ?? '',
+                  ),
+            ),
+          );
+    } else if (_connectionStatus == ConnectionStatus.sent) {
+      primaryLabel = "Requested";
+      primaryAction = () => _handleConnectionAction('cancel');
+      primaryColor = Colors.grey;
+    } else if (_connectionStatus == ConnectionStatus.received) {
+      primaryLabel = "Accept";
+      primaryAction = () => _handleConnectionAction('accept');
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: primaryAction,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 5,
+              shadowColor: primaryColor.withOpacity(0.4),
+            ),
+            child: Text(
+              primaryLabel,
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        if (_connectionStatus == ConnectionStatus.connected) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => _handleConnectionAction('remove'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              child: Text(
+                "Disconnect",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildQuickAccessDock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Quick Access",
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              if (_role == 'driver')
+                _buildDockItem(
+                  "Driver",
+                  Icons.local_shipping_rounded,
+                  Colors.orange,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DriverTrackingScreen(),
+                    ),
+                  ),
+                ),
+              if (_role == 'cafeteria_admin')
+                _buildDockItem(
+                  "Cafe Admin",
+                  Icons.fastfood_rounded,
+                  Colors.teal,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CafeteriaDashboardScreen(),
+                    ),
+                  ),
+                ),
+              if (_isAdmin)
+                _buildDockItem(
+                  "Admin Panel",
+                  Icons.security_rounded,
+                  Colors.indigo,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+                  ),
+                ),
+
+              _buildDockItem(
+                "Requests",
+                Icons.person_add_rounded,
+                Colors.blue,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RequestsScreen()),
+                ),
+              ),
+              _buildDockItem(
+                "Sales",
+                Icons.receipt_long_rounded,
+                Colors.green,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MarketplaceSoldHistoryScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDockItem(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: color.withOpacity(0.2)),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -696,14 +872,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'teacher':
         color = Colors.green;
         break;
-      case 'cafeteria_admin':
-        color = Colors.purple;
-        break;
       default:
         color = Colors.blue;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
@@ -711,7 +884,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Text(
         role.toUpperCase(),
         style: GoogleFonts.poppins(
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
           color: color,
         ),
@@ -719,228 +892,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String count) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: GoogleFonts.archivoBlack(fontSize: 22, color: Colors.black),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.spaceMono(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabButton(String label, ProfileTab tab) {
-    final bool isSelected = _selectedTab == tab;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTab = tab),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF9983F3) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.spaceMono(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    const Color brandBlack = Colors.black;
-    const Color brandPurple = Color(0xFF9983F3);
-
-    if (isCurrentUser) {
-      return Column(
-        children: [
-          if (_role == 'driver')
-            _buildWideButton(
-              "Driver Mode",
-              Icons.local_shipping,
-              Colors.orange,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DriverTrackingScreen()),
-              ),
-            ),
-          if (_role == 'cafeteria_admin')
-            _buildWideButton(
-              "Manage Cafe",
-              Icons.restaurant,
-              Colors.teal,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const CafeteriaDashboardScreen(),
-                ),
-              ),
-            ),
-          if (_isAdmin)
-            _buildWideButton(
-              "Admin Panel",
-              Icons.admin_panel_settings,
-              Colors.indigo,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
-              ),
-            ),
-
-          const SizedBox(height: 8),
-          _buildWideButton("Edit Profile", Icons.edit, brandPurple, () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-            );
-            _loadAllData();
-          }),
-        ],
-      );
-    }
-
-    switch (_connectionStatus) {
-      case ConnectionStatus.connected:
-        return Row(
-          children: [
-            Expanded(
-              child: _buildWideButton(
-                "Message",
-                Icons.chat,
-                brandBlack,
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (_) => ChatScreen(
-                          receiverId: targetUserId,
-                          receiverName: _displayName,
-                          receiverImageUrl: _profilePhotoUrl ?? '',
-                        ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildWideButton(
-                "Disconnect",
-                Icons.person_remove,
-                Colors.white,
-                _removeConnection,
-                isOutlined: true,
-              ),
-            ),
-          ],
-        );
-      case ConnectionStatus.sent:
-        return _buildWideButton(
-          "Cancel Request",
-          Icons.close,
-          Colors.grey,
-          _cancelConnectionRequest,
-        );
-      case ConnectionStatus.received:
-        return _buildWideButton(
-          "Accept Request",
-          Icons.check,
-          Colors.green,
-          _acceptConnectionRequest,
-        );
-      case ConnectionStatus.none:
-        return _buildWideButton(
-          "Connect",
-          Icons.person_add,
-          brandPurple,
-          _sendConnectionRequest,
-        );
-    }
-  }
-
-  Widget _buildWideButton(
-    String text,
-    IconData icon,
-    Color color,
-    VoidCallback onTap, {
-    bool isOutlined = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: isOutlined ? Colors.white : color,
-          border: Border.all(color: Colors.black, width: 2),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(color: Colors.black, offset: Offset(2, 2), blurRadius: 0),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: isOutlined ? Colors.black : Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: GoogleFonts.spaceMono(
-                color: isOutlined ? Colors.black : Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhotoGallery() {
-    final List<DocumentSnapshot> filteredPosts;
-    if (_selectedTab == ProfileTab.photos) {
-      filteredPosts =
-          _userPosts.where((post) {
-            final d = post.data() as Map<String, dynamic>;
-            return d['postType'] == 'image' || d['postType'] == null;
-          }).toList();
-    } else if (_selectedTab == ProfileTab.videos) {
-      filteredPosts =
-          _userPosts.where((post) {
-            final d = post.data() as Map<String, dynamic>;
-            return d['postType'] == 'video';
-          }).toList();
-    } else {
-      filteredPosts = _userPosts;
-    }
-
-    if (filteredPosts.isEmpty) {
+  Widget _buildContentGrid() {
+    if (_userPosts.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.all(40.0),
+          padding: const EdgeInsets.all(40),
           child: Center(
-            child: Text(
-              "No posts yet.",
-              style: GoogleFonts.spaceMono(color: Colors.grey),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.camera_alt_outlined,
+                  size: 40,
+                  color: Colors.grey.shade300,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "No posts yet",
+                  style: GoogleFonts.poppins(color: Colors.grey),
+                ),
+              ],
             ),
           ),
         ),
@@ -948,23 +918,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
+          crossAxisSpacing: 8, // More spacing than IG for a "Card" look
+          mainAxisSpacing: 8,
           childAspectRatio: 1.0,
         ),
         delegate: SliverChildBuilderDelegate((context, index) {
-          final postSnapshot = filteredPosts[index];
-          final postData = postSnapshot.data() as Map<String, dynamic>;
+          final postSnapshot = _userPosts[index];
+          final data = postSnapshot.data() as Map<String, dynamic>;
           final mediaUrl =
-              postData['postType'] == 'video'
-                  ? postData['postThumbnailUrl']
-                  : (postData['postMediaUrl'] ?? postData['postImageUrl']);
+              data['postType'] == 'video'
+                  ? data['postThumbnailUrl']
+                  : (data['postMediaUrl'] ?? data['postImageUrl']);
 
-          if (mediaUrl == null) return Container(color: Colors.grey.shade100);
+          if (mediaUrl == null) return Container(color: Colors.grey.shade200);
 
           return GestureDetector(
             onTap:
@@ -974,20 +944,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (_) => PostDetailScreen(postId: postSnapshot.id),
                   ),
                 ),
-            child: CachedNetworkImage(
-              imageUrl: mediaUrl,
-              fit: BoxFit.cover,
-              placeholder:
-                  (context, url) => Container(color: Colors.grey.shade100),
-              errorWidget: (context, url, error) => const Icon(Icons.error),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12), // Rounded images
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: mediaUrl,
+                    fit: BoxFit.cover,
+                    placeholder:
+                        (context, url) =>
+                            Container(color: Colors.grey.shade100),
+                    errorWidget:
+                        (context, url, error) => const Icon(Icons.error),
+                  ),
+                  if (data['postType'] == 'video')
+                    const Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Icon(
+                        Icons.play_circle_fill,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                ],
+              ),
             ),
           );
-        }, childCount: filteredPosts.length),
+        }, childCount: _userPosts.length),
       ),
+    );
+  }
+
+  void _showSettingsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: Text(
+                    'Log Out',
+                    style: GoogleFonts.poppins(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _logout();
+                  },
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
     );
   }
 }
 
-// Helper for Sticky TabBar
-// This is no longer used as we switched to custom button tabs, but good to keep if you want to switch back.
-// I've removed it from the build method to avoid unused warnings if it's not called.
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+  _SliverAppBarDelegate(this._tabBar);
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: const Color(0xFFF8F9FE), // Matches scaffold background
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
+}
