@@ -37,7 +37,7 @@ dependencies:
   firebase_core: 2.27.0
   firebase_auth: 4.16.0
   google_sign_in: ^6.1.0
-  google_fonts: ^6.3.2
+  google_fonts: ^6.3.3
   image_picker: ^1.0.4
   cloud_firestore: ^4.8.0
   firebase_storage: ^11.2.1
@@ -150,3 +150,6 @@ flutter:
     - assets/map_style.json
     - assets/default_avatar.png
     - assets/app_icon.png
+    - assets/graduation_cap.png
+    - assets/icon_with_cap.png
+    - assets/ente_rit.png

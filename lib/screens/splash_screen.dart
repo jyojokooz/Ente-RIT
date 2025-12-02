@@ -1,14 +1,14 @@
-// ===============================
+// = "=============================="
 // FILE NAME: splash_screen.dart
 // FILE PATH: lib/screens/splash_screen.dart
-// ===============================
+// "=============================="
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
 
-// Import AuthScreen directly (The Welcome/Login wrapper)
-import 'auth_screen.dart';
+// Import AuthGate for navigation
+import 'package:my_project/auth/auth_gate.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -21,9 +21,6 @@ class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _mainController;
   late AnimationController _binaryController;
-  late AnimationController _floatingController;
-  late AnimationController _marqueeController;
-  late AnimationController _rotationController;
 
   late Animation<double> _boxAppear;
   late Animation<double> _monitorSlide;
@@ -43,18 +40,6 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 80),
     )..repeat();
-    _floatingController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-    _marqueeController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat();
-    _rotationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12),
-    )..repeat();
 
     _boxAppear = CurvedAnimation(
       parent: _mainController,
@@ -64,7 +49,6 @@ class _SplashScreenState extends State<SplashScreen>
       parent: _mainController,
       curve: const Interval(0.20, 0.40, curve: Curves.easeInOutCubic),
     );
-
     _monitorWobble = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: -0.05), weight: 1),
       TweenSequenceItem(tween: Tween(begin: -0.05, end: 0.05), weight: 2),
@@ -79,14 +63,12 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.40, 0.80, curve: Curves.easeInOut),
       ),
     );
-
     _loaderVisibility = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _mainController,
         curve: const Interval(0.40, 0.80, curve: Threshold(0.0)),
       ),
     );
-
     _fadeOut = CurvedAnimation(
       parent: _mainController,
       curve: const Interval(0.90, 1.0, curve: Curves.easeOut),
@@ -103,11 +85,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigate() {
     if (!mounted) return;
-    // Navigate to AuthScreen (Welcome Page) with a smooth fade
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder:
-            (context, animation, secondaryAnimation) => const AuthScreen(),
+            (context, animation, secondaryAnimation) => const AuthGate(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -120,375 +101,126 @@ class _SplashScreenState extends State<SplashScreen>
   void dispose() {
     _mainController.dispose();
     _binaryController.dispose();
-    _floatingController.dispose();
-    _marqueeController.dispose();
-    _rotationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     const Color purpleFill = Color(0xFF9983F3);
-    const Color brandBlack = Colors.black;
-    const Color accentYellow = Color(0xFFFFD700);
-    const Color accentPurple = Color(0xFF9983F3);
-    const Color accentPink = Color(0xFFFF6B6B);
-    const Color accentBlue = Color(0xFF4D96FF);
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          CustomPaint(size: Size.infinite, painter: DottedBackgroundPainter()),
-          Positioned(
-            top: 80,
-            left: 30,
-            child: FloatingShape(
-              controller: _floatingController,
-              delay: 0.0,
-              child: const Icon(Icons.star, size: 40, color: accentYellow),
-            ),
-          ),
-          Positioned(
-            top: 120,
-            right: 40,
-            child: FloatingShape(
-              controller: _floatingController,
-              delay: 0.5,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: accentPink, width: 3),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 200,
-            left: 40,
-            child: FloatingShape(
-              controller: _floatingController,
-              delay: 0.2,
-              child: const Icon(Icons.add, size: 50, color: accentPurple),
-            ),
-          ),
-          Positioned(
-            bottom: 150,
-            right: 30,
-            child: FloatingShape(
-              controller: _floatingController,
-              delay: 0.7,
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  border: Border.all(color: brandBlack, width: 3),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 300,
-            right: -20,
-            child: FloatingShape(
-              controller: _floatingController,
-              delay: 0.9,
-              child: Transform.rotate(
-                angle: -0.2,
-                child: Container(
-                  width: 80,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: accentBlue,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: brandBlack, width: 2),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 180,
-            left: 80,
-            child: AnimatedBuilder(
-              animation: _rotationController,
-              builder: (context, child) {
-                return Transform.rotate(
-                  angle: _rotationController.value * 2 * math.pi,
-                  child: const Icon(
-                    Icons.verified_outlined,
-                    size: 35,
-                    color: Colors.grey,
-                  ),
-                );
-              },
-            ),
-          ),
-          Positioned(
-            bottom: 100,
-            left: -10,
-            child: CustomPaint(
-              size: const Size(100, 50),
-              painter: SquigglyLinePainter(color: accentPink),
-            ),
-          ),
+      backgroundColor: Colors.white, // White background
+      body: AnimatedBuilder(
+        animation: _mainController,
+        builder: (context, child) {
+          final bool showLoader = _loaderVisibility.value > 0;
+          final bool isSystemReady = _mainController.value > 0.8;
+          final Color screenColor = isSystemReady ? purpleFill : Colors.white;
 
-          AnimatedBuilder(
-            animation: _mainController,
-            builder: (context, child) {
-              final bool showLoader = _loaderVisibility.value > 0;
-              final bool isSystemReady = _mainController.value > 0.8;
-              final Color screenColor =
-                  isSystemReady ? purpleFill : Colors.white;
-
-              return FadeTransition(
-                opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOut),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 250,
-                        height: 200,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CustomPaint(
-                              size: const Size(250, 200),
-                              painter: ShadowPainter(
-                                boxScale: _boxAppear.value,
-                              ),
-                            ),
-                            Transform.scale(
-                              scale: _boxAppear.value,
-                              child: CustomPaint(
-                                size: const Size(120, 120),
-                                painter: BoxBackPainter(purpleFill: purpleFill),
-                              ),
-                            ),
-                            Positioned(
-                              top: 40 + (1 - _monitorSlide.value) * 60,
-                              child: Transform.scale(
-                                scale: _boxAppear.value,
-                                child: Transform.rotate(
-                                  angle: _monitorWobble.value,
-                                  child: MonitorWidget(
-                                    screenColor: screenColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Transform.scale(
-                              scale: _boxAppear.value,
-                              child: CustomPaint(
-                                size: const Size(120, 120),
-                                painter: BoxFrontPainter(
-                                  purpleFill: purpleFill,
-                                ),
-                              ),
-                            ),
-                          ],
+          return FadeTransition(
+            opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_fadeOut),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 250,
+                    height: 200,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CustomPaint(
+                          size: const Size(250, 200),
+                          painter: ShadowPainter(boxScale: _boxAppear.value),
                         ),
-                      ),
-                      const SizedBox(height: 60),
-                      SizedBox(
-                        height: 50,
-                        child: AnimatedOpacity(
-                          opacity: showLoader ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: AnimatedBuilder(
-                            animation: _binaryController,
-                            builder: (context, child) {
-                              return Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: List.generate(5, (index) {
-                                      final randomBit =
-                                          math.Random().nextBool() ? '1' : '0';
-                                      return SizedBox(
-                                        width: 20,
-                                        child: Text(
-                                          randomBit,
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.firaCode(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: purpleFill,
-                                          ),
-                                        ),
-                                      );
-                                    }),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "INITIALIZING SYSTEM...",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 10,
-                                      letterSpacing: 1.5,
-                                      color: Colors.grey[500],
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
+                        Transform.scale(
+                          scale: _boxAppear.value,
+                          child: CustomPaint(
+                            size: const Size(120, 120),
+                            painter: BoxBackPainter(),
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          top: 40 + (1 - _monitorSlide.value) * 60,
+                          child: Transform.scale(
+                            scale: _boxAppear.value,
+                            child: Transform.rotate(
+                              angle: _monitorWobble.value,
+                              child: MonitorWidget(screenColor: screenColor),
+                            ),
+                          ),
+                        ),
+                        Transform.scale(
+                          scale: _boxAppear.value,
+                          child: CustomPaint(
+                            size: const Size(120, 120),
+                            painter: BoxFrontPainter(purpleFill: purpleFill),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-          Positioned(
-            bottom: 10,
-            left: 0,
-            right: 0,
-            child: SizedBox(
-              height: 30,
-              child: MarqueeText(controller: _marqueeController),
+                  const SizedBox(height: 60),
+                  SizedBox(
+                    height: 50,
+                    child: AnimatedOpacity(
+                      opacity: showLoader ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: AnimatedBuilder(
+                        animation: _binaryController,
+                        builder: (context, child) {
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (index) {
+                                  final randomBit =
+                                      math.Random().nextBool() ? '1' : '0';
+                                  return SizedBox(
+                                    width: 20,
+                                    child: Text(
+                                      randomBit,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.firaCode(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: purpleFill,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "INITIALIZING SYSTEM...",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  letterSpacing: 1.5,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-// --- REUSABLE HELPERS ---
-
-class FloatingShape extends StatelessWidget {
-  final AnimationController controller;
-  final double delay;
-  final Widget child;
-
-  const FloatingShape({
-    super.key,
-    required this.controller,
-    required this.delay,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, childWidget) {
-        final double offset =
-            math.sin((controller.value * 2 * math.pi) + delay) * 10;
-        return Transform.translate(
-          offset: Offset(0, offset),
-          child: childWidget,
-        );
-      },
-      child: child,
-    );
-  }
-}
-
-class MarqueeText extends StatelessWidget {
-  final AnimationController controller;
-  const MarqueeText({super.key, required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        final double slide = -controller.value * 200;
-        return Stack(
-          children: [
-            Transform.translate(
-              offset: Offset(slide, 0),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: Row(
-                  children: List.generate(10, (index) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        "CONNECT • LEARN • GROW • ",
-                        style: GoogleFonts.archivoBlack(
-                          fontSize: 14,
-                          color: Colors.grey.shade300,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class DottedBackgroundPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = Colors.grey.shade200
-          ..strokeWidth = 2
-          ..style = PaintingStyle.fill;
-
-    const double step = 40;
-    for (double y = 0; y < size.height; y += step) {
-      for (double x = 0; x < size.width; x += step) {
-        if (x % (step * 2) == 0 && y % (step * 2) == 0) {
-          canvas.drawCircle(Offset(x, y), 1.5, paint);
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class SquigglyLinePainter extends CustomPainter {
-  final Color color;
-  SquigglyLinePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..strokeWidth = 4
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    path.moveTo(0, size.height / 2);
-
-    double x = 0;
-    while (x < size.width) {
-      path.relativeQuadraticBezierTo(10, -20, 20, 0);
-      path.relativeQuadraticBezierTo(10, 20, 20, 0);
-      x += 40;
-    }
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// --- PAINTERS FOR BOX ANIMATION ---
+// --- HELPER WIDGETS AND PAINTERS (Colors adjusted for white background) ---
 
 class MonitorWidget extends StatelessWidget {
   final Color screenColor;
-
   const MonitorWidget({super.key, required this.screenColor});
 
   @override
@@ -549,9 +281,6 @@ class MonitorWidget extends StatelessWidget {
 }
 
 class BoxBackPainter extends CustomPainter {
-  final Color purpleFill;
-  BoxBackPainter({required this.purpleFill});
-
   @override
   void paint(Canvas canvas, Size size) {
     final Paint stroke =
@@ -560,28 +289,28 @@ class BoxBackPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.5
           ..strokeJoin = StrokeJoin.round;
-    final Paint fillWhite =
+    final Paint fill =
         Paint()
           ..color = Colors.white
           ..style = PaintingStyle.fill;
-
     final w = size.width;
+    final h = size.height;
     final cx = w / 2;
-    final cy = size.height / 2 + 20;
+    final cy = h / 2 + 20;
     final topY = cy - 30;
 
     final Path backFlapL = Path();
     backFlapL.moveTo(cx, topY);
     backFlapL.lineTo(cx - 35, topY - 25);
     backFlapL.lineTo(cx - 40, topY + 10);
-    canvas.drawPath(backFlapL, fillWhite);
+    canvas.drawPath(backFlapL, fill);
     canvas.drawPath(backFlapL, stroke);
 
     final Path backFlapR = Path();
     backFlapR.moveTo(cx, topY);
     backFlapR.lineTo(cx + 35, topY - 25);
     backFlapR.lineTo(cx + 40, topY + 10);
-    canvas.drawPath(backFlapR, fillWhite);
+    canvas.drawPath(backFlapR, fill);
     canvas.drawPath(backFlapR, stroke);
   }
 
@@ -592,7 +321,6 @@ class BoxBackPainter extends CustomPainter {
 class BoxFrontPainter extends CustomPainter {
   final Color purpleFill;
   BoxFrontPainter({required this.purpleFill});
-
   @override
   void paint(Canvas canvas, Size size) {
     final Paint stroke =
@@ -605,11 +333,10 @@ class BoxFrontPainter extends CustomPainter {
         Paint()
           ..color = purpleFill
           ..style = PaintingStyle.fill;
-    final Paint fillWhite =
+    final Paint fillSide =
         Paint()
           ..color = Colors.white
           ..style = PaintingStyle.fill;
-
     final cx = size.width / 2;
     final cy = size.height / 2 + 20;
     final double boxH = 40;
@@ -630,7 +357,7 @@ class BoxFrontPainter extends CustomPainter {
     rightFace.lineTo(cx + boxW, cy - 15 + boxH);
     rightFace.lineTo(cx, cy + boxH);
     rightFace.close();
-    canvas.drawPath(rightFace, fillWhite);
+    canvas.drawPath(rightFace, fillSide);
     canvas.drawPath(rightFace, stroke);
 
     final Path frontFlapL = Path();
@@ -675,13 +402,12 @@ class BoxFrontPainter extends CustomPainter {
 class ShadowPainter extends CustomPainter {
   final double boxScale;
   ShadowPainter({required this.boxScale});
-
   @override
   void paint(Canvas canvas, Size size) {
     if (boxScale <= 0) return;
     final cx = size.width / 2;
     final cy = size.height / 2 + 20;
-    final Paint shadowPaint = Paint()..color = Colors.black.withAlpha(50);
+    final Paint shadowPaint = Paint()..color = Colors.black.withAlpha(80);
     final Rect shadowRect = Rect.fromCenter(
       center: Offset(cx, cy + 45),
       width: 100 * boxScale,
