@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart'; // Import Shimmer
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
@@ -67,11 +68,9 @@ class PostCard extends StatelessWidget {
     final String heroTag = 'post-${postSnapshot.id}';
 
     return Container(
-      // FIX 1: Reduced vertical margin to 0 so posts stack without gaps
       margin: const EdgeInsets.only(bottom: 1.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        // Removed large radius for a continuous feed look
         border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
       ),
       child: Column(
@@ -173,9 +172,6 @@ class PostCard extends StatelessWidget {
               },
               child: Hero(
                 tag: heroTag,
-                // FIX 2: ConstrainedBox allows dynamic aspect ratio
-                // Max height 500 ensures vertical images don't take entire screen
-                // Min height 250 ensures landscape images aren't too thin
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
                     minHeight: 250,
@@ -183,9 +179,7 @@ class PostCard extends StatelessWidget {
                     minWidth: double.infinity,
                   ),
                   child: Stack(
-                    fit:
-                        StackFit
-                            .loose, // Allows child to determine size within constraints
+                    fit: StackFit.loose,
                     alignment: Alignment.center,
                     children: [
                       CachedNetworkImage(
@@ -195,21 +189,18 @@ class PostCard extends StatelessWidget {
                                   originalThumbnailUrl ?? '',
                                 )
                                 : getOptimizedCloudinaryUrl(originalMediaUrl),
-                        // fitWidth ensures we see the full width of landscape images
-                        // while cover handles filling vertical space
                         fit: BoxFit.cover,
                         width: double.infinity,
-                        placeholder:
-                            (context, url) => Container(
-                              height: 300,
-                              color: Colors.grey.shade50,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: brandPurple.withOpacity(0.5),
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
+                        // FIX: Replaced CircularProgressIndicator with Shimmer
+                        placeholder: (context, url) => Shimmer.fromColors(
+                          baseColor: Colors.grey[300]!,
+                          highlightColor: Colors.grey[100]!,
+                          child: Container(
+                            height: 300,
+                            width: double.infinity,
+                            color: Colors.white,
+                          ),
+                        ),
                         errorWidget:
                             (context, url, error) => Container(
                               height: 300,
@@ -286,7 +277,7 @@ class PostCard extends StatelessWidget {
                     const Icon(
                       Icons.send_rounded,
                       size: 24,
-                    ), // Share placeholder
+                    ), 
                     const Spacer(),
                     const Icon(Icons.bookmark_border_rounded, size: 26),
                   ],

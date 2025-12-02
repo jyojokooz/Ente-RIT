@@ -6,11 +6,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart'; // Ensure shimmer is imported
 
-// Import the possible destinations from this gate.
+// Import destinations
 import 'package:my_project/screens/create_username_screen.dart';
 import 'package:my_project/screens/main_screen.dart';
-import 'package:my_project/screens/auth_screen.dart'; // The Welcome/Login page
+import 'package:my_project/screens/auth_screen.dart';
+import 'package:my_project/screens/post_card_placeholder.dart'; // Import your placeholder
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -18,36 +21,27 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, authSnapshot) {
-          // While checking auth status...
+          // 1. While waiting for Auth, show the HOME SKELETON instead of a spinner
           if (authSnapshot.connectionState == ConnectionState.waiting) {
-            // Show a simple loading indicator. This screen is usually very fast.
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.yellow),
-            );
+            return const _HomeSkeletonLoader();
           }
 
-          // Case 1: USER IS LOGGED IN
           if (authSnapshot.hasData) {
-            // Now, check if they have a username set up
             return FutureBuilder<DocumentSnapshot>(
-              future:
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(authSnapshot.data!.uid)
-                      .get(),
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(authSnapshot.data!.uid)
+                  .get(),
               builder: (context, userDocSnapshot) {
-                // While fetching user data...
-                if (userDocSnapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.yellow),
-                  );
+                // 2. While waiting for User Data, keep showing the HOME SKELETON
+                if (userDocSnapshot.connectionState == ConnectionState.waiting) {
+                  return const _HomeSkeletonLoader();
                 }
 
-                // If user document doesn't exist OR username is missing...
                 if (!userDocSnapshot.hasData || !userDocSnapshot.data!.exists) {
                   return const CreateUsernameScreen();
                 }
@@ -57,21 +51,49 @@ class AuthGate extends StatelessWidget {
                 final username = userData?['username'] as String?;
 
                 if (username == null || username.isEmpty) {
-                  // Redirect to create username page
                   return const CreateUsernameScreen();
                 }
 
-                // SUCCESS: User is fully set up, go to home screen.
                 return const MainScreen();
               },
             );
-          }
-          // Case 2: USER IS LOGGED OUT
-          else {
-            // Go to the Welcome/Login/Signup screen
+          } else {
             return const AuthScreen();
           }
         },
+      ),
+    );
+  }
+}
+
+// --- VISUAL FIX: Fake Home Screen ---
+// This looks exactly like your Home Screen but with Shimmer effects.
+// This prevents the "White screen with Spinner" jar.
+class _HomeSkeletonLoader extends StatelessWidget {
+  const _HomeSkeletonLoader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Kampus Konnect',
+          style: GoogleFonts.poppins(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ),
+      body: ListView.builder(
+        // Disable scrolling on the skeleton
+        physics: const NeverScrollableScrollPhysics(), 
+        itemCount: 3,
+        itemBuilder: (context, index) => const PostCardPlaceholder(),
       ),
     );
   }

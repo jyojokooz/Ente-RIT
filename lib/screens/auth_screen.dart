@@ -4,7 +4,7 @@
 // ===============================
 
 import 'package:flutter/material.dart';
-import 'pages/welcome_page.dart';
+// Note: WelcomePage import is removed as we are skipping it
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
 
@@ -16,7 +16,9 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  int _currentPageIndex = 0;
+  // 0 = Login, 1 = Signup
+  // We start directly at Login (Index 0) to skip the "Get Started" screen
+  int _currentPageIndex = 0; 
   bool _areImagesPrecached = false;
 
   @override
@@ -29,9 +31,10 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  void _goToPage(int pageIndex) {
+  void _togglePage() {
     setState(() {
-      _currentPageIndex = pageIndex;
+      // Toggle between 0 (Login) and 1 (Signup)
+      _currentPageIndex = _currentPageIndex == 0 ? 1 : 0;
     });
   }
 
@@ -40,8 +43,6 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: AnimatedSwitcher(
-        // Using a simple fade allows the internal staggered animations
-        // of the new page to be the main visual focus.
         duration: const Duration(milliseconds: 400),
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
@@ -54,27 +55,19 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildCurrentPage() {
-    // Keys are critical for AnimatedSwitcher to detect page changes
-    switch (_currentPageIndex) {
-      case 1:
-        return LoginPage(
-          key: const ValueKey<int>(1),
-          onSignupTapped: () => _goToPage(2),
-          onBackTapped: () => _goToPage(0),
-        );
-      case 2:
-        return SignupPage(
-          key: const ValueKey<int>(2),
-          onLoginTapped: () => _goToPage(1),
-          onBackTapped: () => _goToPage(0),
-        );
-      case 0:
-      default:
-        return WelcomePage(
-          key: const ValueKey<int>(0),
-          onLoginTapped: () => _goToPage(1),
-          onSignupTapped: () => _goToPage(2),
-        );
+    // We only have two states now: Login or Signup
+    if (_currentPageIndex == 1) {
+      return SignupPage(
+        key: const ValueKey<int>(1),
+        onLoginTapped: _togglePage, // Switch back to Login
+        onBackTapped: _togglePage,  // Switch back to Login
+      );
+    } else {
+      return LoginPage(
+        key: const ValueKey<int>(0),
+        onSignupTapped: _togglePage, // Switch to Signup
+        onBackTapped: () {}, // No back action on the first screen
+      );
     }
   }
 }

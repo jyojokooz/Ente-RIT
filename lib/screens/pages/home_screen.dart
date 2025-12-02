@@ -183,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const Color brandPurple = Color(0xFF9983F3);
 
     return Scaffold(
-      backgroundColor: Colors.white, // Pure white background
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: _refreshPosts,
         color: brandPurple,
@@ -200,6 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
                 builder: (context, snapshot) {
+                  // FIX: If waiting, show PostCardPlaceholder list (SHIMMER)
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
