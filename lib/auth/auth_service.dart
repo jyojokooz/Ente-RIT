@@ -14,15 +14,13 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  /// Signs a new user up with their Email & Password.
-  /// Allowed for ALL email domains.
+  /// Signs a new user up with Email, Password, and Username.
   Future<UserCredential?> signUpWithEmailAndPassword(
     String email,
     String password,
+    String username, // <-- NEW PARAMETER
   ) async {
     try {
-      // --- REMOVED RIT EMAIL VALIDATION ---
-      
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
@@ -31,8 +29,11 @@ class AuthService {
       // --- NEW USER PROFILE CREATION ---
       if (userCredential.user != null) {
         final user = userCredential.user!;
-        // Auto-generate username from email prefix
-        final username = email.split('@').first;
+        
+        // Use provided username, or fallback to email prefix if somehow empty
+        final finalUsername = username.trim().isNotEmpty 
+            ? username.trim() 
+            : email.split('@').first;
 
         await _firestore.collection('users').doc(user.uid).set({
           'displayName': user.displayName ?? '', 
@@ -41,26 +42,24 @@ class AuthService {
           'profilePhotoUrl': user.photoURL ?? '',
           'lastLogin': Timestamp.now(),
           'createdAt': Timestamp.now(),
-          'username': username, 
+          'username': finalUsername, // Save the custom username
+          'searchableUsername': finalUsername.toLowerCase(), // Helper for search
           'role': 'student', 
         });
-        log(
-          'New user signed up and profile created for $username',
-          name: 'AuthService',
-        );
+        
+        log('New user signed up: $finalUsername', name: 'AuthService');
       }
       return userCredential;
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'An unknown sign-up error occurred.');
     } catch (e) {
-      log(
-        'An unexpected error occurred during email sign-up: $e',
-        name: 'AuthService',
-      );
+      log('Sign-up error: $e', name: 'AuthService');
       throw Exception('An unexpected error occurred. Please try again.');
     }
   }
 
+  // ... (signInWithGoogle and signOut remain unchanged) ...
+  
   /// Signs the user in with their Google account.
   Future<UserCredential?> signInWithGoogle() async {
     try {
@@ -70,8 +69,6 @@ class AuthService {
       if (googleUser == null) {
         return null;
       }
-
-      // --- REMOVED RIT EMAIL VALIDATION ---
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -84,7 +81,6 @@ class AuthService {
         credential,
       );
       
-      // --- USER PROFILE HANDLING LOGIC ---
       if (userCredential.user != null) {
         final userDocRef = _firestore
             .collection('users')
@@ -102,6 +98,7 @@ class AuthService {
             'lastLogin': Timestamp.now(),
             'createdAt': Timestamp.now(),
             'username': username,
+            'searchableUsername': username.toLowerCase(),
             'role': 'student',
           });
         } else {

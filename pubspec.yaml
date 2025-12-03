@@ -91,6 +91,7 @@ dependencies:
   stack_trace: ^1.12.1
   web: ^0.5.1
   emoji_picker_flutter: ^2.2.0
+  email_otp: ^2.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
