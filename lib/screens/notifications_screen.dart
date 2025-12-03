@@ -40,7 +40,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     switch (type) {
       case 'like':
       case 'comment':
-        // FIX: Check if post exists before navigating
         final postDoc =
             await FirebaseFirestore.instance
                 .collection('posts')
@@ -134,14 +133,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-// --- NEW WIDGET: Modern Notification Tile ---
+// --- UPDATED NOTIFICATION TILE ---
 class _NotificationTile extends StatelessWidget {
   final DocumentSnapshot notificationDoc;
   final VoidCallback onTap;
 
   const _NotificationTile({required this.notificationDoc, required this.onTap});
 
-  // Future to check if the related post exists.
   Future<DocumentSnapshot?> _getRelatedPost(String type, String? docId) {
     if (docId != null && (type == 'like' || type == 'comment')) {
       return FirebaseFirestore.instance.collection('posts').doc(docId).get();
@@ -155,8 +153,12 @@ class _NotificationTile extends StatelessWidget {
     final String type = data['type'] ?? '';
     final String body = data['body'] ?? '...';
     final String? relatedDocId = data['relatedDocId'];
+
+    // Get user info for avatar
+    final String triggeringUserId = data['triggeringUserId'] ?? '';
     final String triggeringUserAvatarUrl =
         data['triggeringUserAvatarUrl'] ?? '';
+
     final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
 
     return InkWell(
@@ -166,14 +168,29 @@ class _NotificationTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // User Avatar
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: Colors.grey.shade200,
-              backgroundImage:
-                  triggeringUserAvatarUrl.isNotEmpty
-                      ? CachedNetworkImageProvider(triggeringUserAvatarUrl)
-                      : null,
+            // --- FIX 1: User Avatar with Navigation ---
+            GestureDetector(
+              onTap: () {
+                if (triggeringUserId.isNotEmpty) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => ProfileScreen(userId: triggeringUserId),
+                    ),
+                  );
+                }
+              },
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: Colors.grey.shade200,
+                // --- FIX 2: Default Avatar Logic ---
+                backgroundImage:
+                    triggeringUserAvatarUrl.isNotEmpty
+                        ? CachedNetworkImageProvider(triggeringUserAvatarUrl)
+                        : const AssetImage('assets/default_avatar.png')
+                            as ImageProvider,
+              ),
             ),
             const SizedBox(width: 12),
 
@@ -210,6 +227,7 @@ class _NotificationTile extends StatelessWidget {
                       snapshot.data!.data() as Map<String, dynamic>;
                   final thumbnailUrl =
                       postData['postThumbnailUrl'] ?? postData['postMediaUrl'];
+
                   if (thumbnailUrl != null) {
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(4),
@@ -224,7 +242,6 @@ class _NotificationTile extends StatelessWidget {
                     );
                   }
                 }
-                // Return an empty box if no post or no thumbnail
                 return const SizedBox(width: 44, height: 44);
               },
             ),

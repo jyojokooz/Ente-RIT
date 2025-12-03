@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CommentsScreen extends StatefulWidget {
   final String postId;
@@ -19,28 +20,49 @@ class CommentsScreen extends StatefulWidget {
 
 class _CommentsScreenState extends State<CommentsScreen> {
   final _commentController = TextEditingController();
+  final _focusNode = FocusNode();
   final _currentUser = FirebaseAuth.instance.currentUser!;
+
+  // State to track if we are replying to someone
+  String? _replyToCommentId;
+  String? _replyToUsername;
 
   @override
   void dispose() {
     _commentController.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _startReply(String commentId, String username) {
+    setState(() {
+      _replyToCommentId = commentId;
+      _replyToUsername = username;
+    });
+    _focusNode.requestFocus();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyToCommentId = null;
+      _replyToUsername = null;
+    });
+    _focusNode.unfocus();
   }
 
   Future<void> _postComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
+    final isReply = _replyToCommentId != null;
+    final parentId = _replyToCommentId;
+
     _commentController.clear();
-    FocusScope.of(context).unfocus();
+    _cancelReply();
 
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postId);
-    final commentCollectionRef = postRef.collection('comments');
-    final notificationsCollectionRef = FirebaseFirestore.instance.collection(
-      'notifications',
-    );
 
     try {
       final userDoc =
@@ -52,53 +74,23 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
       final newCommentData = {
         'text': text,
-        'userName': userData['displayName'] ?? 'A User',
+        'userName': userData['displayName'] ?? 'User',
         'userImageUrl': userData['profilePhotoUrl'] ?? '',
         'userId': _currentUser.uid,
         'timestamp': FieldValue.serverTimestamp(),
+        'isReply': isReply,
+        'parentId': isReply ? parentId : null,
       };
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final postSnapshot = await transaction.get(postRef);
-        if (!postSnapshot.exists) throw Exception("Post does not exist!");
-
-        final postData = postSnapshot.data() as Map<String, dynamic>;
-        final postAuthorId = postData['userId'];
+        if (!postSnapshot.exists) return;
 
         transaction.update(postRef, {'comments': FieldValue.increment(1)});
-
-        final newCommentDocRef = commentCollectionRef.doc();
-        transaction.set(newCommentDocRef, newCommentData);
-
-        // --- UPDATED NOTIFICATION LOGIC ---
-        if (postAuthorId != null && postAuthorId != _currentUser.uid) {
-          final postThumbnail =
-              postData['postThumbnailUrl'] ?? postData['postMediaUrl'] ?? '';
-
-          final newNotificationDocRef = notificationsCollectionRef.doc();
-          transaction.set(newNotificationDocRef, {
-            'userId': postAuthorId,
-            'title':
-                'New Comment', // Title is still useful for push notifications
-            'body':
-                '${userData['displayName'] ?? 'Someone'} commented on your post.',
-            'type': 'comment',
-            'relatedDocId': widget.postId,
-            'triggeringUserId': _currentUser.uid,
-            'triggeringUserName': userData['displayName'] ?? 'Someone',
-            'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
-            'postThumbnailUrl': postThumbnail,
-            'isRead': false,
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-        }
+        transaction.set(postRef.collection('comments').doc(), newCommentData);
       });
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to post comment: $error")),
-        );
-      }
+    } catch (e) {
+      debugPrint("Error posting: $e");
     }
   }
 
@@ -106,82 +98,27 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postId);
-    final commentRef = postRef.collection('comments').doc(commentId);
-
-    final bool? didRequestDelete = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: const RoundedRectangleBorder(
-            side: BorderSide(color: Colors.black, width: 2),
-          ),
-          title: Text(
-            'Delete Comment?',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          content: Text(
-            'Are you sure?',
-            style: GoogleFonts.poppins(fontSize: 14),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.poppins(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-            TextButton(
-              child: Text(
-                'Delete',
-                style: GoogleFonts.poppins(
-                  color: Colors.red,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (didRequestDelete == true) {
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        transaction.delete(commentRef);
-        transaction.update(postRef, {'comments': FieldValue.increment(-1)});
-      });
-    }
+    await postRef.collection('comments').doc(commentId).delete();
+    await postRef.update({'comments': FieldValue.increment(-1)});
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color brandBlack = Colors.black;
-    const Color brandPurple = Color(0xFF9983F3);
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          'Comments',
+          "Comments",
           style: GoogleFonts.poppins(
-            color: brandBlack,
+            color: Colors.black,
             fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: brandBlack),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: Colors.grey.shade200, height: 1.0),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Column(
@@ -196,112 +133,105 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text("Error loading comments"));
-                }
-
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: brandPurple),
+                    child: CircularProgressIndicator(color: Colors.black),
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                final allDocs = snapshot.data?.docs ?? [];
+
+                // --- FIX: Safely access fields using data() ---
+                final parentComments =
+                    allDocs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      // If 'isReply' doesn't exist, assume false (it's an old comment)
+                      return (data['isReply'] ?? false) == false;
+                    }).toList();
+
+                final replies =
+                    allDocs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return (data['isReply'] ?? false) == true;
+                    }).toList();
+
+                if (parentComments.isEmpty) {
                   return Center(
                     child: Text(
-                      'No comments yet.\nBe the first!',
-                      textAlign: TextAlign.center,
+                      "No comments yet.",
                       style: GoogleFonts.poppins(color: Colors.grey),
                     ),
                   );
                 }
 
-                final comments = snapshot.data!.docs;
-
                 return ListView.builder(
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: comments.length,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: parentComments.length,
                   itemBuilder: (context, index) {
-                    final comment = comments[index];
-                    final commentData = comment.data() as Map<String, dynamic>;
+                    final parentDoc = parentComments[index];
+                    final parentData = parentDoc.data() as Map<String, dynamic>;
 
-                    final userImage = commentData['userImageUrl'] ?? '';
-                    final userName = commentData['userName'] ?? 'User';
-                    final timestamp =
-                        (commentData['timestamp'] as Timestamp?)?.toDate();
-                    final commentAuthorId = commentData['userId'];
-                    final bool isAuthor = _currentUser.uid == commentAuthorId;
+                    // Find replies for THIS parent safely
+                    final myReplies =
+                        replies.where((r) {
+                          final rData = r.data() as Map<String, dynamic>;
+                          return rData['parentId'] == parentDoc.id;
+                        }).toList();
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: Colors.grey.shade200,
-                            backgroundImage:
-                                userImage.isNotEmpty
-                                    ? NetworkImage(userImage)
-                                    : null,
-                            child:
-                                userImage.isEmpty
-                                    ? const Icon(
-                                      Icons.person,
-                                      size: 20,
-                                      color: Colors.grey,
-                                    )
-                                    : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
+                    // Sort replies oldest to newest
+                    myReplies.sort((a, b) {
+                      final d1 = a.data() as Map<String, dynamic>;
+                      final d2 = b.data() as Map<String, dynamic>;
+                      final t1 =
+                          (d1['timestamp'] as Timestamp?)?.toDate() ??
+                          DateTime.now();
+                      final t2 =
+                          (d2['timestamp'] as Timestamp?)?.toDate() ??
+                          DateTime.now();
+                      return t1.compareTo(t2);
+                    });
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CommentRow(
+                          doc: parentDoc,
+                          currentUserId: _currentUser.uid,
+                          onReply:
+                              () => _startReply(
+                                parentDoc.id,
+                                parentData['userName'] ?? 'User',
+                              ),
+                          onDelete: () => _deleteComment(parentDoc.id),
+                        ),
+                        // Render Replies Indented
+                        if (myReplies.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 44.0,
+                              bottom: 12,
+                            ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                RichText(
-                                  text: TextSpan(
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.black,
-                                      fontSize: 14,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                        text: '$userName ',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                ...myReplies.map((replyDoc) {
+                                  final replyData =
+                                      replyDoc.data() as Map<String, dynamic>;
+                                  return _CommentRow(
+                                    doc: replyDoc,
+                                    currentUserId: _currentUser.uid,
+                                    onReply:
+                                        () => _startReply(
+                                          parentDoc.id,
+                                          replyData['userName'] ?? 'User',
                                         ),
-                                      ),
-                                      TextSpan(text: commentData['text'] ?? ''),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  timestamp != null
-                                      ? timeago.format(
-                                        timestamp,
-                                        locale: 'en_short',
-                                      )
-                                      : 'Just now',
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 12,
-                                  ),
-                                ),
+                                    onDelete: () => _deleteComment(replyDoc.id),
+                                    isSmall: true,
+                                  );
+                                }),
                               ],
                             ),
                           ),
-                          if (isAuthor)
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.grey,
-                                size: 20,
-                              ),
-                              onPressed: () => _deleteComment(comment.id),
-                            ),
-                        ],
-                      ),
+                      ],
                     );
                   },
                 );
@@ -310,56 +240,198 @@ class _CommentsScreenState extends State<CommentsScreen> {
           ),
 
           // --- INPUT AREA ---
-          Container(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              MediaQuery.of(context).padding.bottom + 12,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade200)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _commentController,
-                    textCapitalization: TextCapitalization.sentences,
-                    style: GoogleFonts.poppins(color: brandBlack),
-                    decoration: InputDecoration(
-                      hintText: 'Add a comment...',
-                      hintStyle: GoogleFonts.poppins(
-                        color: Colors.grey.shade500,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_replyToUsername != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.grey[100],
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Replying to ${_replyToUsername}",
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
                       ),
-                      fillColor: Colors.grey.shade100,
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
+                      GestureDetector(
+                        onTap: _cancelReply,
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                      ),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: _postComment,
-                  child: const CircleAvatar(
-                    radius: 22,
-                    backgroundColor: brandPurple,
-                    child: Icon(
-                      Icons.send_rounded,
-                      color: Colors.white,
-                      size: 20,
+
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.grey[200],
+                      backgroundImage:
+                          _currentUser.photoURL != null
+                              ? CachedNetworkImageProvider(
+                                _currentUser.photoURL!,
+                              )
+                              : const AssetImage('assets/default_avatar.png')
+                                  as ImageProvider,
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        focusNode: _focusNode,
+                        style: GoogleFonts.poppins(color: Colors.black),
+                        decoration: InputDecoration(
+                          hintText:
+                              _replyToUsername != null
+                                  ? "Reply to ${_replyToUsername}..."
+                                  : "Add a comment...",
+                          hintStyle: GoogleFonts.poppins(color: Colors.grey),
+                          border: InputBorder.none,
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _postComment,
+                      child: Text(
+                        "Post",
+                        style: GoogleFonts.poppins(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentRow extends StatelessWidget {
+  final DocumentSnapshot doc;
+  final String currentUserId;
+  final VoidCallback onReply;
+  final VoidCallback onDelete;
+  final bool isSmall;
+
+  const _CommentRow({
+    required this.doc,
+    required this.currentUserId,
+    required this.onReply,
+    required this.onDelete,
+    this.isSmall = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final data = doc.data() as Map<String, dynamic>;
+    final bool isMe = data['userId'] == currentUserId;
+    final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
+    final timeString =
+        timestamp != null
+            ? timeago.format(timestamp, locale: 'en_short')
+            : 'now';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: isSmall ? 14 : 18,
+            backgroundColor: Colors.grey[200],
+            backgroundImage:
+                data['userImageUrl'] != null &&
+                        data['userImageUrl'].toString().isNotEmpty
+                    ? CachedNetworkImageProvider(data['userImageUrl'])
+                    : const AssetImage('assets/default_avatar.png')
+                        as ImageProvider,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.black,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: "${data['userName']} ",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: data['text']),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      timeString,
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: onReply,
+                      child: Text(
+                        "Reply",
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 16),
+                      GestureDetector(
+                        onTap: onDelete,
+                        child: const Icon(
+                          Icons.delete_outline,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
+          ),
+          // Optional Like Icon for future
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Icon(Icons.favorite_border, size: 14, color: Colors.grey),
           ),
         ],
       ),
