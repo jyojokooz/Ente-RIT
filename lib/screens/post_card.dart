@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart'; // Import Shimmer
+import 'package:shimmer/shimmer.dart';
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
@@ -191,16 +191,16 @@ class PostCard extends StatelessWidget {
                                 : getOptimizedCloudinaryUrl(originalMediaUrl),
                         fit: BoxFit.cover,
                         width: double.infinity,
-                        // FIX: Replaced CircularProgressIndicator with Shimmer
-                        placeholder: (context, url) => Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
-                          child: Container(
-                            height: 300,
-                            width: double.infinity,
-                            color: Colors.white,
-                          ),
-                        ),
+                        placeholder:
+                            (context, url) => Shimmer.fromColors(
+                              baseColor: Colors.grey[200]!,
+                              highlightColor: Colors.grey[50]!,
+                              child: Container(
+                                height: 300,
+                                width: double.infinity,
+                                color: Colors.white,
+                              ),
+                            ),
                         errorWidget:
                             (context, url, error) => Container(
                               height: 300,
@@ -255,31 +255,45 @@ class PostCard extends StatelessWidget {
 
                 return Row(
                   children: [
+                    // LIKE BUTTON
                     GestureDetector(
                       onTap: onLikePressed,
                       child: Icon(
                         isLiked
                             ? Icons.favorite
                             : Icons.favorite_border_rounded,
-                        color: isLiked ? Colors.redAccent : brandBlack,
+                        color: isLiked ? Colors.redAccent : Colors.black,
                         size: 26,
                       ),
                     ),
                     const SizedBox(width: 16),
+
+                    // COMMENT BUTTON (Fixed Color)
                     GestureDetector(
                       onTap: onCommentPressed,
                       child: const Icon(
                         Icons.chat_bubble_outline_rounded,
+                        color: Colors.black, // Explicitly set to Black
                         size: 24,
                       ),
                     ),
                     const SizedBox(width: 16),
+
+                    // SHARE BUTTON (Fixed Color)
                     const Icon(
                       Icons.send_rounded,
+                      color: Colors.black, // Explicitly set to Black
                       size: 24,
-                    ), 
+                    ),
+
                     const Spacer(),
-                    const Icon(Icons.bookmark_border_rounded, size: 26),
+
+                    // BOOKMARK BUTTON (Fixed Color)
+                    const Icon(
+                      Icons.bookmark_border_rounded,
+                      color: Colors.black, // Explicitly set to Black
+                      size: 26,
+                    ),
                   ],
                 );
               },
@@ -357,8 +371,6 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  // Simple timeago helper
-  // ignore: non_constant_identifier_names
   String timeago_format(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inDays > 7) return DateFormat('MMM d').format(date);

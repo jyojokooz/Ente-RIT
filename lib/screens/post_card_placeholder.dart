@@ -11,20 +11,21 @@ class PostCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Define Shimmer Colors (Subtle Grey)
-    final Color baseColor = Colors.grey[300]!;
-    final Color highlightColor = Colors.grey[100]!;
+    // FIX: Using very subtle colors for "Ultra Smooth" feel
+    final Color baseColor = Colors.grey[200]!; 
+    final Color highlightColor = Colors.grey[50]!;
 
     return Container(
-      color: Colors.white, // Clean white background
-      margin: const EdgeInsets.only(bottom: 1.0), // Match feed spacing
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 1.0),
       child: Shimmer.fromColors(
         baseColor: baseColor,
         highlightColor: highlightColor,
+        period: const Duration(milliseconds: 1500), // Slower animation is smoother
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. HEADER (Avatar + Name)
+            // 1. HEADER
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 12.0,
@@ -32,7 +33,6 @@ class PostCardPlaceholder extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // Avatar Circle
                   Container(
                     width: 36,
                     height: 36,
@@ -42,10 +42,9 @@ class PostCardPlaceholder extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  // Name Line
                   Container(
-                    width: 120,
-                    height: 14,
+                    width: 100,
+                    height: 12,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
@@ -55,76 +54,36 @@ class PostCardPlaceholder extends StatelessWidget {
               ),
             ),
 
-            // 2. MEDIA CONTENT (Big block)
+            // 2. MEDIA BLOCK (Large & Clean)
             Container(
               width: double.infinity,
-              height: 400, // Fixed height for placeholder look
+              height: 350, // Slightly reduced height for better initial view
               color: Colors.white,
             ),
 
-            // 3. ACTIONS ROW
+            // 3. TEXT LINES
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12.0,
-                vertical: 12.0,
-              ),
-              child: Row(
-                children: [
-                  // Icon Placeholders
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // 4. TEXT LINES (Caption)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: double.infinity,
-                    height: 12,
+                    width: 150,
+                    height: 10,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Container(
-                    width: 200,
-                    height: 12,
+                    width: 250,
+                    height: 10,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 20), // Bottom spacing
                 ],
               ),
             ),

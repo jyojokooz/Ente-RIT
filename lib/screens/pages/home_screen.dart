@@ -30,16 +30,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   Future<void> _refreshPosts() async {
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
@@ -200,17 +190,17 @@ class _HomeScreenState extends State<HomeScreen> {
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
                 builder: (context, snapshot) {
-                  // FIX: If waiting, show PostCardPlaceholder list (SHIMMER)
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) => const PostCardPlaceholder(),
-                        childCount: 5,
+                        childCount: 3,
                       ),
                     );
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return SliverFillRemaining(
+                      hasScrollBody: false,
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -218,13 +208,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             Icon(
                               Icons.post_add,
                               size: 64,
-                              color: Colors.grey[400],
+                              color: Colors.grey[300],
                             ),
                             const SizedBox(height: 16),
                             Text(
                               'No posts yet.',
                               style: GoogleFonts.poppins(
-                                color: Colors.grey[500],
+                                color: Colors.grey[400],
                                 fontSize: 16,
                               ),
                             ),
@@ -245,28 +235,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       final currentLikes = postData['likes'] ?? [];
                       final currentCaption = postData['caption'] ?? '';
 
-                      return TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                        builder:
-                            (context, value, child) =>
-                                Opacity(opacity: value, child: child),
-                        child: PostCard(
-                          postSnapshot: postSnapshot,
-                          onCommentPressed:
-                              () => _onCommentTapped(postSnapshot.id),
-                          onDeletePressed: () => _deletePost(postSnapshot.id),
-                          onProfileTapped: () => _onProfileTapped(postAuthorId),
-                          onLikePressed:
-                              () => _toggleLike(
-                                postSnapshot.id,
-                                currentLikes,
-                                postAuthorId,
-                              ),
-                          onEditPressed:
-                              () => _editPost(postSnapshot.id, currentCaption),
-                        ),
+                      return PostCard(
+                        postSnapshot: postSnapshot,
+                        onCommentPressed:
+                            () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onLikePressed:
+                            () => _toggleLike(
+                              postSnapshot.id,
+                              currentLikes,
+                              postAuthorId,
+                            ),
+                        onEditPressed:
+                            () => _editPost(postSnapshot.id, currentCaption),
                       );
                     }, childCount: posts.length),
                   );
@@ -287,8 +269,9 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // --- UPDATED: Replaced Image with Text ---
           Text(
-            'Kampus Konnect',
+            'Ente RIT',
             style: GoogleFonts.poppins(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -296,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
               letterSpacing: -0.5,
             ),
           ),
+
           Row(
             children: [
               NotificationBadge(

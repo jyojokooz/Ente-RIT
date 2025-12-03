@@ -29,7 +29,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
 
   late AnimationController _entranceController;
   late Animation<double> _fadeAnimation;
@@ -97,28 +96,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _signupWithGoogle() async {
-    setState(() => _isGoogleLoading = true);
-    try {
-      await _authService.signInWithGoogle();
-      _checkAuthAndNavigate();
-    } catch (e) {
-      if (!mounted) return;
-      if (FirebaseAuth.instance.currentUser == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst("Exception: ", "")),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      } else {
-        _checkAuthAndNavigate();
-      }
-    } finally {
-      if (mounted) setState(() => _isGoogleLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     const Color brandPurple = Color(0xFF9983F3);
@@ -176,16 +153,24 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-                        decoration: _buildInputDecoration(
-                          "RIT Email Address",
-                          Icons.school_outlined,
+                        // FIX: Explicitly set text color to Black
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500, 
+                          color: Colors.black, 
                         ),
-                        validator:
-                            (val) =>
-                                (val != null && val.contains('@rit.ac.in'))
-                                    ? null
-                                    : 'Must be an @rit.ac.in address',
+                        decoration: _buildInputDecoration(
+                          "Email Address", 
+                          Icons.email_outlined, 
+                        ),
+                        validator: (val) {
+                          if (val == null || val.isEmpty) {
+                            return 'Email is required';
+                          }
+                          if (!val.contains('@') || !val.contains('.')) {
+                            return 'Please enter a valid email';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -193,7 +178,11 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       TextFormField(
                         controller: _passwordController,
                         obscureText: true,
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                        // FIX: Explicitly set text color to Black
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500, 
+                          color: Colors.black,
+                        ),
                         decoration: _buildInputDecoration(
                           "Create Password",
                           Icons.lock_outline,
@@ -237,63 +226,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                                   ),
                         ),
                       ),
-                      const SizedBox(height: 24),
-
-                      Row(
-                        children: [
-                          const Expanded(child: Divider()),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              "or",
-                              style: GoogleFonts.poppins(
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          ),
-                          const Expanded(child: Divider()),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // --- GOOGLE BUTTON ---
-                      SizedBox(
-                        height: 55,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isGoogleLoading ? null : _signupWithGoogle,
-                          icon:
-                              _isGoogleLoading
-                                  ? const SizedBox.shrink()
-                                  : Image.asset(
-                                    'assets/google_logo.png',
-                                    height: 22,
-                                  ),
-                          label:
-                              _isGoogleLoading
-                                  ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                    ),
-                                  )
-                                  : Text(
-                                    "Sign Up with Google",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
+                      
                       const SizedBox(height: 40),
 
                       // --- LOGIN LINK ---

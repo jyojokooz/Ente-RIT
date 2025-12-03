@@ -32,8 +32,6 @@ const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 enum ConnectionStatus { none, sent, received, connected }
 
-enum ProfileTab { posts, media, tagged }
-
 class ProfileScreen extends StatefulWidget {
   final String? userId;
   const ProfileScreen({super.key, this.userId});
@@ -54,6 +52,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   final Color _bgGrey = const Color(0xFFF8F9FE);
 
   bool _isLoading = true;
+
+  // FIX: Flag to prevent double-opening the image picker
+  bool _isPickingImage = false;
 
   String _displayName = 'User';
   String _username = 'username';
@@ -219,15 +220,34 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() => _profilePhotoUrl = downloadUrl);
       }
     } catch (e) {
-      // Error handling
+      debugPrint("Upload failed: $e");
     }
   }
 
+  // FIX: Implemented logic to handle 'already_active' exception
   Future<void> _pickProfileImage() async {
     if (!isCurrentUser) return;
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      await _uploadImage(File(pickedFile.path));
+
+    // Prevent multiple clicks
+    if (_isPickingImage) return;
+
+    setState(() {
+      _isPickingImage = true;
+    });
+
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        await _uploadImage(File(pickedFile.path));
+      }
+    } catch (e) {
+      debugPrint("Image picker error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
+      }
     }
   }
 
@@ -416,24 +436,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ],
                         ),
+                        // FIX: Updated CircleAvatar to use default asset if no URL
                         child: CircleAvatar(
                           radius: 60,
                           backgroundColor: Colors.grey.shade200,
                           backgroundImage:
-                              _profilePhotoUrl != null &&
-                                      _profilePhotoUrl!.isNotEmpty
+                              (_profilePhotoUrl != null &&
+                                      _profilePhotoUrl!.isNotEmpty)
                                   ? CachedNetworkImageProvider(
                                     _profilePhotoUrl!,
                                   )
-                                  : null,
-                          child:
-                              _profilePhotoUrl == null
-                                  ? Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Colors.grey.shade400,
-                                  )
-                                  : null,
+                                  : const AssetImage(
+                                        'assets/default_avatar.png',
+                                      )
+                                      as ImageProvider,
                         ),
                       ),
                     ),
@@ -547,7 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
 
-            // 3. Sticky Tab Bar (Modern Text Style)
+            // 3. Sticky Tab Bar
             SliverPersistentHeader(
               pinned: true,
               delegate: _SliverAppBarDelegate(
@@ -571,7 +587,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
 
-            // 4. Content Grid (Masonry-ish look)
+            // 4. Content Grid
             _buildContentGrid(),
 
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -922,7 +938,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          crossAxisSpacing: 8, // More spacing than IG for a "Card" look
+          crossAxisSpacing: 8,
           mainAxisSpacing: 8,
           childAspectRatio: 1.0,
         ),
@@ -945,7 +961,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12), // Rounded images
+              borderRadius: BorderRadius.circular(12),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -1030,10 +1046,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return Container(
-      color: const Color(0xFFF8F9FE), // Matches scaffold background
-      child: _tabBar,
-    );
+    return Container(color: const Color(0xFFF8F9FE), child: _tabBar);
   }
 
   @override
