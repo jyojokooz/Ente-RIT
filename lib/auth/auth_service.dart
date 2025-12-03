@@ -14,11 +14,12 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  /// Signs a new user up with Email, Password, and Username.
+  /// Signs a new user up with Name, Email, Password, and Username.
   Future<UserCredential?> signUpWithEmailAndPassword(
     String email,
     String password,
-    String username, // <-- NEW PARAMETER
+    String username,
+    String name, // <-- NEW PARAMETER
   ) async {
     try {
       final userCredential = await _auth.createUserWithEmailAndPassword(
@@ -26,28 +27,30 @@ class AuthService {
         password: password.trim(),
       );
 
-      // --- NEW USER PROFILE CREATION ---
       if (userCredential.user != null) {
         final user = userCredential.user!;
         
-        // Use provided username, or fallback to email prefix if somehow empty
+        // Update the display name on the user object immediately
+        await user.updateDisplayName(name);
+
         final finalUsername = username.trim().isNotEmpty 
             ? username.trim() 
             : email.split('@').first;
 
         await _firestore.collection('users').doc(user.uid).set({
-          'displayName': user.displayName ?? '', 
+          'displayName': name.trim(), // Save the name provided
           'email': user.email,
           'uid': user.uid,
           'profilePhotoUrl': user.photoURL ?? '',
           'lastLogin': Timestamp.now(),
           'createdAt': Timestamp.now(),
-          'username': finalUsername, // Save the custom username
-          'searchableUsername': finalUsername.toLowerCase(), // Helper for search
+          'username': finalUsername,
+          'searchableUsername': finalUsername.toLowerCase(),
+          'searchableDisplayName': name.trim().toLowerCase(), // Helper for search
           'role': 'student', 
         });
         
-        log('New user signed up: $finalUsername', name: 'AuthService');
+        log('New user signed up: $name ($finalUsername)', name: 'AuthService');
       }
       return userCredential;
     } on FirebaseAuthException catch (e) {
@@ -60,7 +63,6 @@ class AuthService {
 
   // ... (signInWithGoogle and signOut remain unchanged) ...
   
-  /// Signs the user in with their Google account.
   Future<UserCredential?> signInWithGoogle() async {
     try {
       await _googleSignIn.signOut();
@@ -91,7 +93,7 @@ class AuthService {
         if (!docSnapshot.exists) {
           final username = userCredential.user!.email!.split('@').first;
           await userDocRef.set({
-            'displayName': userCredential.user!.displayName,
+            'displayName': userCredential.user!.displayName ?? 'User',
             'email': userCredential.user!.email,
             'uid': userCredential.user!.uid,
             'profilePhotoUrl': userCredential.user!.photoURL,
@@ -99,6 +101,7 @@ class AuthService {
             'createdAt': Timestamp.now(),
             'username': username,
             'searchableUsername': username.toLowerCase(),
+            'searchableDisplayName': (userCredential.user!.displayName ?? '').toLowerCase(),
             'role': 'student',
           });
         } else {

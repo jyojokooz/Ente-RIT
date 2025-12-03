@@ -3,10 +3,11 @@
 // FILE PATH: lib/screens/pages/signup_page.dart
 // ===============================
 
-import 'package:email_otp/email_otp.dart'; // Import the package
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
+import 'package:email_otp/email_otp.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pinput/pinput.dart';
 import '../../auth/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -26,14 +27,14 @@ class SignupPage extends StatefulWidget {
 class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
-
-  // OTP Object
   final EmailOTP _emailOTP = EmailOTP();
 
+  // Controllers
+  final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _otpController = TextEditingController(); // Controller for OTP input
+  final _otpController = TextEditingController();
 
   bool _isLoading = false;
 
@@ -44,10 +45,9 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // Configure OTP Service
     _emailOTP.setConfig(
-      appEmail: "support@kampuskonnect.com",
-      appName: "Kampus Konnect",
+      appEmail: "support@enterit.ac.in",
+      appName: "Ente RIT",
       userEmail: _emailController.text,
       otpLength: 6,
       otpType: OTPType.digitsOnly,
@@ -77,6 +77,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -86,8 +87,11 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   }
 
   void _checkAuthAndNavigate() {
-    if (FirebaseAuth.instance.currentUser != null && mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    if (mounted) {
+      // FIX: Ensure we go to /auth-gate so the app re-initializes correctly
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/auth-gate', (route) => false);
     }
   }
 
@@ -96,35 +100,26 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      // Update the email in the OTP config dynamically
       _emailOTP.setConfig(
-        appEmail: "verify@kampuskonnect.com",
-        appName: "Kampus Konnect",
+        appEmail: "support@enterit.ac.in",
+        appName: "Ente RIT",
         userEmail: _emailController.text.trim(),
         otpLength: 6,
         otpType: OTPType.digitsOnly,
       );
 
       try {
-        // Send OTP
         bool otpSent = await _emailOTP.sendOTP();
 
         if (mounted) {
           setState(() => _isLoading = false);
 
           if (otpSent) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("OTP sent to your email"),
-                backgroundColor: Colors.green,
-              ),
-            );
-            // Open the verification dialog
             _showOtpDialog();
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text("Failed to send OTP. Try again."),
+                content: Text("Failed to send OTP. Please check email."),
                 backgroundColor: Colors.red,
               ),
             );
@@ -141,25 +136,25 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     }
   }
 
-  // --- STEP 2: VERIFY OTP AND CREATE ACCOUNT ---
-  Future<void> _verifyAndCreateAccount() async {
-    // 1. Verify OTP
-    bool isVerified = _emailOTP.verifyOTP(otp: _otpController.text.trim());
+  // --- STEP 2: VERIFY OTP ---
+  Future<void> _verifyAndCreateAccount(String pin) async {
+    bool isVerified = _emailOTP.verifyOTP(otp: pin);
 
     if (isVerified) {
-      Navigator.of(context).pop(); // Close dialog
+      Navigator.of(context).pop();
       setState(() => _isLoading = true);
 
       try {
-        // 2. Create Firebase Account
         await _authService.signUpWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text.trim(),
           _usernameController.text.trim(),
+          _nameController.text.trim(),
         );
         _checkAuthAndNavigate();
       } catch (e) {
         if (mounted) {
+          setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(e.toString().replaceFirst("Exception: ", "")),
@@ -167,29 +162,33 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             ),
           );
         }
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Invalid OTP"),
+          content: Text("Invalid Code. Please try again."),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // --- UI: OTP DIALOG ---
+  // --- UI: SQUARE BOX OTP DIALOG ---
   void _showOtpDialog() {
+    _otpController.clear();
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text(
-            "Enter Verification Code",
+            "Verification",
+            textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontWeight: FontWeight.bold,
               color: Colors.black,
@@ -199,43 +198,80 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "We sent a code to ${_emailController.text}",
+                "Enter the code sent to:",
                 style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
               ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                textAlign: TextAlign.center,
+              Text(
+                _emailController.text,
                 style: GoogleFonts.poppins(
-                  fontSize: 24,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 5,
                   color: Colors.black,
                 ),
-                decoration: InputDecoration(
-                  counterText: "",
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+              ),
+              const SizedBox(height: 24),
+
+              // --- SQUARE INPUT BOXES ---
+              Pinput(
+                controller: _otpController,
+                length: 6,
+                defaultPinTheme: PinTheme(
+                  width: 45,
+                  height: 45,
+                  textStyle: GoogleFonts.poppins(
+                    fontSize: 20,
+                    color: Colors.black,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey.shade50,
                   ),
                 ),
+                focusedPinTheme: PinTheme(
+                  width: 45,
+                  height: 45,
+                  textStyle: GoogleFonts.poppins(
+                    fontSize: 20,
+                    color: Colors.black,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: const Color(0xFF9983F3),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                  ),
+                ),
+                onCompleted: (pin) {
+                  _verifyAndCreateAccount(pin);
+                },
+              ),
+
+              const SizedBox(height: 24),
+
+              // --- ISOLATED TIMER WIDGET ---
+              _OtpTimer(
+                onResend: () {
+                  Navigator.pop(context);
+                  _handleSignupStep();
+                },
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context), // Cancel
+              onPressed: () => Navigator.pop(context),
               child: Text(
                 "Cancel",
                 style: GoogleFonts.poppins(color: Colors.grey),
               ),
             ),
             ElevatedButton(
-              onPressed: _verifyAndCreateAccount,
+              onPressed: () => _verifyAndCreateAccount(_otpController.text),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF9983F3),
                 foregroundColor: Colors.white,
@@ -283,7 +319,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // --- HEADER ---
                       Text(
                         "Create an Account",
                         textAlign: TextAlign.center,
@@ -295,7 +330,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Start your journey with Kampus Konnect.",
+                        "Start your journey with Ente RIT.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: 16,
@@ -304,7 +339,25 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 48),
 
-                      // --- USERNAME ---
+                      TextFormField(
+                        controller: _nameController,
+                        keyboardType: TextInputType.name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black,
+                        ),
+                        decoration: _buildInputDecoration(
+                          "Full Name",
+                          Icons.person,
+                        ),
+                        validator:
+                            (val) =>
+                                (val == null || val.isEmpty)
+                                    ? 'Name is required'
+                                    : null,
+                      ),
+                      const SizedBox(height: 16),
+
                       TextFormField(
                         controller: _usernameController,
                         keyboardType: TextInputType.text,
@@ -314,7 +367,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                         ),
                         decoration: _buildInputDecoration(
                           "Username",
-                          Icons.person_outline,
+                          Icons.alternate_email,
                         ),
                         validator: (val) {
                           if (val == null || val.isEmpty)
@@ -325,7 +378,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 16),
 
-                      // --- EMAIL ---
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -347,7 +399,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 16),
 
-                      // --- PASSWORD ---
                       TextFormField(
                         controller: _passwordController,
                         obscureText: true,
@@ -365,7 +416,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 32),
 
-                      // --- SIGN UP BUTTON (NOW SENDS OTP) ---
                       SizedBox(
                         height: 55,
                         child: ElevatedButton(
@@ -389,7 +439,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                                     ),
                                   )
                                   : Text(
-                                    "Verify & Create Account", // Changed Label
+                                    "Verify & Create Account",
                                     style: GoogleFonts.poppins(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
@@ -400,7 +450,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 
                       const SizedBox(height: 40),
 
-                      // --- LOGIN LINK ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -446,5 +495,63 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       ),
       prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 20),
     );
+  }
+}
+
+// --- ISOLATED TIMER WIDGET ---
+class _OtpTimer extends StatefulWidget {
+  final VoidCallback onResend;
+  const _OtpTimer({required this.onResend});
+
+  @override
+  State<_OtpTimer> createState() => _OtpTimerState();
+}
+
+class _OtpTimerState extends State<_OtpTimer> {
+  int _start = 60;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    const oneSec = Duration(seconds: 1);
+    _timer = Timer.periodic(oneSec, (Timer timer) {
+      if (_start == 0) {
+        setState(() {
+          timer.cancel();
+        });
+      } else {
+        setState(() {
+          _start--;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_start > 0) {
+      return Text(
+        "Resend code in $_start s",
+        style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13),
+      );
+    } else {
+      return TextButton(
+        onPressed: widget.onResend,
+        child: Text(
+          "Resend Code",
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF9983F3),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
   }
 }

@@ -92,6 +92,7 @@ dependencies:
   web: ^0.5.1
   emoji_picker_flutter: ^2.2.0
   email_otp: ^2.1.0
+  pinput: ^4.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

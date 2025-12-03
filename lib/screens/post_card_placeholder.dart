@@ -11,9 +11,9 @@ class PostCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Using very subtle colors for "Ultra Smooth" feel
-    final Color baseColor = Colors.grey[200]!; 
-    final Color highlightColor = Colors.grey[50]!;
+    // FIX: Darkened the grey slightly so the shimmer is actually visible on white screens
+    final Color baseColor = Colors.grey[300]!;
+    final Color highlightColor = Colors.grey[100]!;
 
     return Container(
       color: Colors.white,
@@ -21,7 +21,7 @@ class PostCardPlaceholder extends StatelessWidget {
       child: Shimmer.fromColors(
         baseColor: baseColor,
         highlightColor: highlightColor,
-        period: const Duration(milliseconds: 1500), // Slower animation is smoother
+        period: const Duration(milliseconds: 1500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -33,15 +33,19 @@ class PostCardPlaceholder extends StatelessWidget {
               ),
               child: Row(
                 children: [
+                  // Avatar Circle
                   Container(
                     width: 36,
                     height: 36,
                     decoration: const BoxDecoration(
-                      color: Colors.white,
+                      color:
+                          Colors
+                              .white, // IMPORTANT: Must be a solid color for shimmer to work
                       shape: BoxShape.circle,
                     ),
                   ),
                   const SizedBox(width: 10),
+                  // Username Line
                   Container(
                     width: 100,
                     height: 12,
@@ -54,12 +58,8 @@ class PostCardPlaceholder extends StatelessWidget {
               ),
             ),
 
-            // 2. MEDIA BLOCK (Large & Clean)
-            Container(
-              width: double.infinity,
-              height: 350, // Slightly reduced height for better initial view
-              color: Colors.white,
-            ),
+            // 2. MEDIA BLOCK
+            Container(width: double.infinity, height: 350, color: Colors.white),
 
             // 3. TEXT LINES
             Padding(

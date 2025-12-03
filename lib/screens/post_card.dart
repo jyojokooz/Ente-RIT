@@ -191,16 +191,21 @@ class PostCard extends StatelessWidget {
                                 : getOptimizedCloudinaryUrl(originalMediaUrl),
                         fit: BoxFit.cover,
                         width: double.infinity,
+
+                        // --- FIX: VISIBLE SHIMMER LOADING ---
                         placeholder:
                             (context, url) => Shimmer.fromColors(
-                              baseColor: Colors.grey[200]!,
-                              highlightColor: Colors.grey[50]!,
+                              baseColor: Colors.grey[300]!,
+                              highlightColor: Colors.grey[100]!,
                               child: Container(
                                 height: 300,
                                 width: double.infinity,
-                                color: Colors.white,
+                                color:
+                                    Colors
+                                        .grey[300], // Grey color ensures shimmer is visible
                               ),
                             ),
+
                         errorWidget:
                             (context, url, error) => Container(
                               height: 300,
@@ -255,7 +260,6 @@ class PostCard extends StatelessWidget {
 
                 return Row(
                   children: [
-                    // LIKE BUTTON
                     GestureDetector(
                       onTap: onLikePressed,
                       child: Icon(
@@ -267,31 +271,24 @@ class PostCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-
-                    // COMMENT BUTTON (Fixed Color)
                     GestureDetector(
                       onTap: onCommentPressed,
                       child: const Icon(
                         Icons.chat_bubble_outline_rounded,
-                        color: Colors.black, // Explicitly set to Black
+                        color: Colors.black,
                         size: 24,
                       ),
                     ),
                     const SizedBox(width: 16),
-
-                    // SHARE BUTTON (Fixed Color)
                     const Icon(
                       Icons.send_rounded,
-                      color: Colors.black, // Explicitly set to Black
+                      color: Colors.black,
                       size: 24,
                     ),
-
                     const Spacer(),
-
-                    // BOOKMARK BUTTON (Fixed Color)
                     const Icon(
                       Icons.bookmark_border_rounded,
-                      color: Colors.black, // Explicitly set to Black
+                      color: Colors.black,
                       size: 26,
                     ),
                   ],

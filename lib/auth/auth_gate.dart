@@ -24,37 +24,48 @@ class AuthGate extends StatelessWidget {
       body: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, authSnapshot) {
-          // 1. Waiting for Auth: Show exact Home Skeleton
+          // 1. Waiting for Auth
           if (authSnapshot.connectionState == ConnectionState.waiting) {
             return const _HomeSkeletonLoader();
           }
 
           if (authSnapshot.hasData) {
-            return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(authSnapshot.data!.uid)
-                  .get(),
+            final user = authSnapshot.data!;
+
+            // FIX: Changed from FutureBuilder to StreamBuilder
+            // This listens continuously. When the signup function finishes writing
+            // the user data to Firestore, this will auto-update and let the user in.
+            return StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .snapshots(),
               builder: (context, userDocSnapshot) {
-                // 2. Waiting for User Data: Keep showing Home Skeleton
-                if (userDocSnapshot.connectionState == ConnectionState.waiting) {
+                // 2. Waiting for Firestore connection
+                if (userDocSnapshot.connectionState ==
+                    ConnectionState.waiting) {
                   return const _HomeSkeletonLoader();
                 }
 
-                if (!userDocSnapshot.hasData || !userDocSnapshot.data!.exists) {
-                  return const CreateUsernameScreen();
+                // 3. User Document Exists
+                if (userDocSnapshot.hasData && userDocSnapshot.data!.exists) {
+                  final userData =
+                      userDocSnapshot.data!.data() as Map<String, dynamic>?;
+                  final username = userData?['username'] as String?;
+
+                  if (username == null || username.isEmpty) {
+                    return const CreateUsernameScreen();
+                  }
+
+                  // User is fully set up
+                  return const MainScreen();
                 }
 
-                final userData =
-                    userDocSnapshot.data!.data() as Map<String, dynamic>?;
-                final username = userData?['username'] as String?;
-
-                if (username == null || username.isEmpty) {
-                  return const CreateUsernameScreen();
-                }
-
-                // SUCCESS: Seamless transition to Main Screen
-                return const MainScreen();
+                // 4. Document doesn't exist YET (Still being created by signup function)
+                // Keep showing loader. Since this is a Stream, it will refresh automatically
+                // the moment the document is created.
+                return const _HomeSkeletonLoader();
               },
             );
           } else {
@@ -72,13 +83,11 @@ class _HomeSkeletonLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Manually matching the MainScreen AppBar structure
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
-            // Fake Top Bar (Matches MainScreen _buildTopBar)
             Container(
               color: Colors.white,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -86,7 +95,7 @@ class _HomeSkeletonLoader extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Kampus Konnect',
+                    'Ente RIT',
                     style: GoogleFonts.poppins(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -96,18 +105,26 @@ class _HomeSkeletonLoader extends StatelessWidget {
                   ),
                   Row(
                     children: [
-                      const Icon(Icons.favorite_border, color: Colors.black, size: 28),
+                      const Icon(
+                        Icons.favorite_border,
+                        color: Colors.black,
+                        size: 28,
+                      ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.chat_bubble_outline, color: Colors.black, size: 26),
+                      const Icon(
+                        Icons.chat_bubble_outline,
+                        color: Colors.black,
+                        size: 26,
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-            // Fake Content List
+            // Use ListView with physics NeverScrollable to prevent user interaction during load
             Expanded(
               child: ListView.builder(
-                physics: const NeverScrollableScrollPhysics(), // Prevent user interaction during load
+                physics: const NeverScrollableScrollPhysics(),
                 itemCount: 3,
                 itemBuilder: (context, index) => const PostCardPlaceholder(),
               ),

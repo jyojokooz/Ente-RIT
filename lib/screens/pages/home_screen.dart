@@ -190,7 +190,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  // --- FIX 1: Handle Errors First ---
+                  if (snapshot.hasError) {
+                    return SliverFillRemaining(
+                      child: Center(child: Text("Something went wrong")),
+                    );
+                  }
+
+                  // --- FIX 2: Only show Shimmer if waiting AND no data ---
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) => const PostCardPlaceholder(),
@@ -198,6 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   }
+
+                  // --- FIX 3: Check for Empty List explicitly ---
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return SliverFillRemaining(
                       hasScrollBody: false,
@@ -269,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // --- UPDATED: Replaced Image with Text ---
+          // Ente RIT Text
           Text(
             'Ente RIT',
             style: GoogleFonts.poppins(
