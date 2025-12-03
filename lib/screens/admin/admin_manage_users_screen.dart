@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: admin_manage_users_screen.dart
+// FILE PATH: lib/screens/admin/admin_manage_users_screen.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +15,6 @@ class AdminManageUsersScreen extends StatefulWidget {
 }
 
 class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
-  // --- NEW: Define the list of assignable roles ---
   final List<String> _assignableRoles = [
     'student',
     'teacher',
@@ -19,9 +23,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
     'admin',
   ];
 
-  /// Sets a user's role to the specified new role.
   Future<void> _changeUserRole(String userId, String newRole) async {
-    // Show a confirmation dialog to prevent accidental changes.
     final bool confirmChange =
         await showDialog<bool>(
           context: context,
@@ -47,20 +49,78 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                 ],
               ),
         ) ??
-        false; // Default to false if the dialog is dismissed.
+        false;
 
     if (confirmChange) {
-      // If confirmed, update the user's document in Firestore.
-      // We also handle the isAdmin flag for convenience.
       await FirebaseFirestore.instance.collection('users').doc(userId).update({
         'role': newRole,
-        'isAdmin':
-            newRole == 'admin', // Set isAdmin to true if the role is admin
+        'isAdmin': newRole == 'admin',
       });
     }
   }
 
-  /// --- NEW: Helper widget to display a role chip ---
+  Future<void> _deleteUser(String userId, String userName) async {
+    final bool confirmDelete =
+        await showDialog<bool>(
+          context: context,
+          builder:
+              (ctx) => AlertDialog(
+                backgroundColor: Colors.grey.shade800,
+                title: const Text(
+                  'Delete User?',
+                  style: TextStyle(color: Colors.red),
+                ),
+                content: Text(
+                  'Are you sure you want to permanently delete "$userName"?\n\nThis will remove their profile immediately.',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text(
+                      'DELETE',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+        ) ??
+        false;
+
+    if (confirmDelete) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('User profile deleted.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error deleting user: $e')));
+        }
+      }
+    }
+  }
+
   Widget _buildRoleChip(String role) {
     Color chipColor;
     String label;
@@ -87,7 +147,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
         label = 'Student';
         break;
       default:
-        return const SizedBox.shrink(); // Don't show a chip for default 'user'
+        return const SizedBox.shrink();
     }
 
     return Padding(
@@ -124,9 +184,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Something went wrong: ${snapshot.error}'),
-            );
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text('No users found.'));
@@ -135,7 +193,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
           final users = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: const EdgeInsets.all(8), // Reduced padding
+            padding: const EdgeInsets.all(8),
             itemCount: users.length,
             itemBuilder: (context, index) {
               final userDoc = users[index];
@@ -143,6 +201,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
               final String role = userData['role'] ?? 'student';
               final profilePhotoUrl = userData['profilePhotoUrl'] ?? '';
               final hasImage = profilePhotoUrl.isNotEmpty;
+              final displayName = userData['displayName'] ?? 'No Name';
 
               return Card(
                 color: Colors.grey.shade900,
@@ -170,7 +229,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              userData['displayName'] ?? 'No Name',
+                              displayName,
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -188,27 +247,63 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                           ],
                         ),
                       ),
-                      // Display chip for the user's role
                       _buildRoleChip(role),
 
-                      // Role management menu
+                      // --- FIX: Using PopupMenuEntry<String> ---
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.more_vert),
-                        onSelected: (String newRole) {
-                          _changeUserRole(userDoc.id, newRole);
+                        onSelected: (String value) {
+                          if (value == 'delete_user_action') {
+                            _deleteUser(userDoc.id, displayName);
+                          } else {
+                            _changeUserRole(userDoc.id, value);
+                          }
                         },
-                        itemBuilder:
-                            (ctx) =>
-                                _assignableRoles
-                                    .map(
-                                      (roleToAssign) => PopupMenuItem<String>(
-                                        value: roleToAssign,
-                                        child: Text(
-                                          'Set as ${roleToAssign.replaceAll('_', ' ')}',
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
+                        itemBuilder: (ctx) {
+                          // 1. Create a generic list of Entries, NOT specific Items
+                          List<PopupMenuEntry<String>> items = [];
+
+                          // 2. Add Role Options
+                          for (var roleToAssign in _assignableRoles) {
+                            items.add(
+                              PopupMenuItem<String>(
+                                value: roleToAssign,
+                                child: Text(
+                                  'Set as ${roleToAssign.replaceAll('_', ' ')}',
+                                ),
+                              ),
+                            );
+                          }
+
+                          // 3. Add Divider (Now allowed because list is generic)
+                          items.add(const PopupMenuDivider());
+
+                          // 4. Add Delete Option
+                          items.add(
+                            const PopupMenuItem<String>(
+                              value: 'delete_user_action',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.redAccent,
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Delete User',
+                                    style: TextStyle(
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+
+                          return items;
+                        },
                       ),
                     ],
                   ),
