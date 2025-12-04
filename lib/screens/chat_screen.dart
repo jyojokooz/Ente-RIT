@@ -11,8 +11,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart' as foundation;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
+import 'package:flutter/foundation.dart'
+    as foundation; // Needed for emoji picker check
+
+// Import Post Detail for navigation
+import 'post_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -56,6 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .doc(_chatRoomId);
     _messagesCollection = chatDocRef.collection('messages');
 
+    // Mark messages as read
     chatDocRef
         .update({'unreadCounts.${_currentUser.uid}': 0})
         .catchError((e) {});
@@ -75,6 +80,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // --- CLEAR CHAT HISTORY ---
   Future<void> _clearChatHistory() async {
     final bool? confirm = await showDialog<bool>(
       context: context,
@@ -198,7 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'senderId': _currentUser.uid,
       'text': text,
       'timestamp': timestamp,
-      'type': 'text',
+      'type': 'text', // Standard text message
     });
 
     await batch.commit();
@@ -335,6 +341,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       final msgData =
                           messages[index].data() as Map<String, dynamic>;
                       final isMe = msgData['senderId'] == _currentUser.uid;
+                      final type =
+                          msgData['type'] ?? 'text'; // Check message type
                       final timestamp =
                           (msgData['timestamp'] as Timestamp?)?.toDate() ??
                           DateTime.now();
@@ -385,14 +393,18 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
 
-                          _buildMessageBubble(
-                            msgData['text'] ?? '',
-                            isMe,
-                            isFirstInGroup,
-                            isLastInGroup,
-                            myBubbleColor,
-                            otherBubbleColor,
-                          ),
+                          // --- DECIDE WHICH BUBBLE TO SHOW ---
+                          if (type == 'post')
+                            _buildSharedPostBubble(msgData['postId'], isMe)
+                          else
+                            _buildMessageBubble(
+                              msgData['text'] ?? '',
+                              isMe,
+                              isFirstInGroup,
+                              isLastInGroup,
+                              myBubbleColor,
+                              otherBubbleColor,
+                            ),
                         ],
                       );
                     },
@@ -419,6 +431,105 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // --- SHARED POST BUBBLE (Preview) ---
+  Widget _buildSharedPostBubble(String postId, bool isMe) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: () {
+          // Navigate to post detail when clicked
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(postId: postId),
+            ),
+          );
+        },
+        child: Container(
+          width: 220,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Fetch minimal post data to show preview
+              FutureBuilder<DocumentSnapshot>(
+                future:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .doc(postId)
+                        .get(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                    return Container(
+                      height: 150,
+                      color: Colors.grey[200],
+                      child: const Center(
+                        child: Icon(Icons.error_outline, color: Colors.grey),
+                      ),
+                    );
+                  }
+                  final post = snapshot.data!.data() as Map<String, dynamic>;
+                  final image = post['postMediaUrl'] ?? post['postImageUrl'];
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Image Preview
+                      if (image != null)
+                        ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(12),
+                          ),
+                          child: CachedNetworkImage(
+                            imageUrl: image,
+                            height: 150,
+                            width: 220,
+                            fit: BoxFit.cover,
+                            placeholder:
+                                (c, u) => Container(color: Colors.grey[200]),
+                          ),
+                        ),
+                      // Post Label
+                      Padding(
+                        padding: const EdgeInsets.all(10.0),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundImage: CachedNetworkImageProvider(
+                                post['userImageUrl'] ?? '',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                post['userName'] ?? 'User',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -472,7 +583,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
-            // Camera Icon background set to Brand Purple
+            // Camera Icon
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -486,6 +597,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
+            // Text Field
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -520,6 +632,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
+            // Send Button
             GestureDetector(
               onTap: _sendMessage,
               child: Padding(
@@ -527,8 +640,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Text(
                   "Send",
                   style: TextStyle(
-                    color:
-                        _brandPurple, // Send button text color is now Brand Purple
+                    color: _brandPurple,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),

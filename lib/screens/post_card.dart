@@ -15,6 +15,7 @@ import 'package:shimmer/shimmer.dart';
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
+import 'share_post_sheet.dart';
 
 class PostCard extends StatelessWidget {
   final DocumentSnapshot postSnapshot;
@@ -41,6 +42,18 @@ class PostCard extends StatelessWidget {
     if (parts.length == 2)
       return '${parts[0]}/upload/$transformations/${parts[1]}';
     return originalUrl;
+  }
+
+  void _onSharePressed(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SharePostSheet(postId: postSnapshot.id),
+    );
   }
 
   @override
@@ -191,11 +204,6 @@ class PostCard extends StatelessWidget {
                                 : getOptimizedCloudinaryUrl(originalMediaUrl),
                         fit: BoxFit.cover,
                         width: double.infinity,
-
-                        // FIX: Added FadeInDuration for smooth transition
-                        fadeInDuration: const Duration(milliseconds: 300),
-
-                        // FIX: Updated placeholder to be visible grey shimmer
                         placeholder:
                             (context, url) => Shimmer.fromColors(
                               baseColor: Colors.grey[300]!,
@@ -206,7 +214,6 @@ class PostCard extends StatelessWidget {
                                 color: Colors.grey[300],
                               ),
                             ),
-
                         errorWidget:
                             (context, url, error) => Container(
                               height: 300,
@@ -261,6 +268,7 @@ class PostCard extends StatelessWidget {
 
                 return Row(
                   children: [
+                    // LIKE BUTTON
                     GestureDetector(
                       onTap: onLikePressed,
                       child: Icon(
@@ -272,6 +280,8 @@ class PostCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
+
+                    // COMMENT BUTTON
                     GestureDetector(
                       onTap: onCommentPressed,
                       child: const Icon(
@@ -281,17 +291,18 @@ class PostCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    const Icon(
-                      Icons.send_rounded,
-                      color: Colors.black,
-                      size: 24,
+
+                    // SHARE BUTTON
+                    GestureDetector(
+                      onTap: () => _onSharePressed(context),
+                      child: const Icon(
+                        Icons.send_rounded,
+                        color: Colors.black,
+                        size: 24,
+                      ),
                     ),
-                    const Spacer(),
-                    const Icon(
-                      Icons.bookmark_border_rounded,
-                      color: Colors.black,
-                      size: 26,
-                    ),
+
+                    // REMOVED: Bookmark Button
                   ],
                 );
               },
