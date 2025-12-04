@@ -192,7 +192,10 @@ class PostCard extends StatelessWidget {
                         fit: BoxFit.cover,
                         width: double.infinity,
 
-                        // --- FIX: VISIBLE SHIMMER LOADING ---
+                        // FIX: Added FadeInDuration for smooth transition
+                        fadeInDuration: const Duration(milliseconds: 300),
+
+                        // FIX: Updated placeholder to be visible grey shimmer
                         placeholder:
                             (context, url) => Shimmer.fromColors(
                               baseColor: Colors.grey[300]!,
@@ -200,9 +203,7 @@ class PostCard extends StatelessWidget {
                               child: Container(
                                 height: 300,
                                 width: double.infinity,
-                                color:
-                                    Colors
-                                        .grey[300], // Grey color ensures shimmer is visible
+                                color: Colors.grey[300],
                               ),
                             ),
 

@@ -80,6 +80,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
         'timestamp': FieldValue.serverTimestamp(),
         'isReply': isReply,
         'parentId': isReply ? parentId : null,
+        'likes': [], // Initialize with empty likes array
       };
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
@@ -91,6 +92,32 @@ class _CommentsScreenState extends State<CommentsScreen> {
       });
     } catch (e) {
       debugPrint("Error posting: $e");
+    }
+  }
+
+  // --- NEW: TOGGLE LIKE FUNCTION ---
+  Future<void> _toggleCommentLike(
+    String commentId,
+    List<dynamic> currentLikes,
+  ) async {
+    final commentRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(widget.postId)
+        .collection('comments')
+        .doc(commentId);
+
+    final uid = _currentUser.uid;
+
+    if (currentLikes.contains(uid)) {
+      // Unlike
+      await commentRef.update({
+        'likes': FieldValue.arrayRemove([uid]),
+      });
+    } else {
+      // Like
+      await commentRef.update({
+        'likes': FieldValue.arrayUnion([uid]),
+      });
     }
   }
 
@@ -141,11 +168,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
 
                 final allDocs = snapshot.data?.docs ?? [];
 
-                // --- FIX: Safely access fields using data() ---
                 final parentComments =
                     allDocs.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
-                      // If 'isReply' doesn't exist, assume false (it's an old comment)
                       return (data['isReply'] ?? false) == false;
                     }).toList();
 
@@ -171,14 +196,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
                     final parentDoc = parentComments[index];
                     final parentData = parentDoc.data() as Map<String, dynamic>;
 
-                    // Find replies for THIS parent safely
                     final myReplies =
                         replies.where((r) {
                           final rData = r.data() as Map<String, dynamic>;
                           return rData['parentId'] == parentDoc.id;
                         }).toList();
 
-                    // Sort replies oldest to newest
                     myReplies.sort((a, b) {
                       final d1 = a.data() as Map<String, dynamic>;
                       final d2 = b.data() as Map<String, dynamic>;
@@ -203,8 +226,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
                                 parentData['userName'] ?? 'User',
                               ),
                           onDelete: () => _deleteComment(parentDoc.id),
+                          onLike:
+                              () => _toggleCommentLike(
+                                parentDoc.id,
+                                parentData['likes'] ?? [],
+                              ),
                         ),
-                        // Render Replies Indented
                         if (myReplies.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(
@@ -225,6 +252,11 @@ class _CommentsScreenState extends State<CommentsScreen> {
                                           replyData['userName'] ?? 'User',
                                         ),
                                     onDelete: () => _deleteComment(replyDoc.id),
+                                    onLike:
+                                        () => _toggleCommentLike(
+                                          replyDoc.id,
+                                          replyData['likes'] ?? [],
+                                        ),
                                     isSmall: true,
                                   );
                                 }),
@@ -335,6 +367,7 @@ class _CommentRow extends StatelessWidget {
   final String currentUserId;
   final VoidCallback onReply;
   final VoidCallback onDelete;
+  final VoidCallback onLike; // New Callback
   final bool isSmall;
 
   const _CommentRow({
@@ -342,6 +375,7 @@ class _CommentRow extends StatelessWidget {
     required this.currentUserId,
     required this.onReply,
     required this.onDelete,
+    required this.onLike, // New Callback
     this.isSmall = false,
   });
 
@@ -354,6 +388,11 @@ class _CommentRow extends StatelessWidget {
         timestamp != null
             ? timeago.format(timestamp, locale: 'en_short')
             : 'now';
+
+    // --- Like Logic ---
+    final List likes = data['likes'] ?? [];
+    final bool isLiked = likes.contains(currentUserId);
+    final int likeCount = likes.length;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -428,10 +467,32 @@ class _CommentRow extends StatelessWidget {
               ],
             ),
           ),
-          // Optional Like Icon for future
-          const Padding(
-            padding: EdgeInsets.only(top: 8.0),
-            child: Icon(Icons.favorite_border, size: 14, color: Colors.grey),
+          // --- Like Button & Count ---
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, left: 8.0),
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: onLike,
+                  child: Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    size: 14, // Instagram style small icon
+                    color: isLiked ? Colors.red : Colors.grey,
+                  ),
+                ),
+                if (likeCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2.0),
+                    child: Text(
+                      "$likeCount",
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
