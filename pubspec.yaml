@@ -95,6 +95,7 @@ dependencies:
   pinput: ^4.0.0
   audioplayers: ^6.0.0 # Add this for playing music
   just_audio: ^0.9.36
+  visibility_detector: ^0.4.0+2
 dev_dependencies:
   flutter_test:
     sdk: flutter

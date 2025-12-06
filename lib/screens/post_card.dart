@@ -5,6 +5,7 @@
 
 // ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
 
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -12,10 +13,72 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:visibility_detector/visibility_detector.dart'; // REQUIRED PACKAGE
 
-import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
 import 'share_post_sheet.dart';
+import 'likes_list_screen.dart';
+
+// --- ROBUST GLOBAL AUDIO HANDLER ---
+class GlobalAudioHandler {
+  static final AudioPlayer _player = AudioPlayer();
+  static String? _currentPostId;
+  static Function(bool)? _currentUiUpdater;
+
+  static void init() {
+    _player.setReleaseMode(ReleaseMode.stop);
+  }
+
+  static Future<void> playOrPause(
+    String postId,
+    String url,
+    Function(bool) updateUi,
+  ) async {
+    try {
+      if (_currentPostId == postId) {
+        // Toggle same song
+        if (_player.state == PlayerState.playing) {
+          await _player.pause();
+          updateUi(false);
+        } else {
+          await _player.resume();
+          updateUi(true);
+        }
+      } else {
+        // Stop old song
+        await _player.stop();
+        if (_currentUiUpdater != null) _currentUiUpdater!(false);
+
+        // Play new song
+        _currentPostId = postId;
+        _currentUiUpdater = updateUi;
+        await _player.play(UrlSource(url));
+        updateUi(true);
+
+        // Auto-reset when finished
+        _player.onPlayerComplete.listen((_) {
+          if (_currentPostId == postId) {
+            updateUi(false);
+            _currentPostId = null;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Audio Error: $e");
+      updateUi(false);
+    }
+  }
+
+  // Called by VisibilityDetector
+  static void stopIfPlaying(String postId) async {
+    if (_currentPostId == postId) {
+      await _player.stop();
+      if (_currentUiUpdater != null) _currentUiUpdater!(false);
+      _currentPostId = null;
+      _currentUiUpdater = null;
+    }
+  }
+}
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
@@ -39,19 +102,107 @@ class PostCard extends StatefulWidget {
   State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard>
-    with AutomaticKeepAliveClientMixin {
+class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   int _currentImageIndex = 0;
-  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlayingMusic = false;
 
+  // Animation State
+  bool _isPowerAnimating = false;
+  AnimationController? _likeController;
+  late Animation<double> _likeScaleAnimation;
+  Timer? _animationTimer;
+
   @override
-  bool get wantKeepAlive => true;
+  void initState() {
+    super.initState();
+
+    // Initialize Animation Controller
+    _likeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+
+    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _likeController!, curve: Curves.easeInOut),
+    );
+  }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    // Backup stop in case VisibilityDetector misses it (rare)
+    if (_isPlayingMusic) {
+      GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+    }
+
+    _likeController?.dispose();
+    _animationTimer?.cancel();
     super.dispose();
+  }
+
+  // --- VISIBILITY LOGIC (STOPS MUSIC ON SCROLL) ---
+  void _onVisibilityChanged(VisibilityInfo info) {
+    if (info.visibleFraction == 0) {
+      // Post is completely off screen -> Stop Music
+      if (_isPlayingMusic) {
+        GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+        if (mounted) setState(() => _isPlayingMusic = false);
+      }
+    }
+  }
+
+  // --- AUDIO LOGIC ---
+  void _toggleMusic(String? url) {
+    if (url == null || url.isEmpty) return;
+
+    GlobalAudioHandler.playOrPause(widget.postSnapshot.id, url, (isPlaying) {
+      if (mounted) {
+        setState(() {
+          _isPlayingMusic = isPlaying;
+        });
+      }
+    });
+  }
+
+  // --- LIKE LOGIC ---
+  void _handleDoubleTapLike() {
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
+    // 1. Database: Add Like (never remove)
+    FirebaseFirestore.instance
+        .collection('posts')
+        .doc(widget.postSnapshot.id)
+        .update({
+          'likes': FieldValue.arrayUnion([currentUserId]),
+        });
+
+    // 2. Button Bounce Animation
+    if (_likeController != null) {
+      _likeController!.forward().then((_) => _likeController!.reverse());
+    }
+
+    // 3. Overlay Animation (handle rapid taps)
+    _animationTimer?.cancel();
+    setState(() {
+      _isPowerAnimating = true;
+    });
+
+    _animationTimer = Timer(const Duration(milliseconds: 1000), () {
+      if (mounted) {
+        setState(() {
+          _isPowerAnimating = false;
+        });
+      }
+    });
+  }
+
+  void _openLikesScreen(List<dynamic> likes) {
+    if (likes.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LikesListScreen(likeUserIds: likes),
+      ),
+    );
   }
 
   String getOptimizedCloudinaryUrl(String originalUrl) {
@@ -75,28 +226,7 @@ class _PostCardState extends State<PostCard>
     );
   }
 
-  Future<void> _toggleMusicPreview(String? url) async {
-    if (url == null || url.isEmpty) return;
-
-    try {
-      if (_isPlayingMusic) {
-        await _audioPlayer.pause();
-        setState(() => _isPlayingMusic = false);
-      } else {
-        await _audioPlayer.play(UrlSource(url));
-        setState(() => _isPlayingMusic = true);
-
-        // Reset state when song finishes
-        _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted) setState(() => _isPlayingMusic = false);
-        });
-      }
-    } catch (e) {
-      debugPrint("Error playing preview: $e");
-    }
-  }
-
-  // --- HELPER: AUDIO CONTROL BUTTON (Instagram Style) ---
+  // --- UI WIDGETS ---
   Widget _buildAudioControl(String? previewUrl) {
     if (previewUrl == null) return const SizedBox.shrink();
 
@@ -104,22 +234,56 @@ class _PostCardState extends State<PostCard>
       bottom: 12,
       right: 12,
       child: GestureDetector(
-        onTap: () => _toggleMusicPreview(previewUrl),
+        onTap: () => _toggleMusic(previewUrl),
         child: Container(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(
-              0.7,
-            ), // Semi-transparent black background
+            color: Colors.black.withOpacity(0.6),
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.white24),
           ),
           child: Icon(
             _isPlayingMusic
                 ? Icons.volume_up_rounded
                 : Icons.volume_off_rounded,
-            color: Colors.white, // White icon for visibility
-            size: 16,
+            color: Colors.white,
+            size: 18,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPowerOverlay() {
+    if (!_isPowerAnimating) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: Center(
+        child: TweenAnimationBuilder<double>(
+          key: ValueKey(DateTime.now()), // Restart animation on every tap
+          tween: Tween(begin: 0.0, end: 1.2),
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.elasticOut,
+          builder: (context, value, child) {
+            return Transform.scale(
+              scale: value,
+              child: Opacity(
+                opacity: value.clamp(0.0, 1.0),
+                child: const Icon(
+                  Icons.bolt_rounded, // Power Symbol
+                  color: Colors.white,
+                  size: 110,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black26,
+                      blurRadius: 15,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -127,8 +291,6 @@ class _PostCardState extends State<PostCard>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData == null) return const SizedBox.shrink();
 
@@ -141,13 +303,11 @@ class _PostCardState extends State<PostCard>
       'profilePhotoUrl': postData['userImageUrl'] ?? '',
     };
 
-    // --- MUSIC DATA RETRIEVAL ---
     final Map<String, dynamic>? musicData = postData['music'];
     final String? musicTitle = musicData?['trackName'];
     final String? musicArtist = musicData?['artistName'];
     final String? musicPreviewUrl = musicData?['previewUrl'];
 
-    // --- LOGIC FOR MULTIPLE IMAGES ---
     final String postType = postData['postType'] ?? 'image';
 
     List<String> mediaUrls = [];
@@ -163,393 +323,466 @@ class _PostCardState extends State<PostCard>
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    final String heroTag = 'post-${widget.postSnapshot.id}';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- HEADER ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12.0,
-              vertical: 10.0,
-            ),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: widget.onProfileTapped,
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.grey.shade100,
-                    backgroundImage:
-                        authorData['profilePhotoUrl'].isNotEmpty
-                            ? CachedNetworkImageProvider(
-                              authorData['profilePhotoUrl'],
-                            )
-                            : null,
-                    child:
-                        authorData['profilePhotoUrl'].isEmpty
-                            ? const Icon(
-                              Icons.person,
-                              color: Colors.grey,
-                              size: 20,
-                            )
-                            : null,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        authorData['displayName'],
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: brandBlack,
-                        ),
-                      ),
-
-                      // --- HEADER MUSIC TEXT ---
-                      if (musicTitle != null)
-                        GestureDetector(
-                          onTap: () => _toggleMusicPreview(musicPreviewUrl),
-                          child: Row(
-                            children: [
-                              // Visual indicator only, no icon here to keep it clean
-                              Flexible(
-                                child: Text(
-                                  "$musicTitle • $musicArtist",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color:
-                                        Colors
-                                            .black87, // Black text for visibility
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else if (authorData['username'].isNotEmpty)
-                        Text(
-                          '@${authorData['username']}',
-                          style: GoogleFonts.poppins(
-                            color: Colors.grey.shade500,
-                            fontSize: 11,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // --- 3-DOT MENU ---
-                if (isAuthor)
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') widget.onEditPressed();
-                      if (value == 'delete') widget.onDeletePressed();
-                    },
-                    icon: const Icon(Icons.more_vert, color: Colors.grey),
-                    itemBuilder:
-                        (BuildContext context) => <PopupMenuEntry<String>>[
-                          const PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, color: Colors.black54),
-                                SizedBox(width: 8),
-                                Text('Edit'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                  ),
-              ],
-            ),
-          ),
-
-          // --- MEDIA CAROUSEL OR VIDEO ---
-          if (postType == 'video')
-            // 1. VIDEO PLAYER
-            GestureDetector(
-              onTap: () {
-                if (mediaUrls.isNotEmpty) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (_) =>
-                              FullScreenVideoPlayer(videoUrl: mediaUrls.first),
-                    ),
-                  );
-                }
-              },
-              child: Hero(
-                tag: heroTag,
-                child: AspectRatio(
-                  aspectRatio: 1.0,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CachedNetworkImage(
-                        imageUrl: getOptimizedCloudinaryUrl(
-                          originalThumbnailUrl ?? '',
-                        ),
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (context, url) =>
-                                Container(color: Colors.grey[200]),
-                        errorWidget:
-                            (context, url, error) =>
-                                Container(color: Colors.grey[100]),
-                      ),
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                      ),
-                      // *** AUDIO BUTTON FOR VIDEO ***
-                      _buildAudioControl(musicPreviewUrl),
-                    ],
-                  ),
-                ),
+    return VisibilityDetector(
+      key: Key('post-vis-${widget.postSnapshot.id}'),
+      onVisibilityChanged:
+          _onVisibilityChanged, // Stops music when scrolled away
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(0),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- HEADER ---
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 10.0,
               ),
-            )
-          else if (mediaUrls.isNotEmpty)
-            // 2. IMAGE CAROUSEL
-            Column(
-              children: [
-                SizedBox(
-                  height:
-                      MediaQuery.of(context).size.width, // Square aspect ratio
-                  child: Stack(
-                    children: [
-                      PageView.builder(
-                        itemCount: mediaUrls.length,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentImageIndex = index;
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => FullScreenImageViewer(
-                                        imageUrl: mediaUrls[index],
-                                        heroTag: '$heroTag-$index',
-                                      ),
-                                ),
-                              );
-                            },
-                            child: Hero(
-                              tag: '$heroTag-$index',
-                              child: CachedNetworkImage(
-                                imageUrl: getOptimizedCloudinaryUrl(
-                                  mediaUrls[index],
-                                ),
-                                fit: BoxFit.cover,
-                                memCacheWidth: 1080,
-                                fadeInDuration: const Duration(
-                                  milliseconds: 300,
-                                ),
-                                placeholder:
-                                    (context, url) =>
-                                        Container(color: Colors.grey[200]),
-                                errorWidget:
-                                    (context, url, error) =>
-                                        const Icon(Icons.error),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      // *** AUDIO BUTTON FOR IMAGE ***
-                      _buildAudioControl(musicPreviewUrl),
-                    ],
-                  ),
-                ),
-                // 3. DOTS INDICATOR
-                if (mediaUrls.length > 1)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(mediaUrls.length, (index) {
-                        return Container(
-                          width: 6.0,
-                          height: 6.0,
-                          margin: const EdgeInsets.symmetric(horizontal: 3.0),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color:
-                                _currentImageIndex == index
-                                    ? Colors.blue
-                                    : Colors.grey.withOpacity(0.4),
-                          ),
-                        );
-                      }),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: widget.onProfileTapped,
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.grey.shade100,
+                      backgroundImage:
+                          authorData['profilePhotoUrl'].isNotEmpty
+                              ? CachedNetworkImageProvider(
+                                authorData['profilePhotoUrl'],
+                              )
+                              : null,
+                      child:
+                          authorData['profilePhotoUrl'].isEmpty
+                              ? const Icon(
+                                Icons.person,
+                                color: Colors.grey,
+                                size: 20,
+                              )
+                              : null,
                     ),
                   ),
-              ],
-            ),
-
-          // --- ACTIONS BAR ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12.0,
-              vertical: 10.0,
-            ),
-            child: StreamBuilder<DocumentSnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('posts')
-                      .doc(widget.postSnapshot.id)
-                      .snapshots(),
-              builder: (context, snapshot) {
-                final likesData =
-                    snapshot.hasData
-                        ? snapshot.data!.data() as Map<String, dynamic>
-                        : postData;
-                final rtLikes = likesData['likes'] ?? [];
-                final bool isLiked = rtLikes.contains(currentUserId);
-
-                return Row(
-                  children: [
-                    GestureDetector(
-                      onTap: widget.onLikePressed,
-                      child: Icon(
-                        isLiked
-                            ? Icons.favorite
-                            : Icons.favorite_border_rounded,
-                        color: isLiked ? Colors.redAccent : Colors.black,
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: widget.onCommentPressed,
-                      child: const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        color: Colors.black,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: () => _onSharePressed(context),
-                      child: const Icon(
-                        Icons.send_rounded,
-                        color: Colors.black,
-                        size: 24,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // --- CAPTION & LIKES ---
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                StreamBuilder<DocumentSnapshot>(
-                  stream:
-                      FirebaseFirestore.instance
-                          .collection('posts')
-                          .doc(widget.postSnapshot.id)
-                          .snapshots(),
-                  builder: (context, snapshot) {
-                    final likesData =
-                        snapshot.hasData
-                            ? snapshot.data!.data() as Map<String, dynamic>
-                            : postData;
-                    final rtLikes = likesData['likes'] ?? [];
-                    if (rtLikes.isEmpty) return const SizedBox.shrink();
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6.0),
-                      child: Text(
-                        "${rtLikes.length} likes",
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                if (caption.isNotEmpty)
-                  RichText(
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    text: TextSpan(
-                      style: GoogleFonts.poppins(
-                        color: brandBlack,
-                        fontSize: 13,
-                        height: 1.3,
-                      ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextSpan(
-                          text: "${authorData['displayName']} ",
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        Text(
+                          authorData['displayName'],
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: brandBlack,
+                          ),
                         ),
-                        TextSpan(text: caption),
+                        if (musicTitle != null)
+                          GestureDetector(
+                            onTap: () => _toggleMusic(musicPreviewUrl),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _isPlayingMusic
+                                      ? Icons.graphic_eq
+                                      : Icons.music_note,
+                                  size: 12,
+                                  color:
+                                      _isPlayingMusic
+                                          ? Colors.deepPurple
+                                          : Colors.grey[700],
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    "$musicTitle • $musicArtist",
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color:
+                                          _isPlayingMusic
+                                              ? Colors.deepPurple
+                                              : Colors.grey[700],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (authorData['username'].isNotEmpty)
+                          Text(
+                            '@${authorData['username']}',
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
                       ],
                     ),
                   ),
+                  if (isAuthor)
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'edit') widget.onEditPressed();
+                        if (value == 'delete') widget.onDeletePressed();
+                      },
+                      icon: const Icon(Icons.more_horiz, color: Colors.black54),
+                      itemBuilder:
+                          (BuildContext context) => <PopupMenuEntry<String>>[
+                            const PopupMenuItem<String>(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, color: Colors.black54),
+                                  SizedBox(width: 8),
+                                  Text('Edit'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                    ),
+                ],
+              ),
+            ),
 
-                const SizedBox(height: 4),
-                Text(
-                  timestamp != null ? timeago_format(timestamp) : '',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
+            // --- MEDIA CONTENT ---
+            if (postType == 'video')
+              GestureDetector(
+                onTap: () {
+                  if (mediaUrls.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => FullScreenVideoPlayer(
+                              videoUrl: mediaUrls.first,
+                            ),
+                      ),
+                    );
+                  }
+                },
+                onDoubleTap: _handleDoubleTapLike,
+                child: Hero(
+                  tag: 'post-${widget.postSnapshot.id}',
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: getOptimizedCloudinaryUrl(
+                            originalThumbnailUrl ?? '',
+                          ),
+                          fit: BoxFit.cover,
+                          placeholder:
+                              (context, url) =>
+                                  Container(color: Colors.grey[200]),
+                          errorWidget:
+                              (context, url, error) =>
+                                  Container(color: Colors.grey[100]),
+                        ),
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                        _buildAudioControl(musicPreviewUrl),
+                        _buildPowerOverlay(),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
-              ],
+              )
+            else if (mediaUrls.isNotEmpty)
+              Column(
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        PageView.builder(
+                          itemCount: mediaUrls.length,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentImageIndex = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            return GestureDetector(
+                              onDoubleTap: _handleDoubleTapLike,
+                              child: InteractiveViewer(
+                                clipBehavior: Clip.none,
+                                minScale: 1.0,
+                                maxScale: 4.0,
+                                child: CachedNetworkImage(
+                                  imageUrl: getOptimizedCloudinaryUrl(
+                                    mediaUrls[index],
+                                  ),
+                                  fit: BoxFit.cover,
+                                  memCacheWidth: 1080,
+                                  fadeInDuration: const Duration(
+                                    milliseconds: 300,
+                                  ),
+                                  placeholder:
+                                      (context, url) =>
+                                          Container(color: Colors.grey[100]),
+                                  errorWidget:
+                                      (context, url, error) =>
+                                          const Icon(Icons.error),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildAudioControl(musicPreviewUrl),
+                        _buildPowerOverlay(),
+                      ],
+                    ),
+                  ),
+                  if (mediaUrls.length > 1)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(mediaUrls.length, (index) {
+                          return Container(
+                            width: 6.0,
+                            height: 6.0,
+                            margin: const EdgeInsets.symmetric(horizontal: 3.0),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  _currentImageIndex == index
+                                      ? Colors.blue
+                                      : Colors.grey.withOpacity(0.4),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                ],
+              ),
+
+            // --- ACTIONS BAR ---
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 12.0,
+              ),
+              child: StreamBuilder<DocumentSnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .doc(widget.postSnapshot.id)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  final likesData =
+                      snapshot.hasData
+                          ? snapshot.data!.data() as Map<String, dynamic>
+                          : postData;
+                  final rtLikes = likesData['likes'] ?? [];
+                  final bool isLiked = rtLikes.contains(currentUserId);
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          // LIKE (Power Bolt)
+                          GestureDetector(
+                            onTap: widget.onLikePressed,
+                            child: ScaleTransition(
+                              scale: _likeScaleAnimation,
+                              child: Icon(
+                                isLiked
+                                    ? Icons.bolt_rounded
+                                    : Icons.bolt_outlined,
+                                color:
+                                    isLiked
+                                        ? Colors.amber[700]
+                                        : Colors.black87,
+                                size: 32,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 18),
+
+                          // COMMENT
+                          GestureDetector(
+                            onTap: widget.onCommentPressed,
+                            child: const Icon(
+                              Icons.mode_comment_outlined,
+                              color: Colors.black87,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 18),
+
+                          // SHARE
+                          GestureDetector(
+                            onTap: () => _onSharePressed(context),
+                            child: const Icon(
+                              Icons.near_me_outlined,
+                              color: Colors.black87,
+                              size: 28,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+
+            // --- CAPTION & LIKES COUNT ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  StreamBuilder<DocumentSnapshot>(
+                    stream:
+                        FirebaseFirestore.instance
+                            .collection('posts')
+                            .doc(widget.postSnapshot.id)
+                            .snapshots(),
+                    builder: (context, snapshot) {
+                      final likesData =
+                          snapshot.hasData
+                              ? snapshot.data!.data() as Map<String, dynamic>
+                              : postData;
+                      final rtLikes = likesData['likes'] ?? [];
+                      final bool isLiked = rtLikes.contains(currentUserId);
+                      final int count = rtLikes.length;
+
+                      if (count == 0) return const SizedBox.shrink();
+
+                      Widget likeTextWidget;
+                      if (isLiked) {
+                        if (count == 1) {
+                          likeTextWidget = RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.poppins(
+                                color: Colors.black,
+                                fontSize: 14,
+                              ),
+                              children: [
+                                const TextSpan(text: "Liked by "),
+                                TextSpan(
+                                  text: "you",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          likeTextWidget = RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.poppins(
+                                color: Colors.black,
+                                fontSize: 14,
+                              ),
+                              children: [
+                                const TextSpan(text: "Liked by "),
+                                TextSpan(
+                                  text: "you",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const TextSpan(text: " and "),
+                                TextSpan(
+                                  text: "${count - 1} others",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      } else {
+                        likeTextWidget = Text(
+                          "$count ${count == 1 ? 'like' : 'likes'}",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Colors.black,
+                          ),
+                        );
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6.0),
+                        child: GestureDetector(
+                          onTap: () => _openLikesScreen(rtLikes),
+                          child: likeTextWidget,
+                        ),
+                      );
+                    },
+                  ),
+                  if (caption.isNotEmpty)
+                    RichText(
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
+                        style: GoogleFonts.poppins(
+                          color: brandBlack,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: "${authorData['displayName']} ",
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: caption),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Text(
+                    timestamp != null ? timeago_format(timestamp) : '',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
