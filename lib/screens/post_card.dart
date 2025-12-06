@@ -11,13 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:shimmer/shimmer.dart'; // Ensure shimmer is in pubspec.yaml
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
 import 'share_post_sheet.dart';
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
@@ -34,6 +34,17 @@ class PostCard extends StatelessWidget {
     required this.onLikePressed,
     required this.onEditPressed,
   });
+
+  @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard>
+    with AutomaticKeepAliveClientMixin {
+  int _currentImageIndex = 0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   String getOptimizedCloudinaryUrl(String originalUrl) {
     if (!originalUrl.contains('res.cloudinary.com')) return originalUrl;
@@ -52,18 +63,19 @@ class PostCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SharePostSheet(postId: postSnapshot.id),
+      builder: (context) => SharePostSheet(postId: widget.postSnapshot.id),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final postData = postSnapshot.data() as Map<String, dynamic>?;
+    super.build(context);
+
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData == null) return const SizedBox.shrink();
 
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
     const Color brandBlack = Colors.black;
-    const Color brandPurple = Color(0xFF9983F3);
 
     final authorData = {
       'displayName': postData['userName'] ?? 'Unknown',
@@ -71,14 +83,24 @@ class PostCard extends StatelessWidget {
       'profilePhotoUrl': postData['userImageUrl'] ?? '',
     };
 
-    final String originalMediaUrl =
-        postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
-    final String? originalThumbnailUrl = postData['postThumbnailUrl'];
+    // --- LOGIC FOR MULTIPLE IMAGES ---
     final String postType = postData['postType'] ?? 'image';
+
+    // Get list of images. If 'postImages' doesn't exist (old posts), fallback to 'postMediaUrl' inside a list.
+    List<String> mediaUrls = [];
+    if (postData['postImages'] != null &&
+        (postData['postImages'] as List).isNotEmpty) {
+      mediaUrls = List<String>.from(postData['postImages']);
+    } else if (postData['postMediaUrl'] != null &&
+        postData['postMediaUrl'] != '') {
+      mediaUrls.add(postData['postMediaUrl']);
+    }
+
+    final String? originalThumbnailUrl = postData['postThumbnailUrl'];
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    final String heroTag = 'post-${postSnapshot.id}';
+    final String heroTag = 'post-${widget.postSnapshot.id}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 1.0),
@@ -98,7 +120,7 @@ class PostCard extends StatelessWidget {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: onProfileTapped,
+                  onTap: widget.onProfileTapped,
                   child: CircleAvatar(
                     radius: 18,
                     backgroundColor: Colors.grey.shade100,
@@ -142,111 +164,175 @@ class PostCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                // --- 3-DOT MENU FOR EDIT/DELETE ---
                 if (isAuthor)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.more_vert,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                    onPressed: onEditPressed,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') widget.onEditPressed();
+                      if (value == 'delete') widget.onDeletePressed();
+                    },
+                    icon: const Icon(Icons.more_vert, color: Colors.grey),
+                    itemBuilder:
+                        (BuildContext context) => <PopupMenuEntry<String>>[
+                          const PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit, color: Colors.black54),
+                                SizedBox(width: 8),
+                                Text('Edit'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                   ),
               ],
             ),
           ),
 
-          // --- MEDIA ---
-          if (originalMediaUrl.isNotEmpty)
+          // --- MEDIA CAROUSEL OR VIDEO ---
+          if (postType == 'video')
+            // 1. VIDEO PLAYER
             GestureDetector(
               onTap: () {
-                if (postType == 'video') {
+                if (mediaUrls.isNotEmpty) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder:
                           (_) =>
-                              FullScreenVideoPlayer(videoUrl: originalMediaUrl),
-                    ),
-                  );
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (_) => FullScreenImageViewer(
-                            imageUrl: originalMediaUrl,
-                            heroTag: heroTag,
-                          ),
+                              FullScreenVideoPlayer(videoUrl: mediaUrls.first),
                     ),
                   );
                 }
               },
               child: Hero(
                 tag: heroTag,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minHeight: 250,
-                    maxHeight: 500,
-                    minWidth: double.infinity,
-                  ),
+                child: AspectRatio(
+                  aspectRatio: 1.0,
                   child: Stack(
-                    fit: StackFit.loose,
-                    alignment: Alignment.center,
+                    fit: StackFit.expand,
                     children: [
                       CachedNetworkImage(
-                        imageUrl:
-                            postType == 'video'
-                                ? getOptimizedCloudinaryUrl(
-                                  originalThumbnailUrl ?? '',
-                                )
-                                : getOptimizedCloudinaryUrl(originalMediaUrl),
+                        imageUrl: getOptimizedCloudinaryUrl(
+                          originalThumbnailUrl ?? '',
+                        ),
                         fit: BoxFit.cover,
-                        width: double.infinity,
                         placeholder:
-                            (context, url) => Shimmer.fromColors(
-                              baseColor: Colors.grey[300]!,
-                              highlightColor: Colors.grey[100]!,
-                              child: Container(
-                                height: 300,
-                                width: double.infinity,
-                                color: Colors.grey[300],
-                              ),
-                            ),
+                            (context, url) =>
+                                Container(color: Colors.grey[200]),
                         errorWidget:
-                            (context, url, error) => Container(
-                              height: 300,
-                              color: Colors.grey.shade100,
-                              child: const Icon(
-                                Icons.error_outline,
-                                color: Colors.grey,
-                              ),
-                            ),
+                            (context, url, error) =>
+                                Container(color: Colors.grey[100]),
                       ),
-
-                      if (postType == 'video')
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow,
-                              color: Colors.white,
-                              size: 28,
-                            ),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 28,
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),
               ),
+            )
+          else if (mediaUrls.isNotEmpty)
+            // 2. IMAGE CAROUSEL
+            Column(
+              children: [
+                SizedBox(
+                  height:
+                      MediaQuery.of(context).size.width, // Square aspect ratio
+                  child: PageView.builder(
+                    itemCount: mediaUrls.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentImageIndex = index;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => FullScreenImageViewer(
+                                    imageUrl: mediaUrls[index],
+                                    heroTag:
+                                        '$heroTag-$index', // Unique tag per image
+                                  ),
+                            ),
+                          );
+                        },
+                        child: Hero(
+                          tag: '$heroTag-$index',
+                          child: CachedNetworkImage(
+                            imageUrl: getOptimizedCloudinaryUrl(
+                              mediaUrls[index],
+                            ),
+                            fit: BoxFit.cover,
+                            memCacheWidth: 1080,
+                            fadeInDuration: const Duration(milliseconds: 300),
+                            placeholder:
+                                (context, url) =>
+                                    Container(color: Colors.grey[200]),
+                            errorWidget:
+                                (context, url, error) =>
+                                    const Icon(Icons.error),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // 3. DOTS INDICATOR / BANNER
+                if (mediaUrls.length > 1)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(mediaUrls.length, (index) {
+                        return Container(
+                          width: 6.0,
+                          height: 6.0,
+                          margin: const EdgeInsets.symmetric(horizontal: 3.0),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                _currentImageIndex == index
+                                    ? Colors.blue
+                                    : Colors.grey.withOpacity(0.4),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+              ],
             ),
 
-          // --- ACTIONS ---
+          // --- ACTIONS BAR ---
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 12.0,
@@ -256,7 +342,7 @@ class PostCard extends StatelessWidget {
               stream:
                   FirebaseFirestore.instance
                       .collection('posts')
-                      .doc(postSnapshot.id)
+                      .doc(widget.postSnapshot.id)
                       .snapshots(),
               builder: (context, snapshot) {
                 final likesData =
@@ -268,9 +354,8 @@ class PostCard extends StatelessWidget {
 
                 return Row(
                   children: [
-                    // LIKE BUTTON
                     GestureDetector(
-                      onTap: onLikePressed,
+                      onTap: widget.onLikePressed,
                       child: Icon(
                         isLiked
                             ? Icons.favorite
@@ -280,10 +365,8 @@ class PostCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-
-                    // COMMENT BUTTON
                     GestureDetector(
-                      onTap: onCommentPressed,
+                      onTap: widget.onCommentPressed,
                       child: const Icon(
                         Icons.chat_bubble_outline_rounded,
                         color: Colors.black,
@@ -291,8 +374,6 @@ class PostCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-
-                    // SHARE BUTTON
                     GestureDetector(
                       onTap: () => _onSharePressed(context),
                       child: const Icon(
@@ -301,15 +382,13 @@ class PostCard extends StatelessWidget {
                         size: 24,
                       ),
                     ),
-
-                    // REMOVED: Bookmark Button
                   ],
                 );
               },
             ),
           ),
 
-          // --- LIKES & CAPTION ---
+          // --- CAPTION & LIKES ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Column(
@@ -319,7 +398,7 @@ class PostCard extends StatelessWidget {
                   stream:
                       FirebaseFirestore.instance
                           .collection('posts')
-                          .doc(postSnapshot.id)
+                          .doc(widget.postSnapshot.id)
                           .snapshots(),
                   builder: (context, snapshot) {
                     final likesData =
@@ -363,7 +442,6 @@ class PostCard extends StatelessWidget {
                   ),
 
                 const SizedBox(height: 4),
-
                 Text(
                   timestamp != null ? timeago_format(timestamp) : '',
                   style: GoogleFonts.poppins(
