@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart'; // Ensure shimmer is in pubspec.yaml
+import 'package:audioplayers/audioplayers.dart';
 
 import 'full_screen_image_viewer.dart';
 import 'full_screen_video_player.dart';
@@ -42,9 +42,17 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard>
     with AutomaticKeepAliveClientMixin {
   int _currentImageIndex = 0;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlayingMusic = false;
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
 
   String getOptimizedCloudinaryUrl(String originalUrl) {
     if (!originalUrl.contains('res.cloudinary.com')) return originalUrl;
@@ -67,6 +75,56 @@ class _PostCardState extends State<PostCard>
     );
   }
 
+  Future<void> _toggleMusicPreview(String? url) async {
+    if (url == null || url.isEmpty) return;
+
+    try {
+      if (_isPlayingMusic) {
+        await _audioPlayer.pause();
+        setState(() => _isPlayingMusic = false);
+      } else {
+        await _audioPlayer.play(UrlSource(url));
+        setState(() => _isPlayingMusic = true);
+
+        // Reset state when song finishes
+        _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted) setState(() => _isPlayingMusic = false);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error playing preview: $e");
+    }
+  }
+
+  // --- HELPER: AUDIO CONTROL BUTTON (Instagram Style) ---
+  Widget _buildAudioControl(String? previewUrl) {
+    if (previewUrl == null) return const SizedBox.shrink();
+
+    return Positioned(
+      bottom: 12,
+      right: 12,
+      child: GestureDetector(
+        onTap: () => _toggleMusicPreview(previewUrl),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(
+              0.7,
+            ), // Semi-transparent black background
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            _isPlayingMusic
+                ? Icons.volume_up_rounded
+                : Icons.volume_off_rounded,
+            color: Colors.white, // White icon for visibility
+            size: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -83,10 +141,15 @@ class _PostCardState extends State<PostCard>
       'profilePhotoUrl': postData['userImageUrl'] ?? '',
     };
 
+    // --- MUSIC DATA RETRIEVAL ---
+    final Map<String, dynamic>? musicData = postData['music'];
+    final String? musicTitle = musicData?['trackName'];
+    final String? musicArtist = musicData?['artistName'];
+    final String? musicPreviewUrl = musicData?['previewUrl'];
+
     // --- LOGIC FOR MULTIPLE IMAGES ---
     final String postType = postData['postType'] ?? 'image';
 
-    // Get list of images. If 'postImages' doesn't exist (old posts), fallback to 'postMediaUrl' inside a list.
     List<String> mediaUrls = [];
     if (postData['postImages'] != null &&
         (postData['postImages'] as List).isNotEmpty) {
@@ -153,7 +216,31 @@ class _PostCardState extends State<PostCard>
                           color: brandBlack,
                         ),
                       ),
-                      if (authorData['username'].isNotEmpty)
+
+                      // --- HEADER MUSIC TEXT ---
+                      if (musicTitle != null)
+                        GestureDetector(
+                          onTap: () => _toggleMusicPreview(musicPreviewUrl),
+                          child: Row(
+                            children: [
+                              // Visual indicator only, no icon here to keep it clean
+                              Flexible(
+                                child: Text(
+                                  "$musicTitle • $musicArtist",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color:
+                                        Colors
+                                            .black87, // Black text for visibility
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (authorData['username'].isNotEmpty)
                         Text(
                           '@${authorData['username']}',
                           style: GoogleFonts.poppins(
@@ -164,7 +251,7 @@ class _PostCardState extends State<PostCard>
                     ],
                   ),
                 ),
-                // --- 3-DOT MENU FOR EDIT/DELETE ---
+                // --- 3-DOT MENU ---
                 if (isAuthor)
                   PopupMenuButton<String>(
                     onSelected: (value) {
@@ -252,6 +339,8 @@ class _PostCardState extends State<PostCard>
                           ),
                         ),
                       ),
+                      // *** AUDIO BUTTON FOR VIDEO ***
+                      _buildAudioControl(musicPreviewUrl),
                     ],
                   ),
                 ),
@@ -264,50 +353,57 @@ class _PostCardState extends State<PostCard>
                 SizedBox(
                   height:
                       MediaQuery.of(context).size.width, // Square aspect ratio
-                  child: PageView.builder(
-                    itemCount: mediaUrls.length,
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentImageIndex = index;
-                      });
-                    },
-                    itemBuilder: (context, index) {
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => FullScreenImageViewer(
-                                    imageUrl: mediaUrls[index],
-                                    heroTag:
-                                        '$heroTag-$index', // Unique tag per image
-                                  ),
+                  child: Stack(
+                    children: [
+                      PageView.builder(
+                        itemCount: mediaUrls.length,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentImageIndex = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => FullScreenImageViewer(
+                                        imageUrl: mediaUrls[index],
+                                        heroTag: '$heroTag-$index',
+                                      ),
+                                ),
+                              );
+                            },
+                            child: Hero(
+                              tag: '$heroTag-$index',
+                              child: CachedNetworkImage(
+                                imageUrl: getOptimizedCloudinaryUrl(
+                                  mediaUrls[index],
+                                ),
+                                fit: BoxFit.cover,
+                                memCacheWidth: 1080,
+                                fadeInDuration: const Duration(
+                                  milliseconds: 300,
+                                ),
+                                placeholder:
+                                    (context, url) =>
+                                        Container(color: Colors.grey[200]),
+                                errorWidget:
+                                    (context, url, error) =>
+                                        const Icon(Icons.error),
+                              ),
                             ),
                           );
                         },
-                        child: Hero(
-                          tag: '$heroTag-$index',
-                          child: CachedNetworkImage(
-                            imageUrl: getOptimizedCloudinaryUrl(
-                              mediaUrls[index],
-                            ),
-                            fit: BoxFit.cover,
-                            memCacheWidth: 1080,
-                            fadeInDuration: const Duration(milliseconds: 300),
-                            placeholder:
-                                (context, url) =>
-                                    Container(color: Colors.grey[200]),
-                            errorWidget:
-                                (context, url, error) =>
-                                    const Icon(Icons.error),
-                          ),
-                        ),
-                      );
-                    },
+                      ),
+                      // *** AUDIO BUTTON FOR IMAGE ***
+                      _buildAudioControl(musicPreviewUrl),
+                    ],
                   ),
                 ),
-                // 3. DOTS INDICATOR / BANNER
+                // 3. DOTS INDICATOR
                 if (mediaUrls.length > 1)
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),

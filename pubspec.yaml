@@ -93,6 +93,8 @@ dependencies:
   emoji_picker_flutter: ^2.2.0
   email_otp: ^2.1.0
   pinput: ^4.0.0
+  audioplayers: ^6.0.0 # Add this for playing music
+  just_audio: ^0.9.36
 dev_dependencies:
   flutter_test:
     sdk: flutter
