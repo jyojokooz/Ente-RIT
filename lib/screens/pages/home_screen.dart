@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Ente RIT Text
           Text(
-            'Ente RIT',
+            'Ente RIT ✎ᝰ.',
             style: GoogleFonts.poppins(
               fontSize: 24,
               fontWeight: FontWeight.bold,

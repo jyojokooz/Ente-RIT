@@ -13,13 +13,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:visibility_detector/visibility_detector.dart'; // REQUIRED PACKAGE
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'full_screen_video_player.dart';
 import 'share_post_sheet.dart';
 import 'likes_list_screen.dart';
 
-// --- ROBUST GLOBAL AUDIO HANDLER ---
+// --- GLOBAL AUDIO HANDLER ---
 class GlobalAudioHandler {
   static final AudioPlayer _player = AudioPlayer();
   static String? _currentPostId;
@@ -36,7 +36,6 @@ class GlobalAudioHandler {
   ) async {
     try {
       if (_currentPostId == postId) {
-        // Toggle same song
         if (_player.state == PlayerState.playing) {
           await _player.pause();
           updateUi(false);
@@ -45,17 +44,14 @@ class GlobalAudioHandler {
           updateUi(true);
         }
       } else {
-        // Stop old song
         await _player.stop();
         if (_currentUiUpdater != null) _currentUiUpdater!(false);
 
-        // Play new song
         _currentPostId = postId;
         _currentUiUpdater = updateUi;
         await _player.play(UrlSource(url));
         updateUi(true);
 
-        // Auto-reset when finished
         _player.onPlayerComplete.listen((_) {
           if (_currentPostId == postId) {
             updateUi(false);
@@ -69,7 +65,6 @@ class GlobalAudioHandler {
     }
   }
 
-  // Called by VisibilityDetector
   static void stopIfPlaying(String postId) async {
     if (_currentPostId == postId) {
       await _player.stop();
@@ -106,68 +101,98 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   int _currentImageIndex = 0;
   bool _isPlayingMusic = false;
 
-  // Animation State
-  bool _isPowerAnimating = false;
-  AnimationController? _likeController;
-  late Animation<double> _likeScaleAnimation;
-  Timer? _animationTimer;
+  // --- ANIMATION CONTROLLERS ---
+  AnimationController? _buttonController; // Small button bounce
+  late Animation<double> _buttonScale;
+
+  AnimationController? _overlayController; // Big heart pop
+  late Animation<double> _overlayScale;
+  late Animation<double> _overlayOpacity;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize Animation Controller
-    _likeController = AnimationController(
+    // 1. Small Button Bounce Animation
+    _buttonController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 150), // Fast bounce
+    );
+    _buttonScale = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _buttonController!, curve: Curves.easeOut),
     );
 
-    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _likeController!, curve: Curves.easeInOut),
+    // 2. Big Heart Overlay Animation (Smooth Pop & Fade)
+    _overlayController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800), // Longer for smoothness
+    );
+
+    // Scale: Elastic pop effect
+    _overlayScale = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _overlayController!,
+        curve: const Interval(
+          0.0,
+          0.5,
+          curve: Curves.elasticOut,
+        ), // First half is pop
+      ),
+    );
+
+    // Opacity: Stays visible then fades out smoothly
+    _overlayOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _overlayController!,
+        curve: const Interval(
+          0.5,
+          1.0,
+          curve: Curves.easeOut,
+        ), // Second half is fade
+      ),
     );
   }
 
   @override
+  void deactivate() {
+    if (_isPlayingMusic) {
+      GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+      _isPlayingMusic = false;
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
-    // Backup stop in case VisibilityDetector misses it (rare)
     if (_isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
     }
-
-    _likeController?.dispose();
-    _animationTimer?.cancel();
+    _buttonController?.dispose();
+    _overlayController?.dispose();
     super.dispose();
   }
 
-  // --- VISIBILITY LOGIC (STOPS MUSIC ON SCROLL) ---
+  // --- VISIBILITY LOGIC ---
   void _onVisibilityChanged(VisibilityInfo info) {
-    if (info.visibleFraction == 0) {
-      // Post is completely off screen -> Stop Music
-      if (_isPlayingMusic) {
-        GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
-        if (mounted) setState(() => _isPlayingMusic = false);
-      }
+    if (info.visibleFraction == 0 && _isPlayingMusic) {
+      GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+      if (mounted) setState(() => _isPlayingMusic = false);
     }
   }
 
   // --- AUDIO LOGIC ---
   void _toggleMusic(String? url) {
     if (url == null || url.isEmpty) return;
-
     GlobalAudioHandler.playOrPause(widget.postSnapshot.id, url, (isPlaying) {
-      if (mounted) {
-        setState(() {
-          _isPlayingMusic = isPlaying;
-        });
-      }
+      if (mounted) setState(() => _isPlayingMusic = isPlaying);
     });
   }
 
-  // --- LIKE LOGIC ---
+  // --- LIKE LOGIC (DOUBLE TAP) ---
   void _handleDoubleTapLike() {
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
-    // 1. Database: Add Like (never remove)
+    // 1. Database: Add Like (Never remove on double tap)
     FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postSnapshot.id)
@@ -175,24 +200,25 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           'likes': FieldValue.arrayUnion([currentUserId]),
         });
 
-    // 2. Button Bounce Animation
-    if (_likeController != null) {
-      _likeController!.forward().then((_) => _likeController!.reverse());
+    // 2. Animate Small Button
+    if (_buttonController != null) {
+      _buttonController!.forward().then((_) => _buttonController!.reverse());
     }
 
-    // 3. Overlay Animation (handle rapid taps)
-    _animationTimer?.cancel();
-    setState(() {
-      _isPowerAnimating = true;
-    });
+    // 3. Animate Big Overlay (Reset then Play for spam-tapping)
+    if (_overlayController != null) {
+      _overlayController!.reset();
+      _overlayController!.forward();
+    }
+  }
 
-    _animationTimer = Timer(const Duration(milliseconds: 1000), () {
-      if (mounted) {
-        setState(() {
-          _isPowerAnimating = false;
-        });
-      }
-    });
+  // --- LIKE LOGIC (BUTTON PRESS) ---
+  void _triggerLikeButtonPress() {
+    widget.onLikePressed(); // This handles the toggle logic
+    // Just bounce the button
+    if (_buttonController != null) {
+      _buttonController!.forward().then((_) => _buttonController!.reverse());
+    }
   }
 
   void _openLikesScreen(List<dynamic> likes) {
@@ -254,29 +280,25 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPowerOverlay() {
-    if (!_isPowerAnimating) return const SizedBox.shrink();
-
+  // --- SMOOTH HEART ANIMATION ---
+  Widget _buildLikeOverlay() {
     return Positioned.fill(
       child: Center(
-        child: TweenAnimationBuilder<double>(
-          key: ValueKey(DateTime.now()), // Restart animation on every tap
-          tween: Tween(begin: 0.0, end: 1.2),
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.elasticOut,
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Opacity(
-                opacity: value.clamp(0.0, 1.0),
+        child: AnimatedBuilder(
+          animation: _overlayController!,
+          builder: (context, child) {
+            return Opacity(
+              opacity: _overlayOpacity.value, // Fades out at end
+              child: Transform.scale(
+                scale: _overlayScale.value, // Bounces in
                 child: const Icon(
-                  Icons.bolt_rounded, // Power Symbol
+                  Icons.favorite, // Heart Icon
                   color: Colors.white,
-                  size: 110,
+                  size: 85, // Slightly smaller size as requested
                   shadows: [
                     Shadow(
                       color: Colors.black26,
-                      blurRadius: 15,
+                      blurRadius: 10,
                       offset: Offset(0, 4),
                     ),
                   ],
@@ -326,8 +348,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     return VisibilityDetector(
       key: Key('post-vis-${widget.postSnapshot.id}'),
-      onVisibilityChanged:
-          _onVisibilityChanged, // Stops music when scrolled away
+      onVisibilityChanged: _onVisibilityChanged,
       child: Container(
         margin: const EdgeInsets.only(bottom: 24.0),
         decoration: BoxDecoration(
@@ -512,7 +533,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           ),
                         ),
                         _buildAudioControl(musicPreviewUrl),
-                        _buildPowerOverlay(),
+                        _buildLikeOverlay(),
                       ],
                     ),
                   ),
@@ -561,7 +582,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           },
                         ),
                         _buildAudioControl(musicPreviewUrl),
-                        _buildPowerOverlay(),
+                        _buildLikeOverlay(),
                       ],
                     ),
                   ),
@@ -614,19 +635,16 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     children: [
                       Row(
                         children: [
-                          // LIKE (Power Bolt)
+                          // LIKE (Animated Button)
                           GestureDetector(
-                            onTap: widget.onLikePressed,
+                            onTap: _triggerLikeButtonPress,
                             child: ScaleTransition(
-                              scale: _likeScaleAnimation,
+                              scale: _buttonScale, // The bounce animation
                               child: Icon(
                                 isLiked
-                                    ? Icons.bolt_rounded
-                                    : Icons.bolt_outlined,
-                                color:
-                                    isLiked
-                                        ? Colors.amber[700]
-                                        : Colors.black87,
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                color: isLiked ? Colors.red : Colors.black87,
                                 size: 32,
                               ),
                             ),
