@@ -103,7 +103,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   // Animation State
   AnimationController? _likeController;
-  late Animation<double> _likeScaleAnimation; // FIX: This name is now used
+  late Animation<double> _likeScaleAnimation;
 
   AnimationController? _overlayController;
   late Animation<double> _overlayScale;
@@ -341,33 +341,41 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             // --- HEADER ---
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 12.0,
-                vertical: 10.0,
+                horizontal: 16.0, // Increased padding
+                vertical: 12.0,
               ),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: widget.onProfileTapped,
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.grey.shade100,
-                      backgroundImage:
-                          authorData['profilePhotoUrl'].isNotEmpty
-                              ? CachedNetworkImageProvider(
-                                authorData['profilePhotoUrl'],
-                              )
-                              : null,
+                    // --- STYLE UPDATE: Rounded Square Profile Pic ---
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(14), // Squarcle
+                        image:
+                            authorData['profilePhotoUrl'].isNotEmpty
+                                ? DecorationImage(
+                                  image: CachedNetworkImageProvider(
+                                    authorData['profilePhotoUrl'],
+                                  ),
+                                  fit: BoxFit.cover,
+                                )
+                                : null,
+                      ),
                       child:
                           authorData['profilePhotoUrl'].isEmpty
                               ? const Icon(
                                 Icons.person,
                                 color: Colors.grey,
-                                size: 20,
+                                size: 24,
                               )
                               : null,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,7 +383,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         Text(
                           authorData['displayName'],
                           style: GoogleFonts.poppins(
-                            fontSize: 15,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: brandBlack,
                           ),
@@ -415,7 +423,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           )
                         else if (authorData['username'].isNotEmpty)
                           Text(
-                            '@${authorData['username']}',
+                            // Adding simple location placeholder style
+                            // In real app, fetch location from postData['location']
+                            'New York, USA',
                             style: GoogleFonts.poppins(
                               color: Colors.grey.shade500,
                               fontSize: 12,
@@ -462,7 +472,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               ),
             ),
 
-            // --- MEDIA CONTENT ---
+            // --- MEDIA CONTENT (WITH DEEP CURVE) ---
             if (postType == 'video')
               GestureDetector(
                 onTap: () {
@@ -482,39 +492,46 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 child: Hero(
                   tag: 'post-${widget.postSnapshot.id}',
                   child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CachedNetworkImage(
-                          imageUrl: getOptimizedCloudinaryUrl(
-                            originalThumbnailUrl ?? '',
-                          ),
-                          fit: BoxFit.cover,
-                          placeholder:
-                              (context, url) =>
-                                  Container(color: Colors.grey[200]),
-                          errorWidget:
-                              (context, url, error) =>
-                                  Container(color: Colors.grey[100]),
-                        ),
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              shape: BoxShape.circle,
+                    aspectRatio: 1.0, // 4:5 is cleaner for vertical, 1.0 square
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                      child: ClipRRect(
+                        // --- STYLE UPDATE: Deep Curve for Post Image ---
+                        borderRadius: BorderRadius.circular(30),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CachedNetworkImage(
+                              imageUrl: getOptimizedCloudinaryUrl(
+                                originalThumbnailUrl ?? '',
+                              ),
+                              fit: BoxFit.cover,
+                              placeholder:
+                                  (context, url) =>
+                                      Container(color: Colors.grey[200]),
+                              errorWidget:
+                                  (context, url, error) =>
+                                      Container(color: Colors.grey[100]),
                             ),
-                            child: const Icon(
-                              Icons.play_arrow,
-                              color: Colors.white,
-                              size: 28,
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
                             ),
-                          ),
+                            _buildAudioControl(musicPreviewUrl),
+                            _buildLikeOverlay(),
+                          ],
                         ),
-                        _buildAudioControl(musicPreviewUrl),
-                        _buildLikeOverlay(),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -523,47 +540,50 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               Column(
                 children: [
                   SizedBox(
-                    height: MediaQuery.of(context).size.width,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        PageView.builder(
-                          itemCount: mediaUrls.length,
-                          onPageChanged: (index) {
-                            setState(() {
-                              _currentImageIndex = index;
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            return GestureDetector(
-                              onDoubleTap: _handleDoubleTapLike,
-                              child: InteractiveViewer(
-                                clipBehavior: Clip.none,
-                                minScale: 1.0,
-                                maxScale: 4.0,
-                                child: CachedNetworkImage(
-                                  imageUrl: getOptimizedCloudinaryUrl(
-                                    mediaUrls[index],
+                    height: MediaQuery.of(context).size.width, // Square
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                      child: ClipRRect(
+                        // --- STYLE UPDATE: Deep Curve for Post Image ---
+                        borderRadius: BorderRadius.circular(30),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            PageView.builder(
+                              itemCount: mediaUrls.length,
+                              onPageChanged: (index) {
+                                setState(() {
+                                  _currentImageIndex = index;
+                                });
+                              },
+                              itemBuilder: (context, index) {
+                                return GestureDetector(
+                                  onDoubleTap: _handleDoubleTapLike,
+                                  child: CachedNetworkImage(
+                                    imageUrl: getOptimizedCloudinaryUrl(
+                                      mediaUrls[index],
+                                    ),
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    memCacheWidth: 1080,
+                                    fadeInDuration: const Duration(
+                                      milliseconds: 300,
+                                    ),
+                                    placeholder:
+                                        (context, url) =>
+                                            Container(color: Colors.grey[100]),
+                                    errorWidget:
+                                        (context, url, error) =>
+                                            const Icon(Icons.error),
                                   ),
-                                  fit: BoxFit.cover,
-                                  memCacheWidth: 1080,
-                                  fadeInDuration: const Duration(
-                                    milliseconds: 300,
-                                  ),
-                                  placeholder:
-                                      (context, url) =>
-                                          Container(color: Colors.grey[100]),
-                                  errorWidget:
-                                      (context, url, error) =>
-                                          const Icon(Icons.error),
-                                ),
-                              ),
-                            );
-                          },
+                                );
+                              },
+                            ),
+                            _buildAudioControl(musicPreviewUrl),
+                            _buildLikeOverlay(),
+                          ],
                         ),
-                        _buildAudioControl(musicPreviewUrl),
-                        _buildLikeOverlay(),
-                      ],
+                      ),
                     ),
                   ),
                   if (mediaUrls.length > 1)
@@ -615,17 +635,17 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     children: [
                       Row(
                         children: [
+                          const SizedBox(width: 8),
                           GestureDetector(
                             onTap: _triggerLikeButtonPress,
                             child: ScaleTransition(
-                              // FIX: Use the correct animation variable
                               scale: _likeScaleAnimation,
                               child: Icon(
                                 isLiked
                                     ? Icons.favorite
                                     : Icons.favorite_border,
                                 color: isLiked ? Colors.red : Colors.black87,
-                                size: 32,
+                                size: 28,
                               ),
                             ),
                           ),
@@ -635,7 +655,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             child: const Icon(
                               Icons.mode_comment_outlined,
                               color: Colors.black87,
-                              size: 28,
+                              size: 26,
                             ),
                           ),
                           const SizedBox(width: 18),
@@ -644,7 +664,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             child: const Icon(
                               Icons.near_me_outlined,
                               color: Colors.black87,
-                              size: 28,
+                              size: 26,
                             ),
                           ),
                         ],
@@ -657,7 +677,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
             // --- CAPTION & LIKES COUNT ---
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -765,9 +785,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     ),
                   const SizedBox(height: 6),
                   Text(
-                    timestamp != null
-                        ? formatTimeAgo(timestamp)
-                        : '', // FIX: Use the corrected function name
+                    timestamp != null ? formatTimeAgo(timestamp) : '',
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       color: Colors.grey.shade500,
@@ -783,7 +801,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  // FIX: Renamed function to lowerCamelCase
   String formatTimeAgo(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inDays > 7) return DateFormat('MMM d').format(date);
