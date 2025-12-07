@@ -35,13 +35,35 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
+  Route _createSmoothRoute(Widget page) {
+    return PageRouteBuilder(
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        var fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
+        );
+        var scaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
+          CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
+        );
+        return FadeTransition(
+          opacity: fadeAnimation,
+          child: ScaleTransition(
+            scale: scaleAnimation,
+            child: child,
+          ),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 250),
+      reverseTransitionDuration: const Duration(milliseconds: 200),
+    );
+  }
+
   void _editPost(String postId, String currentCaption) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) =>
-                EditPostScreen(postId: postId, initialCaption: currentCaption),
+        builder: (context) =>
+            EditPostScreen(postId: postId, initialCaption: currentCaption),
       ),
     );
   }
@@ -80,10 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (didRequestDelete == true) {
       try {
-        await FirebaseFirestore.instance
-            .collection('posts')
-            .doc(postId)
-            .delete();
+        await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
         if (mounted)
           scaffoldMessenger.showSnackBar(
             const SnackBar(
@@ -100,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ... (toggleLike, onComment, onProfile methods remain unchanged from previous versions) ...
+  // --- UPDATED _toggleLike FUNCTION ---
   Future<void> _toggleLike(
     String postId,
     List<dynamic> currentLikes,
@@ -110,14 +129,40 @@ class _HomeScreenState extends State<HomeScreen> {
     final isLiked = currentLikes.contains(user.uid);
 
     if (isLiked) {
+      // User is unliking
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
     } else {
+      // User is liking
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
-      // Logic for notification would go here
+
+      // --- CREATE NOTIFICATION LOGIC ---
+      // Don't send a notification if you like your own post
+      if (postAuthorId != user.uid) {
+        // Get current user's details to show in the notification
+        final currentUserDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        final currentUserData = currentUserDoc.data() ?? {};
+
+        // Create the notification document
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': postAuthorId, // The recipient of the notification
+          'title': 'New Like',
+          'body': '${currentUserData['displayName'] ?? 'Someone'} liked your post.',
+          'type': 'like',
+          'relatedDocId': postId, // Link to the post
+          'triggeringUserId': user.uid,
+          'triggeringUserName': currentUserData['displayName'] ?? 'Someone',
+          'triggeringUserAvatarUrl': currentUserData['profilePhotoUrl'] ?? '',
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
     }
   }
 
@@ -231,7 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       },
                       childCount: posts.length,
-                      addAutomaticKeepAlives: true,
                     ),
                   );
                 },
@@ -251,9 +295,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Ente RIT Text
           Text(
-            'Ente RIT ✎ᝰ.',
+            'Ente RIT',
             style: GoogleFonts.poppins(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -266,13 +309,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               NotificationBadge(
                 child: IconButton(
-                  onPressed:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const NotificationsScreen(),
-                        ),
-                      ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      _createSmoothRoute(const NotificationsScreen()),
+                    );
+                  },
                   icon: const Icon(
                     Icons.favorite_border,
                     color: Colors.black,
@@ -282,13 +324,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ChatListScreen(),
-                      ),
-                    ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    _createSmoothRoute(const ChatListScreen()),
+                  );
+                },
                 icon: const Icon(
                   Icons.chat_bubble_outline,
                   color: Colors.black,

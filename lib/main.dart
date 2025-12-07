@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// --- NEW IMPORTS FOR NOTIFICATIONS ---
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart'; // Import for debugPrint
+
 // --- Screen Imports ---
 import 'package:my_project/auth/auth_gate.dart';
 import 'package:my_project/screens/main_screen.dart';
@@ -21,10 +25,20 @@ import 'package:my_project/screens/create_username_screen.dart';
 
 import 'firebase_options.dart';
 
+// --- BACKGROUND HANDLER ---
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // FIX 2: Replaced 'print' with 'debugPrint'
+  debugPrint("Handling a background message: ${message.messageId}");
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const MyApp());
 }
@@ -58,12 +72,10 @@ class MyApp extends StatelessWidget {
           backgroundColor: Colors.grey.shade900,
           elevation: 0,
         ),
-        // --- THIS IS THE FIX ---
-        // Changed BottomAppBarTheme to BottomAppBarThemeData
+        // FIX 1: Changed 'BottomAppBarTheme' to 'BottomAppBarThemeData'
         bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.black87),
       ),
 
-      // Always start with SplashScreen
       home: const SplashScreen(),
 
       routes: {

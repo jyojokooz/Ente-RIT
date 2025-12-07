@@ -23,7 +23,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
   final _focusNode = FocusNode();
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
-  // State to track if we are replying to someone
   String? _replyToCommentId;
   String? _replyToUsername;
 
@@ -50,6 +49,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
     _focusNode.unfocus();
   }
 
+  // --- UPDATED _postComment FUNCTION ---
   Future<void> _postComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
@@ -60,16 +60,14 @@ class _CommentsScreenState extends State<CommentsScreen> {
     _commentController.clear();
     _cancelReply();
 
-    final postRef = FirebaseFirestore.instance
-        .collection('posts')
-        .doc(widget.postId);
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(widget.postId);
 
     try {
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_currentUser.uid)
-              .get();
+      // Fetch current user data for notification
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser.uid)
+          .get();
       final userData = userDoc.data() ?? {};
 
       final newCommentData = {
@@ -80,22 +78,46 @@ class _CommentsScreenState extends State<CommentsScreen> {
         'timestamp': FieldValue.serverTimestamp(),
         'isReply': isReply,
         'parentId': isReply ? parentId : null,
-        'likes': [], // Initialize with empty likes array
+        'likes': [],
       };
 
+      // Use a transaction to update post and create comment atomically
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final postSnapshot = await transaction.get(postRef);
         if (!postSnapshot.exists) return;
 
+        // Increment comment count on the post
         transaction.update(postRef, {'comments': FieldValue.increment(1)});
+        // Add the new comment
         transaction.set(postRef.collection('comments').doc(), newCommentData);
       });
+
+      // --- CREATE NOTIFICATION LOGIC ---
+      final postDoc = await postRef.get();
+      final postData = postDoc.data() ?? {};
+      final postAuthorId = postData['userId'];
+
+      // Don't notify if you comment on your own post
+      if (postAuthorId != null && postAuthorId != _currentUser.uid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': postAuthorId,
+          'title': 'New Comment',
+          'body': '${userData['displayName'] ?? 'Someone'} commented on your post.',
+          'type': 'comment',
+          'relatedDocId': widget.postId,
+          'triggeringUserId': _currentUser.uid,
+          'triggeringUserName': userData['displayName'] ?? 'Someone',
+          'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
     } catch (e) {
-      debugPrint("Error posting: $e");
+      debugPrint("Error posting comment: $e");
     }
   }
 
-  // --- NEW: TOGGLE LIKE FUNCTION ---
   Future<void> _toggleCommentLike(
     String commentId,
     List<dynamic> currentLikes,
@@ -109,12 +131,10 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final uid = _currentUser.uid;
 
     if (currentLikes.contains(uid)) {
-      // Unlike
       await commentRef.update({
         'likes': FieldValue.arrayRemove([uid]),
       });
     } else {
-      // Like
       await commentRef.update({
         'likes': FieldValue.arrayUnion([uid]),
       });
@@ -122,9 +142,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
   }
 
   Future<void> _deleteComment(String commentId) async {
-    final postRef = FirebaseFirestore.instance
-        .collection('posts')
-        .doc(widget.postId);
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(widget.postId);
     await postRef.collection('comments').doc(commentId).delete();
     await postRef.update({'comments': FieldValue.increment(-1)});
   }
@@ -287,7 +305,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        "Replying to ${_replyToUsername}",
+                        "Replying to $_replyToUsername",
                         style: GoogleFonts.poppins(
                           color: Colors.grey[600],
                           fontSize: 12,
@@ -333,7 +351,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         decoration: InputDecoration(
                           hintText:
                               _replyToUsername != null
-                                  ? "Reply to ${_replyToUsername}..."
+                                  ? "Reply to $_replyToUsername..."
                                   : "Add a comment...",
                           hintStyle: GoogleFonts.poppins(color: Colors.grey),
                           border: InputBorder.none,
@@ -367,7 +385,7 @@ class _CommentRow extends StatelessWidget {
   final String currentUserId;
   final VoidCallback onReply;
   final VoidCallback onDelete;
-  final VoidCallback onLike; // New Callback
+  final VoidCallback onLike;
   final bool isSmall;
 
   const _CommentRow({
@@ -375,7 +393,7 @@ class _CommentRow extends StatelessWidget {
     required this.currentUserId,
     required this.onReply,
     required this.onDelete,
-    required this.onLike, // New Callback
+    required this.onLike,
     this.isSmall = false,
   });
 
@@ -389,7 +407,6 @@ class _CommentRow extends StatelessWidget {
             ? timeago.format(timestamp, locale: 'en_short')
             : 'now';
 
-    // --- Like Logic ---
     final List likes = data['likes'] ?? [];
     final bool isLiked = likes.contains(currentUserId);
     final int likeCount = likes.length;
@@ -467,7 +484,6 @@ class _CommentRow extends StatelessWidget {
               ],
             ),
           ),
-          // --- Like Button & Count ---
           Padding(
             padding: const EdgeInsets.only(top: 8.0, left: 8.0),
             child: Column(
@@ -476,7 +492,7 @@ class _CommentRow extends StatelessWidget {
                   onTap: onLike,
                   child: Icon(
                     isLiked ? Icons.favorite : Icons.favorite_border,
-                    size: 14, // Instagram style small icon
+                    size: 14,
                     color: isLiked ? Colors.red : Colors.grey,
                   ),
                 ),

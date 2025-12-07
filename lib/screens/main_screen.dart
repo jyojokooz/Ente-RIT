@@ -8,6 +8,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // --- Screen Imports ---
 import 'pages/pages.dart';
@@ -30,7 +32,6 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
-    // IndexedStack now correctly has 4 pages
     _pages = [
       const HomeScreen(),
       const ExploreScreen(),
@@ -40,11 +41,42 @@ class _MainScreenState extends State<MainScreen> {
       else
         const Center(child: Text("Error: User not found.")),
     ];
+
+    // SETUP PUSH NOTIFICATIONS
+    _setupPushNotifications();
+  }
+
+  // --- CORRECTED FUNCTION FOR firebase_messaging: 14.7.10 ---
+  Future<void> _setupPushNotifications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final messaging = FirebaseMessaging.instance;
+
+    // 1. Request Permission
+    // **SYNTAX FOR v14.7.10**
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
+
+    // 2. Get the Token
+    try {
+      String? token = await messaging.getToken();
+
+      // 3. Save Token to Firestore
+      if (token != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'fcmToken': token,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        debugPrint("FCM Token saved for user ${user.uid}: $token");
+      }
+    } catch (e) {
+      debugPrint("Error getting or saving FCM token: $e");
+    }
   }
 
   void _onTabTapped(int index) {
     if (index == 2) {
-      // Center button
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const CreatePostScreen()),
@@ -107,7 +139,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
 
         bottomNavigationBar: BottomAppBar(
-          height: 55, // REDUCED HEIGHT
+          height: 55,
           color: Colors.white,
           elevation: 0,
           surfaceTintColor: Colors.white,
@@ -120,7 +152,7 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 _buildInstagramIcon(Icons.home, Icons.home_outlined, 0, 0),
                 _buildInstagramIcon(Icons.search, Icons.search_outlined, 1, 1),
-                const SizedBox(width: 48),
+                const SizedBox(width: 48), // Space for FAB
                 _buildInstagramIcon(Icons.apps, Icons.apps_outlined, 2, 3),
                 _buildInstagramIcon(
                   Icons.person,

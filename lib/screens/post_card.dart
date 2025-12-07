@@ -101,11 +101,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   int _currentImageIndex = 0;
   bool _isPlayingMusic = false;
 
-  // --- ANIMATION CONTROLLERS ---
-  AnimationController? _buttonController; // Small button bounce
-  late Animation<double> _buttonScale;
+  // Animation State
+  AnimationController? _likeController;
+  late Animation<double> _likeScaleAnimation; // FIX: This name is now used
 
-  AnimationController? _overlayController; // Big heart pop
+  AnimationController? _overlayController;
   late Animation<double> _overlayScale;
   late Animation<double> _overlayOpacity;
 
@@ -113,42 +113,32 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // 1. Small Button Bounce Animation
-    _buttonController = AnimationController(
+    _likeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150), // Fast bounce
-    );
-    _buttonScale = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _buttonController!, curve: Curves.easeOut),
+      duration: const Duration(milliseconds: 150),
     );
 
-    // 2. Big Heart Overlay Animation (Smooth Pop & Fade)
+    _likeScaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.2,
+    ).animate(CurvedAnimation(parent: _likeController!, curve: Curves.easeOut));
+
     _overlayController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800), // Longer for smoothness
+      duration: const Duration(milliseconds: 800),
     );
 
-    // Scale: Elastic pop effect
     _overlayScale = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _overlayController!,
-        curve: const Interval(
-          0.0,
-          0.5,
-          curve: Curves.elasticOut,
-        ), // First half is pop
+        curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
       ),
     );
 
-    // Opacity: Stays visible then fades out smoothly
     _overlayOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _overlayController!,
-        curve: const Interval(
-          0.5,
-          1.0,
-          curve: Curves.easeOut,
-        ), // Second half is fade
+        curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
       ),
     );
   }
@@ -167,12 +157,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     if (_isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
     }
-    _buttonController?.dispose();
+    _likeController?.dispose();
     _overlayController?.dispose();
     super.dispose();
   }
 
-  // --- VISIBILITY LOGIC ---
   void _onVisibilityChanged(VisibilityInfo info) {
     if (info.visibleFraction == 0 && _isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
@@ -180,7 +169,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
-  // --- AUDIO LOGIC ---
   void _toggleMusic(String? url) {
     if (url == null || url.isEmpty) return;
     GlobalAudioHandler.playOrPause(widget.postSnapshot.id, url, (isPlaying) {
@@ -188,11 +176,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     });
   }
 
-  // --- LIKE LOGIC (DOUBLE TAP) ---
   void _handleDoubleTapLike() {
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
-    // 1. Database: Add Like (Never remove on double tap)
     FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postSnapshot.id)
@@ -200,24 +186,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           'likes': FieldValue.arrayUnion([currentUserId]),
         });
 
-    // 2. Animate Small Button
-    if (_buttonController != null) {
-      _buttonController!.forward().then((_) => _buttonController!.reverse());
+    if (_likeController != null) {
+      _likeController!.forward().then((_) => _likeController!.reverse());
     }
 
-    // 3. Animate Big Overlay (Reset then Play for spam-tapping)
     if (_overlayController != null) {
       _overlayController!.reset();
       _overlayController!.forward();
     }
   }
 
-  // --- LIKE LOGIC (BUTTON PRESS) ---
   void _triggerLikeButtonPress() {
-    widget.onLikePressed(); // This handles the toggle logic
-    // Just bounce the button
-    if (_buttonController != null) {
-      _buttonController!.forward().then((_) => _buttonController!.reverse());
+    widget.onLikePressed();
+    if (_likeController != null) {
+      _likeController!.forward().then((_) => _likeController!.reverse());
     }
   }
 
@@ -252,7 +234,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  // --- UI WIDGETS ---
   Widget _buildAudioControl(String? previewUrl) {
     if (previewUrl == null) return const SizedBox.shrink();
 
@@ -280,7 +261,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  // --- SMOOTH HEART ANIMATION ---
   Widget _buildLikeOverlay() {
     return Positioned.fill(
       child: Center(
@@ -288,13 +268,13 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           animation: _overlayController!,
           builder: (context, child) {
             return Opacity(
-              opacity: _overlayOpacity.value, // Fades out at end
+              opacity: _overlayOpacity.value,
               child: Transform.scale(
-                scale: _overlayScale.value, // Bounces in
+                scale: _overlayScale.value,
                 child: const Icon(
-                  Icons.favorite, // Heart Icon
+                  Icons.favorite,
                   color: Colors.white,
-                  size: 85, // Slightly smaller size as requested
+                  size: 85,
                   shadows: [
                     Shadow(
                       color: Colors.black26,
@@ -635,11 +615,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     children: [
                       Row(
                         children: [
-                          // LIKE (Animated Button)
                           GestureDetector(
                             onTap: _triggerLikeButtonPress,
                             child: ScaleTransition(
-                              scale: _buttonScale, // The bounce animation
+                              // FIX: Use the correct animation variable
+                              scale: _likeScaleAnimation,
                               child: Icon(
                                 isLiked
                                     ? Icons.favorite
@@ -650,8 +630,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(width: 18),
-
-                          // COMMENT
                           GestureDetector(
                             onTap: widget.onCommentPressed,
                             child: const Icon(
@@ -661,8 +639,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(width: 18),
-
-                          // SHARE
                           GestureDetector(
                             onTap: () => _onSharePressed(context),
                             child: const Icon(
@@ -789,7 +765,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     ),
                   const SizedBox(height: 6),
                   Text(
-                    timestamp != null ? timeago_format(timestamp) : '',
+                    timestamp != null
+                        ? formatTimeAgo(timestamp)
+                        : '', // FIX: Use the corrected function name
                     style: GoogleFonts.poppins(
                       fontSize: 11,
                       color: Colors.grey.shade500,
@@ -805,7 +783,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  String timeago_format(DateTime date) {
+  // FIX: Renamed function to lowerCamelCase
+  String formatTimeAgo(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inDays > 7) return DateFormat('MMM d').format(date);
     if (diff.inDays > 0) return '${diff.inDays}d ago';
