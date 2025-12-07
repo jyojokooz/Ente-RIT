@@ -14,6 +14,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import 'post_detail_screen.dart';
 import 'pages/profile_screen.dart';
+import 'chat_screen.dart'; // Import chat screen for navigation
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -34,12 +35,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final String? type = data['type'];
     final String? relatedDocId = data['relatedDocId'];
 
-    if (relatedDocId == null || relatedDocId.isEmpty) return;
+    // For chat navigation
+    final String? triggeringUserId = data['triggeringUserId'];
+    final String? triggeringUserName = data['triggeringUserName'];
+    final String? triggeringUserAvatarUrl = data['triggeringUserAvatarUrl'];
+
     if (!mounted) return;
 
     switch (type) {
       case 'like':
       case 'comment':
+        if (relatedDocId == null) return;
         final postDoc =
             await FirebaseFirestore.instance
                 .collection('posts')
@@ -58,14 +64,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
         }
         break;
+
       case 'follow':
       case 'connection_accepted':
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ProfileScreen(userId: relatedDocId),
-          ),
-        );
+        if (relatedDocId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfileScreen(userId: relatedDocId),
+            ),
+          );
+        }
+        break;
+
+      case 'message':
+        if (triggeringUserId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => ChatScreen(
+                    receiverId: triggeringUserId,
+                    receiverName: triggeringUserName ?? 'User',
+                    receiverImageUrl: triggeringUserAvatarUrl ?? '',
+                  ),
+            ),
+          );
+        }
         break;
     }
   }
@@ -133,7 +158,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-// --- UPDATED NOTIFICATION TILE ---
 class _NotificationTile extends StatelessWidget {
   final DocumentSnapshot notificationDoc;
   final VoidCallback onTap;
@@ -153,6 +177,7 @@ class _NotificationTile extends StatelessWidget {
     final String type = data['type'] ?? '';
     final String body = data['body'] ?? '...';
     final String? relatedDocId = data['relatedDocId'];
+    final bool isRead = data['isRead'] ?? false;
 
     // Get user info for avatar
     final String triggeringUserId = data['triggeringUserId'] ?? '';
@@ -161,14 +186,32 @@ class _NotificationTile extends StatelessWidget {
 
     final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
 
+    IconData? typeIcon;
+    Color? typeIconColor;
+
+    if (type == 'like') {
+      typeIcon = Icons.favorite;
+      typeIconColor = Colors.red;
+    } else if (type == 'comment') {
+      typeIcon = Icons.comment;
+      typeIconColor = Colors.blue;
+    } else if (type == 'message') {
+      typeIcon = Icons.chat_bubble;
+      typeIconColor = const Color(0xFF9983F3); // Brand purple
+    } else if (type == 'connection_accepted') {
+      typeIcon = Icons.person_add;
+      typeIconColor = Colors.green;
+    }
+
     return InkWell(
       onTap: onTap,
       child: Container(
+        color: isRead ? Colors.transparent : Colors.blue.withAlpha(10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // --- FIX 1: User Avatar with Navigation ---
+            // User Avatar with Navigation
             GestureDetector(
               onTap: () {
                 if (triggeringUserId.isNotEmpty) {
@@ -181,70 +224,99 @@ class _NotificationTile extends StatelessWidget {
                   );
                 }
               },
-              child: CircleAvatar(
-                radius: 22,
-                backgroundColor: Colors.grey.shade200,
-                // --- FIX 2: Default Avatar Logic ---
-                backgroundImage:
-                    triggeringUserAvatarUrl.isNotEmpty
-                        ? CachedNetworkImageProvider(triggeringUserAvatarUrl)
-                        : const AssetImage('assets/default_avatar.png')
-                            as ImageProvider,
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.grey.shade200,
+                    backgroundImage:
+                        triggeringUserAvatarUrl.isNotEmpty
+                            ? CachedNetworkImageProvider(
+                              triggeringUserAvatarUrl,
+                            )
+                            : const AssetImage('assets/default_avatar.png')
+                                as ImageProvider,
+                  ),
+                  if (typeIcon != null)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(typeIcon, color: typeIconColor, size: 14),
+                      ),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
 
             // Notification Text
             Expanded(
-              child: RichText(
-                text: TextSpan(
-                  style: GoogleFonts.poppins(color: Colors.black, fontSize: 14),
-                  children: [
-                    TextSpan(text: body),
-                    if (timestamp != null)
-                      TextSpan(
-                        text:
-                            ' ${timeago.format(timestamp, locale: 'en_short')}',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontSize: 14,
+                      ),
+                      children: [TextSpan(text: body)],
+                    ),
+                  ),
+                  if (timestamp != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        timeago.format(timestamp, locale: 'en_short'),
                         style: TextStyle(
                           color: Colors.grey.shade500,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 12),
 
-            // Post Thumbnail (if it exists)
-            FutureBuilder<DocumentSnapshot?>(
-              future: _getRelatedPost(type, relatedDocId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done &&
-                    snapshot.hasData &&
-                    snapshot.data!.exists) {
-                  final postData =
-                      snapshot.data!.data() as Map<String, dynamic>;
-                  final thumbnailUrl =
-                      postData['postThumbnailUrl'] ?? postData['postMediaUrl'];
+            // Post Thumbnail (if it exists and is a post notification)
+            if (type == 'like' || type == 'comment')
+              FutureBuilder<DocumentSnapshot?>(
+                future: _getRelatedPost(type, relatedDocId),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done &&
+                      snapshot.hasData &&
+                      snapshot.data!.exists) {
+                    final postData =
+                        snapshot.data!.data() as Map<String, dynamic>;
+                    final thumbnailUrl =
+                        postData['postThumbnailUrl'] ??
+                        postData['postMediaUrl'];
 
-                  if (thumbnailUrl != null) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: CachedNetworkImage(
-                        imageUrl: thumbnailUrl,
-                        width: 44,
-                        height: 44,
-                        fit: BoxFit.cover,
-                        errorWidget:
-                            (c, u, e) => Container(color: Colors.grey.shade200),
-                      ),
-                    );
+                    if (thumbnailUrl != null) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: CachedNetworkImage(
+                          imageUrl: thumbnailUrl,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorWidget:
+                              (c, u, e) =>
+                                  Container(color: Colors.grey.shade200),
+                        ),
+                      );
+                    }
                   }
-                }
-                return const SizedBox(width: 44, height: 44);
-              },
-            ),
+                  return const SizedBox(width: 44, height: 44);
+                },
+              ),
           ],
         ),
       ),

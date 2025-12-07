@@ -12,10 +12,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
-import 'package:flutter/foundation.dart'
-    as foundation; // Needed for emoji picker check
+import 'package:flutter/foundation.dart' as foundation;
 
-// Import Post Detail for navigation
 import 'post_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -44,8 +42,6 @@ class _ChatScreenState extends State<ChatScreen> {
   late final CollectionReference _messagesCollection;
 
   bool _showEmojiPicker = false;
-
-  // --- YOUR BRAND COLOR ---
   final Color _brandPurple = const Color(0xFF9983F3);
 
   @override
@@ -60,7 +56,6 @@ class _ChatScreenState extends State<ChatScreen> {
         .doc(_chatRoomId);
     _messagesCollection = chatDocRef.collection('messages');
 
-    // Mark messages as read
     chatDocRef
         .update({'unreadCounts.${_currentUser.uid}': 0})
         .catchError((e) {});
@@ -80,8 +75,8 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // --- CLEAR CHAT HISTORY ---
   Future<void> _clearChatHistory() async {
+    // ... (Existing clear chat logic remains the same)
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder:
@@ -130,6 +125,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showChatOptions() {
+    // ... (Existing options logic remains the same)
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -204,10 +200,42 @@ class _ChatScreenState extends State<ChatScreen> {
       'senderId': _currentUser.uid,
       'text': text,
       'timestamp': timestamp,
-      'type': 'text', // Standard text message
+      'type': 'text',
     });
 
     await batch.commit();
+
+    // --- ADDED: Send Notification ---
+    _sendNotification(text);
+  }
+
+  // --- NEW Helper to send notification ---
+  Future<void> _sendNotification(String messageText) async {
+    try {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.receiverId)
+              .get();
+      // Only send if user exists
+      if (userDoc.exists) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': widget.receiverId, // The person receiving the message
+          'title': 'New Message',
+          'body': '${_currentUser.displayName ?? 'Someone'}: $messageText',
+          'type': 'message', // Specific type for chat
+          'relatedDocId':
+              _currentUser.uid, // When clicked, open chat with sender
+          'triggeringUserId': _currentUser.uid,
+          'triggeringUserName': _currentUser.displayName ?? 'User',
+          'triggeringUserAvatarUrl': _currentUser.photoURL ?? '',
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint("Error sending notification: $e");
+    }
   }
 
   void _toggleEmojiPicker() {
@@ -230,6 +258,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _getFormattedDate(DateTime date) {
+    // ... (Existing date logic remains the same)
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -249,6 +278,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (Existing build method with UI remains exactly the same)
+    // To save space, I am not re-pasting the UI code here unless requested,
+    // as only the _sendMessage logic needed to change.
+    // The previous implementation of the UI was correct.
+
     // Use your Brand Purple here instead of Blue
     final Color myBubbleColor = _brandPurple;
     const Color otherBubbleColor = Color(0xFFEFEFEF);
@@ -393,7 +427,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
 
-                          // --- DECIDE WHICH BUBBLE TO SHOW ---
                           if (type == 'post')
                             _buildSharedPostBubble(msgData['postId'], isMe)
                           else
@@ -436,13 +469,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // --- SHARED POST BUBBLE (Preview) ---
+  // --- HELPER WIDGETS (Post Bubble, Text Bubble, Input Bar) ---
+  // (Copied from previous implementation to ensure file completeness)
+
   Widget _buildSharedPostBubble(String postId, bool isMe) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onTap: () {
-          // Navigate to post detail when clicked
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -461,7 +495,6 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Fetch minimal post data to show preview
               FutureBuilder<DocumentSnapshot>(
                 future:
                     FirebaseFirestore.instance
@@ -484,7 +517,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Image Preview
                       if (image != null)
                         ClipRRect(
                           borderRadius: const BorderRadius.vertical(
@@ -499,7 +531,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                 (c, u) => Container(color: Colors.grey[200]),
                           ),
                         ),
-                      // Post Label
                       Padding(
                         padding: const EdgeInsets.all(10.0),
                         child: Row(
@@ -583,7 +614,6 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
-            // Camera Icon
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -597,7 +627,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            // Text Field
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -632,7 +661,6 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            // Send Button
             GestureDetector(
               onTap: _sendMessage,
               child: Padding(
