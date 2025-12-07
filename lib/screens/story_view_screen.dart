@@ -4,7 +4,7 @@
 // ===============================
 
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Auth
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,16 +24,20 @@ class StoryViewScreen extends StatefulWidget {
   State<StoryViewScreen> createState() => _StoryViewScreenState();
 }
 
-class _StoryViewScreenState extends State<StoryViewScreen> {
+class _StoryViewScreenState extends State<StoryViewScreen>
+    with SingleTickerProviderStateMixin {
   late int _currentIndex;
   late PageController _pageController;
   final StoriesService _service = StoriesService();
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   // Timer logic
-  double _progress = 0.0;
+  double _currentAnimationValue = 0.0;
   Timer? _timer;
-  bool _isPaused = false; // To pause timer during dialogs
+  bool _isPaused = false;
+
+  // Local state for UI
+  bool _isLiked = false; // Just visual for now
 
   @override
   void initState() {
@@ -50,12 +54,18 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
   void _startTimer() {
     _timer?.cancel();
-    _progress = 0.0;
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+    _currentAnimationValue = 0.0;
+    // 5 seconds per story
+    const duration = Duration(seconds: 5);
+    const step = Duration(milliseconds: 50);
+    final totalSteps = duration.inMilliseconds / step.inMilliseconds;
+    final increment = 1.0 / totalSteps;
+
+    _timer = Timer.periodic(step, (timer) {
       if (!_isPaused) {
         setState(() {
-          _progress += 0.01;
-          if (_progress >= 1.0) {
+          _currentAnimationValue += increment;
+          if (_currentAnimationValue >= 1.0) {
             _nextStory();
           }
         });
@@ -67,6 +77,8 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     if (_currentIndex < widget.stories.length - 1) {
       setState(() {
         _currentIndex++;
+        _currentAnimationValue = 0.0;
+        _isLiked = false; // Reset like for new story
         _pageController.nextPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -80,7 +92,25 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     }
   }
 
-  // --- DELETE LOGIC ---
+  void _previousStory() {
+    if (_currentIndex > 0) {
+      setState(() {
+        _currentIndex--;
+        _currentAnimationValue = 0.0;
+        _isLiked = false;
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      });
+      _startTimer();
+    } else {
+      // Restart current story
+      setState(() => _currentAnimationValue = 0.0);
+    }
+  }
+
+  // --- DELETE LOGIC (Moved to Three-Dot Menu) ---
   Future<void> _deleteCurrentStory() async {
     setState(() => _isPaused = true); // Pause timer
 
@@ -121,6 +151,15 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     }
   }
 
+  void _onTapDown(TapDownDetails details) {
+    final width = MediaQuery.of(context).size.width;
+    if (details.globalPosition.dx < width / 3) {
+      _previousStory();
+    } else {
+      _nextStory();
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -136,94 +175,217 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
-        onTapDown: (details) {
-          final width = MediaQuery.of(context).size.width;
-          if (details.globalPosition.dx < width / 3) {
-            // Logic to go back could be added here
-          } else {
-            _nextStory();
-          }
-        },
-        // Pause on long press
+        onTapDown: _onTapDown,
         onLongPressStart: (_) => setState(() => _isPaused = true),
         onLongPressEnd: (_) => setState(() => _isPaused = false),
         child: Stack(
           children: [
+            // 1. The Image (Full Screen)
             PageView.builder(
               controller: _pageController,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.stories.length,
               itemBuilder: (context, index) {
-                return Center(
-                  child: CachedNetworkImage(
-                    imageUrl: widget.stories[index].imageUrl,
-                    fit: BoxFit.contain,
-                    placeholder:
-                        (context, url) =>
-                            const Center(child: CircularProgressIndicator()),
-                  ),
+                return CachedNetworkImage(
+                  imageUrl: widget.stories[index].imageUrl,
+                  fit:
+                      BoxFit
+                          .contain, // Keep aspect ratio, fill black bars if needed
+                  errorWidget:
+                      (c, u, e) => const Center(
+                        child: Icon(Icons.error, color: Colors.white),
+                      ),
+                  placeholder:
+                      (c, u) => const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
                 );
               },
             ),
 
-            // Progress Bar
+            // 2. Gradient Overlay (Top) for text visibility
             Positioned(
-              top: 40,
-              left: 10,
-              right: 10,
-              child: LinearProgressIndicator(
-                value: _progress,
-                backgroundColor: Colors.grey.withOpacity(0.5),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                minHeight: 2,
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 120,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                  ),
+                ),
               ),
             ),
 
-            // User Info Overlay
+            // 3. Gradient Overlay (Bottom) for input visibility
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 120,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+
+            // 4. Progress Bars (Segmented)
             Positioned(
               top: 50,
+              left: 10,
+              right: 10,
+              child: Row(
+                children: List.generate(widget.stories.length, (index) {
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: LinearProgressIndicator(
+                        value:
+                            index < _currentIndex
+                                ? 1.0
+                                : (index == _currentIndex
+                                    ? _currentAnimationValue
+                                    : 0.0),
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                        minHeight: 2.5,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+
+            // 5. Header (User Info & Menu)
+            Positioned(
+              top: 65,
               left: 16,
+              right: 16,
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 16,
                     backgroundImage: NetworkImage(currentStory.userImage),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Text(
                     currentStory.userName,
                     style: GoogleFonts.poppins(
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Text(
                     // Simple time display logic
                     "${DateTime.now().difference(currentStory.timestamp.toDate()).inHours}h",
                     style: GoogleFonts.poppins(
                       color: Colors.white70,
-                      fontSize: 12,
+                      fontSize: 13,
                     ),
+                  ),
+                  const Spacer(),
+                  // Three-dot menu
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz, color: Colors.white),
+                    color: Colors.grey[900],
+                    onSelected: (value) {
+                      if (value == 'delete') _deleteCurrentStory();
+                    },
+                    itemBuilder:
+                        (context) => [
+                          if (isMyStory)
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            )
+                          else
+                            const PopupMenuItem(
+                              value: 'report',
+                              child: Text(
+                                'Report',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                        ],
                   ),
                 ],
               ),
             ),
 
-            // --- DELETE BUTTON (Only if it's my story) ---
-            if (isMyStory)
-              Positioned(
-                bottom: 40,
-                right: 20,
-                child: IconButton(
-                  onPressed: _deleteCurrentStory,
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.white,
-                    size: 28,
+            // 6. Footer (Message & Like)
+            Positioned(
+              bottom: 20,
+              left: 16,
+              right: 16,
+              child: Row(
+                children: [
+                  // Send Message Pill
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        color: Colors.transparent,
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Send Message",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
+
+                  // Like Button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() => _isLiked = !_isLiked);
+                      // Add actual like logic here if needed
+                    },
+                    child: AnimatedScale(
+                      scale: _isLiked ? 1.2 : 1.0,
+                      duration: const Duration(milliseconds: 100),
+                      child: Icon(
+                        _isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: _isLiked ? Colors.red : Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                  // Optional: Send/Share Icon
+                  const SizedBox(width: 16),
+                  const Icon(
+                    Icons.send_outlined,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
