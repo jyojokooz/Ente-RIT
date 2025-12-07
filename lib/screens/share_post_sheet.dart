@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
 
 class SharePostSheet extends StatefulWidget {
   final String postId;
@@ -20,75 +19,106 @@ class SharePostSheet extends StatefulWidget {
 
 class _SharePostSheetState extends State<SharePostSheet> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
-  String _searchQuery = "";
-  final Set<String> _sentUsers = {}; // Track who we sent to locally
+  final TextEditingController _searchController = TextEditingController();
 
-  Future<void> _sendPostToUser(
-    String receiverId,
-    String receiverName,
-    String receiverImage,
-  ) async {
+  String _searchQuery = "";
+  final Set<String> _selectedUserIds = {}; // Track selected users
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSelection(String userId) {
     setState(() {
-      _sentUsers.add(
-        receiverId,
-      ); // Optimistic UI update (show "Sent" immediately)
+      if (_selectedUserIds.contains(userId)) {
+        _selectedUserIds.remove(userId);
+      } else {
+        _selectedUserIds.add(userId);
+      }
     });
+  }
+
+  Future<void> _sendToSelectedUsers(List<DocumentSnapshot> allUsers) async {
+    if (_selectedUserIds.isEmpty) return;
+
+    setState(() => _isSending = true);
 
     try {
-      // 1. Determine Chat Room ID
-      List<String> ids = [_currentUser.uid, receiverId];
-      ids.sort();
-      String chatRoomId = ids.join('_');
-
-      // 2. Setup Chat References
-      final chatDocRef = FirebaseFirestore.instance
-          .collection('chats')
-          .doc(chatRoomId);
-      final messagesCollection = chatDocRef.collection('messages');
       final batch = FirebaseFirestore.instance.batch();
       final timestamp = FieldValue.serverTimestamp();
 
-      // 3. Create/Update Chat Room Metadata
-      batch.set(chatDocRef, {
-        'participants': [_currentUser.uid, receiverId],
-        'participantNames': {
-          _currentUser.uid: _currentUser.displayName ?? 'Me',
-          receiverId: receiverName,
-        },
-        'participantImages': {
-          _currentUser.uid: _currentUser.photoURL ?? '',
-          receiverId: receiverImage,
-        },
-        'lastMessage': 'Sent a post',
-        'lastMessageTimestamp': timestamp,
-        'unreadCounts.${receiverId}': FieldValue.increment(1),
-      }, SetOptions(merge: true));
+      for (var userId in _selectedUserIds) {
+        // Find user data from the snapshot list to avoid extra fetches
+        final userDoc = allUsers.firstWhere((doc) => doc.id == userId);
+        final userData = userDoc.data() as Map<String, dynamic>;
 
-      // 4. Create the "Post" Message
-      final newMessageRef = messagesCollection.doc();
-      batch.set(newMessageRef, {
-        'senderId': _currentUser.uid,
-        'text': '',
-        'timestamp': timestamp,
-        'type': 'post',
-        'postId': widget.postId,
-      });
+        final receiverName = userData['displayName'] ?? 'User';
+        final receiverImage = userData['profilePhotoUrl'] ?? '';
+
+        // 1. Determine Chat Room ID
+        List<String> ids = [_currentUser.uid, userId];
+        ids.sort();
+        String chatRoomId = ids.join('_');
+
+        // 2. Chat References
+        final chatDocRef = FirebaseFirestore.instance
+            .collection('chats')
+            .doc(chatRoomId);
+        final newMessageRef = chatDocRef.collection('messages').doc();
+
+        // 3. Update Metadata
+        batch.set(chatDocRef, {
+          'participants': [_currentUser.uid, userId],
+          'participantNames': {
+            _currentUser.uid: _currentUser.displayName ?? 'Me',
+            userId: receiverName,
+          },
+          'participantImages': {
+            _currentUser.uid: _currentUser.photoURL ?? '',
+            userId: receiverImage,
+          },
+          'lastMessage': 'Sent a post',
+          'lastMessageTimestamp': timestamp,
+          'unreadCounts.$userId': FieldValue.increment(1),
+        }, SetOptions(merge: true));
+
+        // 4. Create Message
+        batch.set(newMessageRef, {
+          'senderId': _currentUser.uid,
+          'text': '',
+          'timestamp': timestamp,
+          'type': 'post',
+          'postId': widget.postId,
+        });
+      }
 
       await batch.commit();
+
+      if (mounted) {
+        Navigator.pop(context); // Close sheet
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Sent to ${_selectedUserIds.length} people"),
+            backgroundColor: const Color(0xFF4B00E0), // Blue/Purple
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _sentUsers.remove(receiverId); // Revert if failed
-        });
+        setState(() => _isSending = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Failed to send")));
+        ).showSnackBar(SnackBar(content: Text("Error sending: $e")));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Fixed height to prevent keyboard jumps
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
       decoration: const BoxDecoration(
@@ -97,74 +127,60 @@ class _SharePostSheetState extends State<SharePostSheet> {
       ),
       child: Column(
         children: [
-          // Handle Bar
-          Center(
+          // --- Header ---
+          const SizedBox(height: 16),
+          Text(
+            "share",
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: Colors.black,
+            ),
+          ),
+
+          // --- Search Bar ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
             child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
+              height: 40,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
               ),
-            ),
-          ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "Share",
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black, // Explicit Black
-              ),
-            ),
-          ),
-
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-            child: TextField(
-              style: const TextStyle(color: Colors.black), // Black Text Input
-              decoration: InputDecoration(
-                hintText: "Search",
-                hintStyle: TextStyle(color: Colors.grey[500]),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                fillColor: Colors.grey[100],
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+              child: TextField(
+                controller: _searchController,
+                style: GoogleFonts.poppins(color: Colors.black),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  hintText: "search",
+                  hintStyle: GoogleFonts.poppins(color: Colors.grey.shade500),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                onChanged:
+                    (val) => setState(() => _searchQuery = val.toLowerCase()),
               ),
-              onChanged:
-                  (val) => setState(() => _searchQuery = val.toLowerCase()),
             ),
           ),
 
-          const Divider(height: 1),
-
-          // User List
+          // --- User Grid ---
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              // Limit fetch size to improve performance
               stream:
                   FirebaseFirestore.instance
                       .collection('users')
-                      .limit(50)
+                      .limit(50) // Limit for performance
                       .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const _ShareSheetSkeleton(); // Smooth loading state
+                  return const Center(child: CircularProgressIndicator());
                 }
 
-                if (!snapshot.hasData)
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Center(child: Text("No users found"));
+                }
 
-                // Filter users locally
+                // Filter users locally based on search
                 final users =
                     snapshot.data!.docs.where((doc) {
                       if (doc.id == _currentUser.uid) return false;
@@ -177,135 +193,164 @@ class _SharePostSheetState extends State<SharePostSheet> {
                           username.contains(_searchQuery);
                     }).toList();
 
-                return ListView.builder(
-                  padding: const EdgeInsets.only(top: 8),
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final userData =
-                        users[index].data() as Map<String, dynamic>;
-                    final userId = users[index].id;
-                    final name = userData['displayName'] ?? 'User';
-                    final username = userData['username'] ?? '';
-                    final image = userData['profilePhotoUrl'] ?? '';
-                    final bool isSent = _sentUsers.contains(userId);
+                return Column(
+                  children: [
+                    Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount:
+                                  4, // 4 items per row like screenshot
+                              childAspectRatio: 0.7, // Taller for name text
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                        itemCount: users.length,
+                        itemBuilder: (context, index) {
+                          final userDoc = users[index];
+                          final userData =
+                              userDoc.data() as Map<String, dynamic>;
+                          final userId = userDoc.id;
+                          final name = userData['displayName'] ?? 'User';
+                          final image = userData['profilePhotoUrl'] ?? '';
+                          final isSelected = _selectedUserIds.contains(userId);
 
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
+                          return GestureDetector(
+                            onTap: () => _toggleSelection(userId),
+                            child: Column(
+                              children: [
+                                // Avatar Stack
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      // Squarcle Avatar
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ), // Squarcle shape
+                                          color: Colors.grey.shade200,
+                                          image:
+                                              image.isNotEmpty
+                                                  ? DecorationImage(
+                                                    image:
+                                                        CachedNetworkImageProvider(
+                                                          image,
+                                                        ),
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                  : null,
+                                        ),
+                                        child:
+                                            image.isEmpty
+                                                ? const Center(
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    color: Colors.grey,
+                                                  ),
+                                                )
+                                                : null,
+                                      ),
+
+                                      // Selection Overlay
+                                      if (isSelected)
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            color: Colors.black.withOpacity(
+                                              0.4,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFF4B00E0),
+                                              width: 3,
+                                            ), // Blue Border
+                                          ),
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.check,
+                                              color: Colors.white,
+                                              size: 30,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                // Name
+                                Text(
+                                  name,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage:
-                            image.isNotEmpty
-                                ? CachedNetworkImageProvider(image)
-                                : null,
+                    ),
+
+                    // --- Send Button (Only shows at bottom) ---
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        border: Border(top: BorderSide(color: Colors.black12)),
+                      ),
+                      child: ElevatedButton(
+                        onPressed:
+                            (_selectedUserIds.isEmpty || _isSending)
+                                ? null
+                                : () =>
+                                    _sendToSelectedUsers(snapshot.data!.docs),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(
+                            0xFF3000F8,
+                          ), // Bright Blue/Purple from screenshot
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
                         child:
-                            image.isEmpty
-                                ? const Icon(Icons.person, color: Colors.grey)
-                                : null,
+                            _isSending
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  "Send${_selectedUserIds.isNotEmpty ? ' (${_selectedUserIds.length})' : ''}",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                       ),
-                      title: Text(
-                        name,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black, // Explicit Black
-                          fontSize: 14,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '@$username',
-                        style: GoogleFonts.poppins(
-                          color: Colors.grey[600], // Explicit Grey
-                          fontSize: 12,
-                        ),
-                      ),
-                      trailing: SizedBox(
-                        height: 32,
-                        child: ElevatedButton(
-                          onPressed:
-                              isSent
-                                  ? null
-                                  : () => _sendPostToUser(userId, name, image),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                isSent ? Colors.white : Colors.black,
-                            foregroundColor:
-                                isSent ? Colors.black : Colors.white,
-                            disabledBackgroundColor: Colors.white,
-                            disabledForegroundColor: Colors.grey,
-                            side:
-                                isSent
-                                    ? BorderSide(color: Colors.grey.shade300)
-                                    : null,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                          child: Text(
-                            isSent ? "Sent" : "Send",
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                    ),
+                  ],
                 );
               },
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-// --- SKELETON LOADER TO PREVENT JANK ---
-class _ShareSheetSkeleton extends StatelessWidget {
-  const _ShareSheetSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Shimmer.fromColors(
-            baseColor: Colors.grey[300]!,
-            highlightColor: Colors.grey[100]!,
-            child: Row(
-              children: [
-                const CircleAvatar(radius: 24, backgroundColor: Colors.white),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(width: 100, height: 12, color: Colors.white),
-                    const SizedBox(height: 6),
-                    Container(width: 60, height: 10, color: Colors.white),
-                  ],
-                ),
-                const Spacer(),
-                Container(
-                  width: 60,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
