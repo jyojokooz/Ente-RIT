@@ -5,7 +5,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Needed for PlatformException
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,7 +20,6 @@ class StoriesBar extends StatefulWidget {
   State<StoriesBar> createState() => _StoriesBarState();
 }
 
-// Added SingleTickerProviderStateMixin for Animation
 class _StoriesBarState extends State<StoriesBar>
     with SingleTickerProviderStateMixin {
   final StoriesService _service = StoriesService();
@@ -29,14 +28,13 @@ class _StoriesBarState extends State<StoriesBar>
   bool _isUploading = false;
   bool _isPickerActive = false;
 
-  // Made nullable (?) to prevent LateInitializationError during Hot Reload
   AnimationController? _rotationController;
 
   @override
   void initState() {
     super.initState();
     _rotationController = AnimationController(
-      duration: const Duration(seconds: 1), // Speed of spin
+      duration: const Duration(seconds: 1),
       vsync: this,
     );
   }
@@ -48,7 +46,6 @@ class _StoriesBarState extends State<StoriesBar>
   }
 
   Future<void> _addStory() async {
-    // Prevent double taps
     if (_isPickerActive || _isUploading) return;
 
     setState(() => _isPickerActive = true);
@@ -59,9 +56,8 @@ class _StoriesBarState extends State<StoriesBar>
 
       if (image == null) return;
 
-      // Start Animation and Loading state
       setState(() => _isUploading = true);
-      _rotationController?.repeat(); // Start spinning safely
+      _rotationController?.repeat();
 
       await _service.uploadStory(image);
 
@@ -92,7 +88,7 @@ class _StoriesBarState extends State<StoriesBar>
           _isPickerActive = false;
           _isUploading = false;
         });
-        _rotationController?.stop(); // Stop spinning safely
+        _rotationController?.stop();
         _rotationController?.reset();
       }
     }
@@ -140,11 +136,10 @@ class _StoriesBarState extends State<StoriesBar>
     );
   }
 
-  // --- THE "ME" BUTTON WITH ANIMATION ---
+  // --- THE "ME" BUTTON ---
   Widget _buildMeButton(List<Story> myStories) {
     final bool hasStory = myStories.isNotEmpty;
 
-    // Instagram Gradient
     const gradient = LinearGradient(
       colors: [Color(0xFF833AB4), Color(0xFFFF2D55), Color(0xFFFFC107)],
       begin: Alignment.topLeft,
@@ -158,7 +153,6 @@ class _StoriesBarState extends State<StoriesBar>
           Stack(
             alignment: Alignment.center,
             children: [
-              // 1. The Gradient Ring (Spinning or Static)
               if (_isUploading && _rotationController != null)
                 RotationTransition(
                   turns: _rotationController!,
@@ -181,7 +175,6 @@ class _StoriesBarState extends State<StoriesBar>
                   ),
                 )
               else
-                // Grey border if no story and not uploading
                 Container(
                   width: 68,
                   height: 68,
@@ -191,7 +184,6 @@ class _StoriesBarState extends State<StoriesBar>
                   ),
                 ),
 
-              // 2. The White Spacer and Image
               GestureDetector(
                 onTap: () {
                   if (hasStory && !_isUploading && !_isPickerActive) {
@@ -206,7 +198,7 @@ class _StoriesBarState extends State<StoriesBar>
                   }
                 },
                 child: Container(
-                  width: 62, // Smaller to show border
+                  width: 62,
                   height: 62,
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -223,22 +215,26 @@ class _StoriesBarState extends State<StoriesBar>
                                 .doc(currentUser?.uid)
                                 .snapshots(),
                         builder: (context, snapshot) {
+                          ImageProvider? imageProvider;
+
                           if (snapshot.hasData && snapshot.data!.exists) {
                             final data =
                                 snapshot.data!.data() as Map<String, dynamic>;
                             final photoUrl = data['profilePhotoUrl'];
+
                             if (photoUrl != null && photoUrl.isNotEmpty) {
-                              return CachedNetworkImage(
-                                imageUrl: photoUrl,
-                                fit: BoxFit.cover,
+                              imageProvider = CachedNetworkImageProvider(
+                                photoUrl,
                               );
                             }
                           }
-                          return const Icon(
-                            Icons.person,
-                            color: Colors.grey,
-                            size: 30,
+
+                          // Default Avatar Fallback
+                          imageProvider ??= const AssetImage(
+                            'assets/default_avatar.png',
                           );
+
+                          return Image(image: imageProvider, fit: BoxFit.cover);
                         },
                       ),
                     ),
@@ -246,8 +242,6 @@ class _StoriesBarState extends State<StoriesBar>
                 ),
               ),
 
-              // 3. The Plus Icon (Only if NOT uploading)
-              // If uploading, the spinner is the ring itself
               if (!_isUploading)
                 Positioned(
                   bottom: 0,
@@ -292,6 +286,14 @@ class _StoriesBarState extends State<StoriesBar>
     final myUid = currentUser?.uid;
     final bool allSeen = stories.every((s) => s.viewers.contains(myUid));
 
+    // Determine correct image provider for friend
+    ImageProvider imageProvider;
+    if (story.userImage.isNotEmpty) {
+      imageProvider = CachedNetworkImageProvider(story.userImage);
+    } else {
+      imageProvider = const AssetImage('assets/default_avatar.png');
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -333,13 +335,7 @@ class _StoriesBarState extends State<StoriesBar>
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(17),
-                  child: CachedNetworkImage(
-                    imageUrl: story.userImage,
-                    fit: BoxFit.cover,
-                    placeholder:
-                        (c, u) => Container(color: Colors.grey.shade200),
-                    errorWidget: (c, u, e) => const Icon(Icons.person),
-                  ),
+                  child: Image(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
             ),
