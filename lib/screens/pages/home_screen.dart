@@ -3,7 +3,7 @@
 // FILE PATH: lib/screens/pages/home_screen.dart
 // ===============================
 
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 // --- Screen Imports ---
-import '../comments_screen.dart';
+import '../comments_sheet.dart'; // Ensure you have this
 import '../edit_post_screen.dart';
 import '../notifications_screen.dart';
 import '../chat_list_screen.dart';
@@ -19,6 +19,7 @@ import '../post_card.dart';
 import '../post_card_placeholder.dart';
 import 'profile_screen.dart';
 import '../../widgets/notification_badge.dart';
+import '../../widgets/stories_bar.dart'; // <--- NEW IMPORT
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -47,10 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         return FadeTransition(
           opacity: fadeAnimation,
-          child: ScaleTransition(
-            scale: scaleAnimation,
-            child: child,
-          ),
+          child: ScaleTransition(scale: scaleAnimation, child: child),
         );
       },
       transitionDuration: const Duration(milliseconds: 250),
@@ -62,8 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            EditPostScreen(postId: postId, initialCaption: currentCaption),
+        builder:
+            (context) =>
+                EditPostScreen(postId: postId, initialCaption: currentCaption),
       ),
     );
   }
@@ -102,7 +101,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (didRequestDelete == true) {
       try {
-        await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+        await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(postId)
+            .delete();
         if (mounted)
           scaffoldMessenger.showSnackBar(
             const SnackBar(
@@ -119,7 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- UPDATED _toggleLike FUNCTION ---
   Future<void> _toggleLike(
     String postId,
     List<dynamic> currentLikes,
@@ -129,33 +130,29 @@ class _HomeScreenState extends State<HomeScreen> {
     final isLiked = currentLikes.contains(user.uid);
 
     if (isLiked) {
-      // User is unliking
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
     } else {
-      // User is liking
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
 
-      // --- CREATE NOTIFICATION LOGIC ---
-      // Don't send a notification if you like your own post
       if (postAuthorId != user.uid) {
-        // Get current user's details to show in the notification
-        final currentUserDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        final currentUserDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get();
         final currentUserData = currentUserDoc.data() ?? {};
 
-        // Create the notification document
         await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId, // The recipient of the notification
+          'userId': postAuthorId,
           'title': 'New Like',
-          'body': '${currentUserData['displayName'] ?? 'Someone'} liked your post.',
+          'body':
+              '${currentUserData['displayName'] ?? 'Someone'} liked your post.',
           'type': 'like',
-          'relatedDocId': postId, // Link to the post
+          'relatedDocId': postId,
           'triggeringUserId': user.uid,
           'triggeringUserName': currentUserData['displayName'] ?? 'Someone',
           'triggeringUserAvatarUrl': currentUserData['profilePhotoUrl'] ?? '',
@@ -166,10 +163,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- CHANGED: This now opens the bottom sheet instead of navigating ---
   void _onCommentTapped(String postId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => CommentsScreen(postId: postId)),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useRootNavigator: true,
+      builder:
+          (context) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: CommentsSheet(postId: postId),
+          ),
     );
   }
 
@@ -195,8 +202,21 @@ class _HomeScreenState extends State<HomeScreen> {
             cacheExtent: 1000,
             physics: const BouncingScrollPhysics(),
             slivers: [
+              // 1. TOP APP BAR
               SliverToBoxAdapter(child: _buildTopBar()),
 
+              // 2. STORIES BAR (NEW FEATURE)
+              const SliverToBoxAdapter(child: StoriesBar()),
+
+              // 3. DIVIDER
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 8.0),
+                  child: Divider(height: 1, thickness: 0.5, color: Colors.grey),
+                ),
+              ),
+
+              // 4. POST FEED
               StreamBuilder<QuerySnapshot>(
                 stream:
                     FirebaseFirestore.instance
@@ -249,34 +269,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   final posts = snapshot.data!.docs;
 
                   return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final postSnapshot = posts[index];
-                        final postData =
-                            postSnapshot.data() as Map<String, dynamic>;
-                        final postAuthorId = postData['userId'] ?? '';
-                        final currentLikes = postData['likes'] ?? [];
-                        final currentCaption = postData['caption'] ?? '';
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final postSnapshot = posts[index];
+                      final postData =
+                          postSnapshot.data() as Map<String, dynamic>;
+                      final postAuthorId = postData['userId'] ?? '';
+                      final currentLikes = postData['likes'] ?? [];
+                      final currentCaption = postData['caption'] ?? '';
 
-                        return PostCard(
-                          key: ValueKey(postSnapshot.id),
-                          postSnapshot: postSnapshot,
-                          onCommentPressed:
-                              () => _onCommentTapped(postSnapshot.id),
-                          onDeletePressed: () => _deletePost(postSnapshot.id),
-                          onProfileTapped: () => _onProfileTapped(postAuthorId),
-                          onLikePressed:
-                              () => _toggleLike(
-                                postSnapshot.id,
-                                currentLikes,
-                                postAuthorId,
-                              ),
-                          onEditPressed:
-                              () => _editPost(postSnapshot.id, currentCaption),
-                        );
-                      },
-                      childCount: posts.length,
-                    ),
+                      return PostCard(
+                        key: ValueKey(postSnapshot.id),
+                        postSnapshot: postSnapshot,
+                        onCommentPressed:
+                            () => _onCommentTapped(postSnapshot.id),
+                        onDeletePressed: () => _deletePost(postSnapshot.id),
+                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onLikePressed:
+                            () => _toggleLike(
+                              postSnapshot.id,
+                              currentLikes,
+                              postAuthorId,
+                            ),
+                        onEditPressed:
+                            () => _editPost(postSnapshot.id, currentCaption),
+                      );
+                    }, childCount: posts.length),
                   );
                 },
               ),
