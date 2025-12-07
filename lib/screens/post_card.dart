@@ -18,6 +18,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'full_screen_video_player.dart';
 import 'share_post_sheet.dart';
 import 'likes_list_screen.dart';
+import 'comments_sheet.dart'; // <--- IMPORT THE NEW SHEET
 
 // --- GLOBAL AUDIO HANDLER ---
 class GlobalAudioHandler {
@@ -77,7 +78,8 @@ class GlobalAudioHandler {
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
-  final Function() onCommentPressed;
+  final Function()
+  onCommentPressed; // Kept for compatibility, but not used for sheet
   final Function() onDeletePressed;
   final Function() onProfileTapped;
   final Function() onLikePressed;
@@ -160,6 +162,25 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _likeController?.dispose();
     _overlayController?.dispose();
     super.dispose();
+  }
+
+  // --- SHOW COMMENTS SHEET ---
+  void _showCommentsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Needed for full height/keyboard interaction
+      backgroundColor: Colors.transparent, // Allows rounded corners to show
+      useRootNavigator: true, // Ensures it covers bottom nav bar if needed
+      builder:
+          (context) => Padding(
+            // IMPORTANT: Padding for keyboard is handled inside the sheet via MediaQuery
+            // But we add this wrapper to ensure safe area if needed
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: CommentsSheet(postId: widget.postSnapshot.id),
+          ),
+    );
   }
 
   void _onVisibilityChanged(VisibilityInfo info) {
@@ -341,20 +362,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             // --- HEADER ---
             Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 16.0, // Increased padding
+                horizontal: 16.0,
                 vertical: 12.0,
               ),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: widget.onProfileTapped,
-                    // --- STYLE UPDATE: Rounded Square Profile Pic ---
+                    // --- STYLE: Rounded Square Profile Pic ---
                     child: Container(
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
                         color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(14), // Squarcle
+                        borderRadius: BorderRadius.circular(14),
                         image:
                             authorData['profilePhotoUrl'].isNotEmpty
                                 ? DecorationImage(
@@ -423,9 +444,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           )
                         else if (authorData['username'].isNotEmpty)
                           Text(
-                            // Adding simple location placeholder style
-                            // In real app, fetch location from postData['location']
-                            'New York, USA',
+                            // Optional: Display location if you have it in data
+                            '@${authorData['username']}',
                             style: GoogleFonts.poppins(
                               color: Colors.grey.shade500,
                               fontSize: 12,
@@ -492,11 +512,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 child: Hero(
                   tag: 'post-${widget.postSnapshot.id}',
                   child: AspectRatio(
-                    aspectRatio: 1.0, // 4:5 is cleaner for vertical, 1.0 square
+                    aspectRatio: 1.0,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10.0),
                       child: ClipRRect(
-                        // --- STYLE UPDATE: Deep Curve for Post Image ---
+                        // --- STYLE: Deep Curve ---
                         borderRadius: BorderRadius.circular(30),
                         child: Stack(
                           fit: StackFit.expand,
@@ -540,11 +560,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               Column(
                 children: [
                   SizedBox(
-                    height: MediaQuery.of(context).size.width, // Square
+                    height: MediaQuery.of(context).size.width,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10.0),
                       child: ClipRRect(
-                        // --- STYLE UPDATE: Deep Curve for Post Image ---
+                        // --- STYLE: Deep Curve ---
                         borderRadius: BorderRadius.circular(30),
                         child: Stack(
                           alignment: Alignment.center,
@@ -636,6 +656,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       Row(
                         children: [
                           const SizedBox(width: 8),
+                          // Like Button
                           GestureDetector(
                             onTap: _triggerLikeButtonPress,
                             child: ScaleTransition(
@@ -650,15 +671,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(width: 18),
+
+                          // --- COMMENT BUTTON (Opens Sheet) ---
                           GestureDetector(
-                            onTap: widget.onCommentPressed,
+                            onTap: () => _showCommentsSheet(context),
                             child: const Icon(
                               Icons.mode_comment_outlined,
                               color: Colors.black87,
                               size: 26,
                             ),
                           ),
+
                           const SizedBox(width: 18),
+                          // Share Button
                           GestureDetector(
                             onTap: () => _onSharePressed(context),
                             child: const Icon(
@@ -783,7 +808,23 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-                  const SizedBox(height: 6),
+
+                  // --- View All Comments Text (Opens Sheet) ---
+                  GestureDetector(
+                    onTap: () => _showCommentsSheet(context),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        "View all comments",
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 2),
                   Text(
                     timestamp != null ? formatTimeAgo(timestamp) : '',
                     style: GoogleFonts.poppins(
