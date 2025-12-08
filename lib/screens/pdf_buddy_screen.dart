@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: pdf_buddy_screen.dart
+// FILE PATH: lib/screens/pdf_buddy_screen.dart
+// ===============================
+
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -25,13 +30,12 @@ class _PdfBuddyScreenState extends State<PdfBuddyScreen> {
   String _fileName = '';
   TtsState _ttsState = TtsState.stopped;
 
-  // Default speech rate is now a more natural 80% speed.
+  // Default speech rate
   double _speechRate = 0.8;
 
   @override
   void initState() {
     super.initState();
-    // Set up listeners to update the UI based on TTS events.
     _flutterTts.setStartHandler(
       () => setState(() => _ttsState = TtsState.playing),
     );
@@ -48,11 +52,10 @@ class _PdfBuddyScreenState extends State<PdfBuddyScreen> {
 
   @override
   void dispose() {
-    _flutterTts.stop(); // Ensure TTS stops when the screen is closed.
+    _flutterTts.stop();
     super.dispose();
   }
 
-  /// Handles the entire workflow: picking a PDF, extracting text, and getting a summary.
   Future<void> _pickAndProcessPdf() async {
     setState(() {
       _isLoading = true;
@@ -92,9 +95,7 @@ class _PdfBuddyScreenState extends State<PdfBuddyScreen> {
     }
   }
 
-  // --- Text-to-Speech Control Methods ---
-
-  /// Speaks the summary. Handles both starting and resuming.
+  // --- TTS Controls ---
   Future<void> _speak() async {
     if (_summary.isNotEmpty) {
       await _flutterTts.setLanguage("en-US");
@@ -104,57 +105,136 @@ class _PdfBuddyScreenState extends State<PdfBuddyScreen> {
     }
   }
 
-  /// Pauses the current speech.
   Future<void> _pause() async {
     await _flutterTts.pause();
   }
 
-  /// Stops the current speech completely.
   Future<void> _stop() async {
     await _flutterTts.stop();
   }
 
   @override
   Widget build(BuildContext context) {
+    const Color primaryBlack = Colors.black;
+    const Color accentYellow = Colors.yellow;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white, // Modern White Background
       appBar: AppBar(
-        title: Text('PDF Study Buddy', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        title: Text(
+          'PDF Study Buddy',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: primaryBlack,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: primaryBlack),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _pickAndProcessPdf,
-              icon: const Icon(Icons.upload_file_rounded),
-              label: Text(_isLoading ? 'Processing...' : 'Upload PDF'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.yellow,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            // --- Header Section ---
+            Text(
+              "Read less,\nlearn more.",
+              style: GoogleFonts.poppins(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
+                height: 1.2,
+                letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            Text(
+              "Upload lecture notes or articles to get an instant AI summary and audio lesson.",
+              style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 15),
+            ),
+            const SizedBox(height: 30),
 
-            if (_isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32.0),
-                  child: CircularProgressIndicator(color: Colors.yellow),
+            // --- Upload Area ---
+            GestureDetector(
+              onTap: _isLoading ? null : _pickAndProcessPdf,
+              child: Container(
+                height: 140,
+                decoration: BoxDecoration(
+                  color: _isLoading ? Colors.grey[50] : const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isLoading ? Colors.grey[300]! : Colors.black12,
+                    width: 2,
+                    style: BorderStyle.solid,
+                  ),
                 ),
+                child:
+                    _isLoading
+                        ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                color: primaryBlack,
+                                strokeWidth: 2.5,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "Reading PDF & Summarizing...",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.upload_file_rounded,
+                                size: 32,
+                                color: primaryBlack,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              "Tap to Upload PDF",
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: primaryBlack,
+                              ),
+                            ),
+                          ],
+                        ),
               ),
-            if (!_isLoading && _summary.isEmpty) _buildEmptyState(),
-            if (_summary.isNotEmpty) _buildSummaryDisplay(),
+            ),
+
+            const SizedBox(height: 40),
+
+            // --- Results Area ---
+            if (!_isLoading && _summary.isEmpty && _fileName.isEmpty)
+              _buildEmptyState()
+            else if (_summary.isNotEmpty)
+              _buildSummaryDisplay(primaryBlack, accentYellow),
           ],
         ),
       ),
@@ -162,161 +242,252 @@ class _PdfBuddyScreenState extends State<PdfBuddyScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return Center(
       child: Column(
         children: [
-          const Icon(Icons.school_outlined, size: 60, color: Colors.white70),
+          Icon(Icons.library_books_outlined, size: 60, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
-            'Upload your lecture notes, articles, or any PDF to get an instant summary and audio lesson!',
+            'No document selected yet.',
             style: GoogleFonts.poppins(
-              color: Colors.white70,
+              color: Colors.grey[400],
               fontSize: 16,
-              height: 1.5,
+              fontWeight: FontWeight.w500,
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryDisplay() {
+  Widget _buildSummaryDisplay(Color primaryColor, Color accentColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          _fileName,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: Colors.white54,
-            fontStyle: FontStyle.italic,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'AI-Generated Summary',
-          style: GoogleFonts.poppins(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
+        // --- File Badge ---
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Text(
-            _summary,
-            style: GoogleFonts.poppins(
-              color: Colors.white.withAlpha(230),
-              fontSize: 16,
-              height: 1.5,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.description, color: Colors.white, size: 14),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  _fileName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 20),
-        _buildAudioControls(),
+
+        // --- Summary Card ---
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey[200]!),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.amber, size: 24),
+                  const SizedBox(width: 10),
+                  Text(
+                    'AI Summary',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Content
+              Text(
+                _summary,
+                style: GoogleFonts.poppins(
+                  color: Colors.black87,
+                  fontSize: 15,
+                  height: 1.6,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // --- Audio Player Card ---
+        _buildAudioControls(primaryColor, accentColor),
+        const SizedBox(height: 40),
       ],
     );
   }
 
-  Widget _buildAudioControls() {
-    return Card(
-      color: Colors.grey.shade900,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Listen to Summary',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                // STOP Button
-                IconButton(
-                  icon: const Icon(Icons.stop_rounded),
+  Widget _buildAudioControls(Color primaryColor, Color accentColor) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB), // Very light grey
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  iconSize: 32,
-                  tooltip: 'Stop',
-                  onPressed: _ttsState == TtsState.stopped ? null : _stop,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 5,
+                    ),
+                  ],
                 ),
-                // PLAY/PAUSE Button
-                IconButton(
-                  icon: Icon(
-                    _ttsState == TtsState.playing
-                        ? Icons.pause_circle_filled_rounded
-                        : Icons.play_circle_filled_rounded,
-                  ),
-                  color: Colors.yellow,
-                  iconSize: 48,
-                  tooltip:
-                      _ttsState == TtsState.playing ? 'Pause' : 'Play / Resume',
-                  onPressed: () {
-                    if (_ttsState == TtsState.playing) {
-                      _pause();
-                    } else {
-                      // Handles both 'stopped' and 'paused' states
-                      _speak();
-                    }
-                  },
-                ),
-              ],
-            ),
-            // Speech Rate Slider
-            Row(
-              children: [
-                const Icon(
-                  Icons.speed_rounded,
-                  color: Colors.white70,
+                child: const Icon(
+                  Icons.headphones_rounded,
                   size: 20,
+                  color: Colors.black,
                 ),
-                Expanded(
-                  child: Slider.adaptive(
-                    value: _speechRate,
-                    min: 0.2,
-                    max: 1.0,
-                    divisions: 8,
-                    activeColor: Colors.yellow,
-                    inactiveColor: Colors.grey.shade700,
-                    label: "${(_speechRate * 100).toStringAsFixed(0)}%",
-                    onChanged: (newRate) {
-                      setState(() {
-                        _speechRate = newRate;
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Listen to Summary',
+                style: GoogleFonts.poppins(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Speed Slider
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SPEED: ${(_speechRate * 100).toInt()}%',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[500],
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 4,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 14,
+                        ),
+                      ),
+                      child: Slider(
+                        value: _speechRate,
+                        min: 0.2,
+                        max: 1.0,
+                        divisions: 8,
+                        activeColor: primaryColor,
+                        inactiveColor: Colors.grey[300],
+                        onChanged: (newRate) {
+                          setState(() {
+                            _speechRate = newRate;
+                            if (_ttsState == TtsState.playing) {
+                              _flutterTts.setSpeechRate(_speechRate);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Controls
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.stop_rounded,
+                      color:
+                          _ttsState == TtsState.stopped
+                              ? Colors.grey[300]
+                              : Colors.red[400],
+                    ),
+                    iconSize: 32,
+                    onPressed: _ttsState == TtsState.stopped ? null : _stop,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withOpacity(0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        _ttsState == TtsState.playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                      color: Colors.black,
+                      iconSize: 32,
+                      onPressed: () {
                         if (_ttsState == TtsState.playing) {
-                          _flutterTts.setSpeechRate(_speechRate);
+                          _pause();
+                        } else {
+                          _speak();
                         }
-                      });
-                    },
+                      },
+                    ),
                   ),
-                ),
-                Text(
-                  '${(_speechRate * 100).toInt()}%',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/youtube_summarizer_service.dart';
 import 'summary_chat_screen.dart';
@@ -99,34 +98,36 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
   Widget build(BuildContext context) {
     // Red accent color for YouTube vibe
     const Color accentColor = Color(0xFFFF0000);
+    const Color textColor = Colors.black87;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white, // Modern White Background
       appBar: AppBar(
         title: Text(
           'AI Video Summarizer',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: Colors.black,
           ),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       floatingActionButton:
           (_summaryResult != null && !_isLoading)
               ? FloatingActionButton.extended(
                 onPressed: _navigateToChat,
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.black,
                 icon: const Icon(
                   Icons.chat_bubble_outline,
-                  color: Colors.black,
+                  color: Colors.white,
                 ),
                 label: Text(
                   "Chat with Video",
                   style: GoogleFonts.poppins(
-                    color: Colors.black,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -142,37 +143,41 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
               "Turn long videos\ninto short notes.",
               style: GoogleFonts.poppins(
                 fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                color: Colors.black,
                 height: 1.2,
+                letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               "Paste a YouTube link below to get a summary, key takeaways, and chat with the content.",
-              style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14),
+              style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 15),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
 
             // --- Input Field ---
             Container(
               decoration: BoxDecoration(
-                color: Colors.grey[900],
+                color: Colors.grey[100], // Light grey background
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[800]!),
+                border: Border.all(color: Colors.grey[300]!),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.link, color: Colors.white54),
+                  const Icon(Icons.link, color: Colors.grey),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       controller: _urlController,
-                      style: GoogleFonts.poppins(color: Colors.white),
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         hintText: "Paste YouTube Link",
-                        hintStyle: GoogleFonts.poppins(color: Colors.white38),
+                        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
                         border: InputBorder.none,
                       ),
                     ),
@@ -188,7 +193,7 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // --- Action Button ---
             SizedBox(
@@ -201,8 +206,8 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  elevation: 5,
-                  shadowColor: accentColor.withOpacity(0.4),
+                  elevation: 0,
+                  disabledBackgroundColor: Colors.red.shade100,
                 ),
                 child:
                     _isLoading
@@ -250,8 +255,16 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
         // --- Video Preview Card ---
         Container(
           decoration: BoxDecoration(
-            color: Colors.grey[900],
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+            border: Border.all(color: Colors.grey[100]!),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -298,15 +311,16 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       video['author'] ?? 'Unknown Channel',
                       style: GoogleFonts.poppins(
-                        color: Colors.white54,
+                        color: Colors.grey[600],
                         fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -316,19 +330,23 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 32),
 
         // --- Summary Content ---
         Row(
           children: [
-            const Icon(Icons.auto_awesome, color: Colors.yellow, size: 20),
+            const Icon(
+              Icons.auto_awesome,
+              color: Colors.amber, // Gold for AI
+              size: 24,
+            ),
             const SizedBox(width: 8),
             Text(
               "AI Summary",
               style: GoogleFonts.poppins(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
           ],
@@ -336,38 +354,41 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
         const SizedBox(height: 16),
 
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey[800]!),
+            color: const Color(0xFFF9FAFB), // Very light grey
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey[200]!),
           ),
           child: MarkdownBody(
             data: summary,
             styleSheet: MarkdownStyleSheet(
               p: GoogleFonts.poppins(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 14,
+                color: Colors.black87,
+                fontSize: 15,
                 height: 1.6,
               ),
               h1: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
+                color: Colors.black,
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+                height: 1.5,
               ),
               h2: GoogleFonts.poppins(
-                color: Colors.white,
+                color: Colors.black,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
+                height: 1.5,
               ),
               h3: GoogleFonts.poppins(
-                color: Colors.white,
+                color: Colors.black87,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
+                height: 1.5,
               ),
-              listBullet: GoogleFonts.poppins(color: Colors.white70),
+              listBullet: GoogleFonts.poppins(color: Colors.black87),
               strong: GoogleFonts.poppins(
-                color: Colors.white,
+                color: Colors.black,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -381,9 +402,9 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: Colors.red.withOpacity(0.2)),
       ),
       child: Row(
         children: [
@@ -392,7 +413,7 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
           Expanded(
             child: Text(
               error,
-              style: GoogleFonts.poppins(color: Colors.red[100]),
+              style: GoogleFonts.poppins(color: Colors.red[900]),
             ),
           ),
         ],

@@ -1,12 +1,14 @@
-// lib/screens/summary_chat_screen.dart
+// ===============================
+// FILE NAME: summary_chat_screen.dart
+// FILE PATH: lib/screens/summary_chat_screen.dart
+// ===============================
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // --- IMPROVEMENT: Import Markdown package
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/youtube_summarizer_service.dart';
 
 /// A screen for a conversational chat with an AI about a video summary.
-/// It allows users to ask follow-up questions that are answered with web-enhanced context.
 class SummaryChatScreen extends StatefulWidget {
   final String initialSummary;
   final String videoTitle;
@@ -33,7 +35,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Start the chat history with the initial summary from the AI.
     _chatHistory.add({'role': 'ai', 'message': widget.initialSummary});
   }
 
@@ -45,7 +46,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     super.dispose();
   }
 
-  /// Sends the user's message to the web-enhanced AI service and displays the response.
   Future<void> _sendMessage() async {
     final userMessage = _messageController.text.trim();
     if (userMessage.isEmpty) return;
@@ -53,7 +53,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     _messageController.clear();
     FocusScope.of(context).unfocus();
 
-    // Add the user's message to the UI immediately and show loading indicator.
     setState(() {
       _chatHistory.add({'role': 'user', 'message': userMessage});
       _isLoading = true;
@@ -61,17 +60,14 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     _scrollToBottom();
 
     try {
-      // Call the powerful web-enhanced method from the service.
       final aiResponse = await _summarizerService.getWebEnhancedAnswer(
         videoTitle: widget.videoTitle,
         userQuestion: userMessage,
       );
-      // Add the AI's detailed response to the chat.
       setState(() {
         _chatHistory.add({'role': 'ai', 'message': aiResponse});
       });
     } catch (e) {
-      // Handle any errors during the process.
       setState(() {
         _chatHistory.add({
           'role': 'ai',
@@ -79,7 +75,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
         });
       });
     } finally {
-      // Always hide the loading indicator.
       setState(() {
         _isLoading = false;
       });
@@ -87,7 +82,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     }
   }
 
-  /// Smoothly scrolls the chat list to the bottom to show the latest message.
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -103,21 +97,45 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white, // Modern White Background
       appBar: AppBar(
-        title: Text(
-          'Chat about "${widget.videoTitle}"',
-          style: GoogleFonts.poppins(),
-          overflow: TextOverflow.ellipsis,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Video Chat',
+              style: GoogleFonts.poppins(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            Text(
+              widget.videoTitle,
+              style: GoogleFonts.poppins(
+                color: Colors.grey[600],
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.grey[200], height: 1),
+        ),
       ),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               itemCount: _chatHistory.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _chatHistory.length) {
@@ -138,39 +156,55 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
     );
   }
 
-  /// The message input bar at the bottom of the screen.
   Widget _buildMessageComposer() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      color: Colors.grey.shade900,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, -2),
+            blurRadius: 10,
+          ),
+        ],
+      ),
       child: SafeArea(
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _messageController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Ask for more details...',
-                  hintStyle: TextStyle(color: Colors.white54),
-                  filled: true,
-                  fillColor: Colors.grey.shade800,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.grey[200]!),
                 ),
-                onSubmitted: _isLoading ? null : (_) => _sendMessage(),
+                child: TextField(
+                  controller: _messageController,
+                  style: const TextStyle(color: Colors.black87),
+                  decoration: InputDecoration(
+                    hintText: 'Ask for details...',
+                    hintStyle: TextStyle(color: Colors.grey[500]),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
+                  onSubmitted: _isLoading ? null : (_) => _sendMessage(),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.send_rounded, color: Colors.yellow),
-              onPressed: _isLoading ? null : _sendMessage,
+            const SizedBox(width: 12),
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.black, // Modern black button
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_upward, color: Colors.white),
+                onPressed: _isLoading ? null : _sendMessage,
+              ),
             ),
           ],
         ),
@@ -179,7 +213,6 @@ class _SummaryChatScreenState extends State<SummaryChatScreen> {
   }
 }
 
-/// A simple UI widget for styling a single chat message bubble.
 class _ChatMessageBubble extends StatelessWidget {
   final String message;
   final bool isUser;
@@ -187,40 +220,51 @@ class _ChatMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.only(
+      topLeft: const Radius.circular(20),
+      topRight: const Radius.circular(20),
+      bottomLeft: isUser ? const Radius.circular(20) : const Radius.circular(4),
+      bottomRight:
+          isUser ? const Radius.circular(4) : const Radius.circular(20),
+    );
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: MediaQuery.of(context).size.width * 0.8,
         ),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        margin: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: isUser ? Colors.yellow : Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(20),
+          // User: Primary Yellow (App Theme) or Black for high contrast.
+          // Let's use Yellow for user to match main app, Light Grey for AI.
+          color: isUser ? Colors.yellow : Colors.grey[100],
+          borderRadius: borderRadius,
+          border: isUser ? null : Border.all(color: Colors.grey[200]!),
         ),
-        // --- IMPROVEMENT: Use MarkdownBody to render formatted text ---
         child: MarkdownBody(
           data: message,
           selectable: true,
           styleSheet: MarkdownStyleSheet(
             p: GoogleFonts.poppins(
-              color: isUser ? Colors.black : Colors.white,
+              color: Colors.black87, // Always black text for readability
+              fontSize: 15,
               height: 1.5,
             ),
             h3: GoogleFonts.poppins(
-              color: isUser ? Colors.black : Colors.white,
+              color: Colors.black,
               fontWeight: FontWeight.bold,
             ),
+            strong: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            listBullet: GoogleFonts.poppins(color: Colors.black87),
           ),
         ),
-        // --- END OF IMPROVEMENT ---
       ),
     );
   }
 }
 
-/// A bubble with a loading indicator to show the AI is "typing".
 class _TypingIndicatorBubble extends StatelessWidget {
   const _TypingIndicatorBubble();
   @override
@@ -228,21 +272,32 @@ class _TypingIndicatorBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
         margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.grey[100],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(20),
+          ),
         ),
-        child: const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            color: Colors.white,
-            strokeWidth: 2.5,
+        child: SizedBox(
+          width: 24,
+          height: 12,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(3, (index) {
+              return Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  shape: BoxShape.circle,
+                ),
+              );
+            }),
           ),
         ),
       ),
