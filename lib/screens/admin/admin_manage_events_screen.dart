@@ -23,11 +23,11 @@ class AdminManageEventsScreen extends StatefulWidget {
 }
 
 class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
+  // --- ADD EVENT DIALOG ---
   Future<void> _showAddEventDialog() async {
     final formKey = GlobalKey<FormState>();
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    // --- NEW CONTROLLERS ---
     final whatsappController = TextEditingController();
     final bookingController = TextEditingController();
 
@@ -37,7 +37,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
     bool isUploading = false;
     final ImagePicker picker = ImagePicker();
 
-    // We capture context before async gaps
+    // Capture context to avoid async gap issues
     final parentContext = context;
 
     await showDialog<void>(
@@ -116,7 +116,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // --- NEW OPTIONAL FIELDS ---
+                      // Optional Fields
                       _buildTextField(
                         whatsappController,
                         'WhatsApp Group Link (Optional)',
@@ -197,7 +197,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                               setDialogState(() => isUploading = true);
 
                               try {
-                                // Upload Image
+                                // 1. Upload Image
                                 final cloudinary = CloudinaryPublic(
                                   cloudinaryCloudName,
                                   cloudinaryUploadPreset,
@@ -220,7 +220,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                                   ),
                                 );
 
-                                // Save to Firestore
+                                // 2. Save to Firestore
                                 await FirebaseFirestore.instance
                                     .collection('events')
                                     .add({
@@ -228,11 +228,9 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                                       'description':
                                           descriptionController.text.trim(),
                                       'whatsappLink':
-                                          whatsappController.text
-                                              .trim(), // Save Link
+                                          whatsappController.text.trim(),
                                       'bookingLink':
-                                          bookingController.text
-                                              .trim(), // Save Link
+                                          bookingController.text.trim(),
                                       'eventDate': eventTimestamp,
                                       'imageUrl': response.secureUrl,
                                       'createdAt': FieldValue.serverTimestamp(),
@@ -276,6 +274,91 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
     );
   }
 
+  // --- MANUAL NOTIFICATION TRIGGER ---
+  Future<void> _triggerNotification(String eventTitle, String eventId) async {
+    final messageController = TextEditingController(
+      text: "Don't miss out! $eventTitle is starting soon.",
+    );
+
+    await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: Colors.grey.shade900,
+            title: Text(
+              "Send Reminder",
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "This will send a push notification to ALL users via Cloud Functions.",
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: messageController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: "Notification Body",
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.yellow),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.send, size: 16),
+                label: const Text("Send Now"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.yellow,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () async {
+                  // Write to 'notification_requests' collection
+                  // The deployed Cloud Function will listen to this and send the FCM
+                  await FirebaseFirestore.instance
+                      .collection('notification_requests')
+                      .add({
+                        'title': "Event Reminder 📅",
+                        'body': messageController.text.trim(),
+                        'eventId': eventId,
+                        'timestamp': FieldValue.serverTimestamp(),
+                        'status': 'pending',
+                      });
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Notification queued for delivery!"),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _deleteEvent(String docId) async {
+    await FirebaseFirestore.instance.collection('events').doc(docId).delete();
+  }
+
   // Helper for fields
   Widget _buildTextField(
     TextEditingController controller,
@@ -303,10 +386,6 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
     );
   }
 
-  Future<void> _deleteEvent(String docId) async {
-    await FirebaseFirestore.instance.collection('events').doc(docId).delete();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -329,6 +408,10 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
         builder: (context, snapshot) {
           if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
+
+          if (snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No events found."));
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -366,17 +449,39 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                       if (data['whatsappLink'] != null &&
                           data['whatsappLink'].toString().isNotEmpty)
                         const Text(
-                          "WhatsApp Link Added",
+                          "• WhatsApp Link",
                           style: TextStyle(color: Colors.green, fontSize: 10),
+                        ),
+                      if (data['bookingLink'] != null &&
+                          data['bookingLink'].toString().isNotEmpty)
+                        const Text(
+                          "• Booking Link",
+                          style: TextStyle(color: Colors.blue, fontSize: 10),
                         ),
                     ],
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.redAccent,
-                    ),
-                    onPressed: () => _deleteEvent(doc.id),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Notification Trigger Button
+                      IconButton(
+                        icon: const Icon(
+                          Icons.notifications_active_outlined,
+                          color: Colors.yellow,
+                        ),
+                        tooltip: "Send Reminder",
+                        onPressed:
+                            () => _triggerNotification(data['title'], doc.id),
+                      ),
+                      // Delete Button
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: () => _deleteEvent(doc.id),
+                      ),
+                    ],
                   ),
                 ),
               );

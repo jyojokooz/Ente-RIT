@@ -3,16 +3,17 @@
 // FILE PATH: lib/screens/main_screen.dart
 // ===============================
 
-// ignore_for_file: sized_box_for_whitespace
+// ignore_for_file: sized_box_for_whitespace, curly_braces_in_flow_control_structures
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // --- Screen Imports ---
-import 'pages/pages.dart';
+import 'pages/pages.dart'; // Ensure this exports HomeScreen, ExploreScreen, etc.
 import 'create_post_screen.dart';
 import '../widgets/notification_badge.dart';
 
@@ -46,7 +47,7 @@ class _MainScreenState extends State<MainScreen> {
     _setupPushNotifications();
   }
 
-  // --- CORRECTED FUNCTION FOR firebase_messaging: 14.7.10 ---
+  // --- FCM TOKEN SETUP ---
   Future<void> _setupPushNotifications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -54,7 +55,6 @@ class _MainScreenState extends State<MainScreen> {
     final messaging = FirebaseMessaging.instance;
 
     // 1. Request Permission
-    // **SYNTAX FOR v14.7.10**
     await messaging.requestPermission(alert: true, badge: true, sound: true);
 
     // 2. Get the Token
@@ -70,6 +70,13 @@ class _MainScreenState extends State<MainScreen> {
 
         debugPrint("FCM Token saved for user ${user.uid}: $token");
       }
+
+      // 4. Handle token refresh
+      messaging.onTokenRefresh.listen((newToken) {
+        FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'fcmToken': newToken,
+        }, SetOptions(merge: true));
+      });
     } catch (e) {
       debugPrint("Error getting or saving FCM token: $e");
     }
