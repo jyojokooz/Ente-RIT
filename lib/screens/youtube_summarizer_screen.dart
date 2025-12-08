@@ -1,8 +1,14 @@
-// lib/screens/youtube_summarizer_screen.dart
+// ===============================
+// FILE NAME: youtube_summarizer_screen.dart
+// FILE PATH: lib/screens/youtube_summarizer_screen.dart
+// ===============================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For Clipboard
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/youtube_summarizer_service.dart';
 import 'summary_chat_screen.dart';
 
@@ -29,14 +35,25 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
     super.dispose();
   }
 
+  Future<void> _pasteFromClipboard() async {
+    final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data != null && data.text != null) {
+      setState(() {
+        _urlController.text = data.text!;
+      });
+    }
+  }
+
   Future<void> _summarizeVideo() async {
     final url = _urlController.text.trim();
     if (!YouTubeSummarizerService.isValidYouTubeUrl(url)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid YouTube URL.')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invalid YouTube URL', style: GoogleFonts.poppins()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
@@ -55,289 +72,328 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An unexpected error occurred: ${e.toString()}'),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _navigateToChat() {
+    if (_summaryResult == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => SummaryChatScreen(
+              initialSummary: _summaryResult!['summary'],
+              videoTitle: _summaryResult!['videoDetails']['title'] ?? 'Video',
+            ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Red accent color for YouTube vibe
+    const Color accentColor = Color(0xFFFF0000);
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('YouTube Summarizer', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        title: Text(
+          'AI Video Summarizer',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
+      floatingActionButton:
+          (_summaryResult != null && !_isLoading)
+              ? FloatingActionButton.extended(
+                onPressed: _navigateToChat,
+                backgroundColor: Colors.white,
+                icon: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.black,
+                ),
+                label: Text(
+                  "Chat with Video",
+                  style: GoogleFonts.poppins(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+              : null,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: _urlController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Paste YouTube video link here...',
-                hintStyle: TextStyle(color: Colors.white54),
-                filled: true,
-                fillColor: Colors.grey.shade900,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
+            // --- Header Section ---
+            Text(
+              "Turn long videos\ninto short notes.",
+              style: GoogleFonts.poppins(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Paste a YouTube link below to get a summary, key takeaways, and chat with the content.",
+              style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14),
+            ),
+            const SizedBox(height: 30),
+
+            // --- Input Field ---
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey[800]!),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.link, color: Colors.white54),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _urlController,
+                      style: GoogleFonts.poppins(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: "Paste YouTube Link",
+                        hintStyle: GoogleFonts.poppins(color: Colors.white38),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _pasteFromClipboard,
+                    icon: const Icon(
+                      Icons.content_paste_rounded,
+                      color: accentColor,
+                    ),
+                    tooltip: "Paste",
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _summarizeVideo,
-              icon: const Icon(Icons.summarize_outlined),
-              label: Text(_isLoading ? 'Summarizing...' : 'Summarize Video'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.yellow,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+
+            // --- Action Button ---
+            SizedBox(
+              height: 55,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _summarizeVideo,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 5,
+                  shadowColor: accentColor.withOpacity(0.4),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                child:
+                    _isLoading
+                        ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Text(
+                          "Summarize Now",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
               ),
             ),
-            const SizedBox(height: 24),
-            if (_isLoading)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.yellow),
-              ),
 
-            if (_summaryResult != null)
-              if (_summaryResult!['success'] == true)
-                _buildSummaryDisplay(_summaryResult!)
-              else
-                _buildErrorDisplay(
-                  _summaryResult!['error'] ?? 'An unknown error occurred.',
-                ),
+            const SizedBox(height: 40),
+
+            // --- Results Area ---
+            if (_summaryResult != null && _summaryResult!['success'] == true)
+              _buildResultView()
+            else if (_summaryResult != null &&
+                _summaryResult!['success'] == false)
+              _buildErrorCard(_summaryResult!['error']),
+
+            const SizedBox(height: 80), // Space for FAB
           ],
         ),
       ),
     );
   }
 
-  Widget _buildErrorDisplay(String error) {
-    return Card(
-      // --- THIS IS THE FIX: Replaced withOpacity with withAlpha ---
-      color: Colors.red.shade900.withAlpha(128), // 128 is 50% opacity
-      // --- END OF FIX ---
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+  Widget _buildResultView() {
+    final video = _summaryResult!['videoDetails'];
+    final summary = _summaryResult!['summary'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // --- Video Preview Card ---
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (video['thumbnailUrl'] != null)
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CachedNetworkImage(
+                      imageUrl: video['thumbnailUrl'],
+                      width: double.infinity,
+                      height: 200,
+                      fit: BoxFit.cover,
+                    ),
+                    Container(
+                      margin: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        "${video['duration']} min",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      video['title'] ?? 'Unknown Title',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      video['author'] ?? 'Unknown Channel',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // --- Summary Content ---
+        Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
-            const SizedBox(height: 12),
+            const Icon(Icons.auto_awesome, color: Colors.yellow, size: 20),
+            const SizedBox(width: 8),
             Text(
-              'Failed to Summarize',
+              "AI Summary",
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: GoogleFonts.poppins(color: Colors.white70),
-              textAlign: TextAlign.center,
-            ),
           ],
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 16),
 
-  Widget _buildSummaryDisplay(Map<String, dynamic> result) {
-    final videoDetails = result['videoDetails'] as Map<String, dynamic>;
-    final summary = result['summary'] as String;
-    final method = result['method'] as String;
-
-    return Column(
-      children: [
-        _VideoDetailsCard(videoDetails: videoDetails),
-        const SizedBox(height: 20),
-        Card(
-          color: Colors.grey.shade900,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[800]!),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'AI-Generated Summary',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.yellow,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Chip(
-                      label: Text(
-                        method.contains('transcript')
-                            ? 'From Transcript'
-                            : 'From Metadata',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      backgroundColor:
-                          method.contains('transcript')
-                              ? Colors.green.shade800
-                              : Colors.blue.shade800,
-                    ),
-                  ],
-                ),
-                const Divider(color: Colors.grey, height: 24),
-                Text(
-                  summary,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white.withAlpha(230),
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => SummaryChatScreen(
-                                initialSummary: summary,
-                                videoTitle:
-                                    videoDetails['title'] ?? 'this video',
-                              ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(
-                      Icons.smart_toy_outlined,
-                      color: Colors.yellow,
-                    ),
-                    label: Text(
-                      'Ask Follow-up Questions',
-                      style: GoogleFonts.poppins(
-                        color: Colors.yellow,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          child: MarkdownBody(
+            data: summary,
+            styleSheet: MarkdownStyleSheet(
+              p: GoogleFonts.poppins(
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 14,
+                height: 1.6,
+              ),
+              h1: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+              h2: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+              h3: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+              listBullet: GoogleFonts.poppins(color: Colors.white70),
+              strong: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
       ],
     );
   }
-}
 
-class _VideoDetailsCard extends StatelessWidget {
-  final Map<String, dynamic> videoDetails;
-  const _VideoDetailsCard({required this.videoDetails});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.grey.shade900,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (videoDetails['thumbnailUrl'] != null)
-            Image.network(
-              videoDetails['thumbnailUrl']!,
-              height: 200,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  videoDetails['title'] ?? 'No Title',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  videoDetails['author'] ?? 'Unknown Author',
-                  style: GoogleFonts.poppins(color: Colors.white70),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildStatChip(
-                      Icons.visibility_outlined,
-                      '${NumberFormat.compact().format(videoDetails['viewCount'] ?? 0)} views',
-                    ),
-                    const SizedBox(width: 8),
-                    _buildStatChip(
-                      Icons.timer_outlined,
-                      '${videoDetails['duration'] ?? 0} min',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatChip(IconData icon, String label) {
+  Widget _buildErrorCard(String error) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade800,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white70, size: 14),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          const Icon(Icons.error_outline, color: Colors.red),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              error,
+              style: GoogleFonts.poppins(color: Colors.red[100]),
+            ),
           ),
         ],
       ),
