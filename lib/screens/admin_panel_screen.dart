@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: admin_panel_screen.dart
+// FILE PATH: lib/screens/admin_panel_screen.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,8 +18,9 @@ import 'admin/admin_manage_lostfound_screen.dart';
 import 'admin/admin_manage_card_images_screen.dart';
 import 'admin/admin_manage_cafeteria_menu_screen.dart';
 import 'admin/admin_manage_buses_screen.dart';
-// CORRECTED: Points to the screen specifically for top-level admins
 import 'admin/admin_view_cafeteria_orders_screen.dart';
+// NEW IMPORT
+import 'admin/admin_manage_features_screen.dart';
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -154,6 +160,15 @@ class AdminPanelScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          // NEW BUTTON ADDED HERE
+          _buildManagementCard(
+            context: context,
+            label: 'Manage App Features',
+            icon: Icons.grid_view_rounded,
+            color: Colors.cyanAccent,
+            screen: const AdminManageFeaturesScreen(),
+          ),
+          const SizedBox(height: 12),
           _buildManagementCard(
             context: context,
             label: 'Manage Departments',
@@ -202,7 +217,6 @@ class AdminPanelScreen extends StatelessWidget {
             label: 'Manage Food Orders',
             icon: Icons.receipt_long_outlined,
             color: Colors.orange.shade600,
-            // CORRECTED: Navigates to the screen for main admins.
             screen: const AdminViewCafeteriaOrdersScreen(),
           ),
           const SizedBox(height: 12),
