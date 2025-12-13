@@ -52,8 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   final Color _bgGrey = const Color(0xFFF8F9FE);
 
   bool _isLoading = true;
-
-  // FIX: Flag to prevent double-opening the image picker
   bool _isPickingImage = false;
 
   String _displayName = 'User';
@@ -224,11 +222,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // FIX: Implemented logic to handle 'already_active' exception
   Future<void> _pickProfileImage() async {
     if (!isCurrentUser) return;
-
-    // Prevent multiple clicks
     if (_isPickingImage) return;
 
     setState(() {
@@ -261,7 +256,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // --- Actions Logic ---
   void _viewConnections() {
     if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
       Navigator.push(
@@ -390,8 +384,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 onPressed: () => Navigator.pop(context),
                               )
                             else
-                              const SizedBox(width: 48), // Balancer
-                            // Top Title
+                              const SizedBox(width: 48),
+
                             Text(
                               "Profile",
                               style: GoogleFonts.poppins(
@@ -420,7 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                   // Floating Avatar Card
                   Positioned(
-                    top: 110, // Overlap the header edge
+                    top: 110,
                     child: GestureDetector(
                       onTap: _pickProfileImage,
                       child: Container(
@@ -436,7 +430,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ],
                         ),
-                        // FIX: Updated CircleAvatar to use default asset if no URL
                         child: CircleAvatar(
                           radius: 60,
                           backgroundColor: Colors.grey.shade200,

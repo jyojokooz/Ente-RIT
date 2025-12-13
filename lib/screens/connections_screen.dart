@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: connections_screen.dart
+// FILE PATH: lib/screens/connections_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,27 +22,34 @@ class ConnectionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           title,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       body:
           userIds.isEmpty
               ? Center(
                 child: Text(
-                  'No connections to show.',
-                  style: GoogleFonts.poppins(color: Colors.white70),
+                  'No connections yet.',
+                  style: GoogleFonts.poppins(color: Colors.grey),
                 ),
               )
               : ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 itemCount: userIds.length,
                 itemBuilder: (context, index) {
                   final userId = userIds[index];
-                  // Use a FutureBuilder to fetch each user's profile data
+
+                  // Fetch each user's data individually
                   return FutureBuilder<DocumentSnapshot>(
                     future:
                         FirebaseFirestore.instance
@@ -45,28 +57,35 @@ class ConnectionsScreen extends StatelessWidget {
                             .doc(userId)
                             .get(),
                     builder: (context, userSnapshot) {
-                      // While loading, show the shimmer placeholder
+                      // 1. Loading State
                       if (userSnapshot.connectionState ==
                           ConnectionState.waiting) {
                         return const _ConnectionListTilePlaceholder();
                       }
 
-                      // Handle errors during fetch
-                      if (userSnapshot.hasError) {
-                        return const ListTile(
+                      // 2. Error/Deleted User State (THE FIX)
+                      // If the user document doesn't exist, we show a placeholder instead of hiding it.
+                      // This ensures the list count matches the profile count.
+                      if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
+                        return ListTile(
                           leading: CircleAvatar(
-                            child: Icon(Icons.error_outline),
+                            backgroundColor: Colors.grey.shade200,
+                            child: const Icon(
+                              Icons.person_off,
+                              color: Colors.grey,
+                            ),
                           ),
-                          title: Text('Could not load user'),
+                          title: Text(
+                            "Account Unavailable",
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                         );
                       }
 
-                      // Handle case where user document doesn't exist (e.g., deleted account)
-                      if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                        return const SizedBox.shrink(); // Don't show anything
-                      }
-
-                      // If data is available, display the user info
+                      // 3. Success State
                       final userData =
                           userSnapshot.data!.data() as Map<String, dynamic>;
                       final userImage = userData['profilePhotoUrl'] as String?;
@@ -76,25 +95,28 @@ class ConnectionsScreen extends StatelessWidget {
 
                       return ListTile(
                         leading: CircleAvatar(
+                          backgroundColor: Colors.grey.shade200,
                           backgroundImage:
                               (userImage != null && userImage.isNotEmpty)
                                   ? NetworkImage(userImage)
                                   : null,
                           child:
                               (userImage == null || userImage.isEmpty)
-                                  ? const Icon(Icons.person)
+                                  ? const Icon(Icons.person, color: Colors.grey)
                                   : null,
                         ),
                         title: Text(
                           displayName,
-                          style: GoogleFonts.poppins(color: Colors.white),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
                         ),
                         subtitle: Text(
                           '@$username',
-                          style: GoogleFonts.poppins(color: Colors.white70),
+                          style: GoogleFonts.poppins(color: Colors.grey),
                         ),
                         onTap: () {
-                          // Navigate to the tapped user's profile
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -119,8 +141,8 @@ class _ConnectionListTilePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: Colors.grey.shade800,
-      highlightColor: Colors.grey.shade700,
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
       child: ListTile(
         leading: const CircleAvatar(backgroundColor: Colors.white),
         title: Container(height: 16.0, width: 150.0, color: Colors.white),

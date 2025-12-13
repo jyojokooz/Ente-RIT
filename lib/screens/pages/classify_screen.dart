@@ -19,10 +19,7 @@ class ClassifyScreen extends StatefulWidget {
 }
 
 class _ClassifyScreenState extends State<ClassifyScreen> {
-  // Manual refresh logic
   Future<void> _handleRefresh() async {
-    // Since we are using a StreamBuilder, data updates automatically.
-    // This is mostly for UX feel or to re-trigger if connection was lost.
     setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
   }
@@ -78,7 +75,8 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             // --- DYNAMIC GRID CONTENT ---
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                // Filter: Only fetch documents where isVisible is true
+                // FIX: Removed 'where' clause. We fetch all and filter in Dart.
+                // This avoids needing a composite index immediately.
                 stream:
                     FirebaseFirestore.instance
                         .collection('features')
@@ -90,7 +88,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(20.0),
                         child: Text(
-                          "Could not load tools.\nCheck your internet connection.",
+                          "Error loading tools: ${snapshot.error}",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(color: Colors.grey),
                         ),
@@ -104,9 +102,17 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                     );
                   }
 
-                  final docs = snapshot.data!.docs;
+                  // 1. Get all docs
+                  final allDocs = snapshot.data!.docs;
 
-                  if (docs.isEmpty) {
+                  // 2. Filter locally for isVisible == true
+                  final visibleDocs =
+                      allDocs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return data['isVisible'] == true;
+                      }).toList();
+
+                  if (visibleDocs.isEmpty) {
                     return Center(
                       child: Text(
                         "No tools enabled yet.\nAsk Admin to enable features.",
@@ -131,9 +137,10 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                             mainAxisSpacing: 16,
                             childAspectRatio: 1.3, // Wider cards
                           ),
-                      itemCount: docs.length,
+                      itemCount: visibleDocs.length,
                       itemBuilder: (context, index) {
-                        final id = docs[index].id;
+                        final doc = visibleDocs[index];
+                        final id = doc.id;
 
                         // Look up the static configuration for this ID
                         final config = FeatureConfig.featureMap[id];
