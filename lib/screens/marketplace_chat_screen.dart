@@ -1,21 +1,30 @@
+// ===============================
+// FILE NAME: marketplace_chat_screen.dart
+// FILE PATH: lib/screens/marketplace_chat_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-import '../services/marketplace_chat_service.dart'; // Make sure this path is correct
+import '../services/marketplace_chat_service.dart';
+import '../services/marketplace_service.dart'; // Import for Product model
 
 class MarketplaceChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
   final String receiverImageUrl;
+  final Product? productToTag; // Optional product to send context
 
   const MarketplaceChatScreen({
     super.key,
     required this.receiverId,
     required this.receiverName,
     required this.receiverImageUrl,
+    this.productToTag,
   });
 
   @override
@@ -36,9 +45,38 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
       _currentUser.uid,
       widget.receiverId,
     );
-    _messageController.addListener(() {
-      setState(() {});
-    });
+
+    // If opened from a product page, send the product details automatically
+    if (widget.productToTag != null) {
+      _checkAndSendProductTag();
+    }
+  }
+
+  // Prevent spamming the same product tag
+  Future<void> _checkAndSendProductTag() async {
+    // In a real app, you might want to check the last message to see if it's already this product
+    // For now, we simply send it when the user clicks "Contact Seller"
+    // To make it smoother, we'll delay slightly so the UI builds first
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      _sendProductMessage();
+    }
+  }
+
+  void _sendProductMessage() {
+    if (widget.productToTag == null) return;
+
+    _chatService.sendMessage(
+      chatRoomId: _chatRoomId,
+      text: "I'm interested in this item.", // Fallback text
+      senderId: _currentUser.uid,
+      receiverId: widget.receiverId,
+      type: 'product',
+      productId: widget.productToTag!.id,
+      productTitle: widget.productToTag!.title,
+      productImageUrl: widget.productToTag!.imageUrl,
+      productPrice: widget.productToTag!.price,
+    );
   }
 
   @override
@@ -66,41 +104,10 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
     }
   }
 
-  // --- NEW: Method to show attachment options ---
   void _showAttachmentOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Colors.black54),
-                title: Text('Camera', style: GoogleFonts.poppins()),
-                onTap: () {
-                  Navigator.of(context).pop();
-
-                  debugPrint('Camera selected');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Colors.black54),
-                title: Text('Gallery', style: GoogleFonts.poppins()),
-                onTap: () {
-                  Navigator.of(context).pop();
-
-                  debugPrint('Gallery selected');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Attachments coming soon")));
   }
 
   @override
@@ -119,18 +126,22 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
           children: [
             CircleAvatar(
               backgroundImage: NetworkImage(widget.receiverImageUrl),
+              radius: 18,
             ),
             const SizedBox(width: 12),
-            Text(
-              widget.receiverName,
-              style: GoogleFonts.poppins(
-                color: Colors.black,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                widget.receiverName,
+                style: GoogleFonts.poppins(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        centerTitle: false,
       ),
       body: Column(
         children: [
@@ -138,18 +149,15 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
             child: StreamBuilder<QuerySnapshot<MarketplaceMessage>>(
               stream: _chatService.getMessages(_chatRoomId),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent),
+                    child: CircularProgressIndicator(color: Colors.black),
                   );
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
                     child: Text(
-                      'Say hello!',
+                      'Start the conversation!',
                       style: GoogleFonts.poppins(color: Colors.grey.shade600),
                     ),
                   );
@@ -162,37 +170,10 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
                   padding: const EdgeInsets.all(16.0),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    final currentMessage = messages[index].data();
-                    final prevMessage =
-                        (index < messages.length - 1)
-                            ? messages[index + 1].data()
-                            : null;
+                    final message = messages[index].data();
+                    final isMe = message.senderId == _currentUser.uid;
 
-                    final bool isMe =
-                        currentMessage.senderId == _currentUser.uid;
-                    final bool isSameDay =
-                        prevMessage != null &&
-                        currentMessage.timestamp.toDate().day ==
-                            prevMessage.timestamp.toDate().day;
-
-                    final bool showDateDivider = !isSameDay;
-                    final bool isFirstInGroup =
-                        prevMessage == null ||
-                        prevMessage.senderId != currentMessage.senderId ||
-                        !isSameDay;
-
-                    return Column(
-                      children: [
-                        if (showDateDivider)
-                          _DateDivider(date: currentMessage.timestamp.toDate()),
-                        _MessageBubble(
-                          message: currentMessage.text,
-                          isMe: isMe,
-                          isFirstInGroup: isFirstInGroup,
-                          timestamp: currentMessage.timestamp.toDate(),
-                        ),
-                      ],
-                    );
+                    return _MessageItem(message: message, isMe: isMe);
                   },
                 );
               },
@@ -205,7 +186,6 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
   }
 
   Widget _buildMessageInputField() {
-    final bool canSend = _messageController.text.trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       decoration: const BoxDecoration(
@@ -215,6 +195,10 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: Colors.grey),
+              onPressed: _showAttachmentOptions,
+            ),
             Expanded(
               child: TextField(
                 controller: _messageController,
@@ -238,27 +222,9 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) {
-                return ScaleTransition(scale: animation, child: child);
-              },
-              child:
-                  canSend
-                      ? IconButton(
-                        key: const ValueKey('send_button'),
-                        icon: const Icon(
-                          Icons.send_rounded,
-                          color: Colors.blueAccent,
-                        ),
-                        onPressed: _sendMessage,
-                      )
-                      : IconButton(
-                        key: const ValueKey('attach_button'),
-                        icon: const Icon(Icons.attach_file, color: Colors.grey),
-                        // --- CHANGED: Calls the new method to show options ---
-                        onPressed: _showAttachmentOptions,
-                      ),
+            IconButton(
+              icon: const Icon(Icons.send_rounded, color: Colors.black),
+              onPressed: _sendMessage,
             ),
           ],
         ),
@@ -267,125 +233,154 @@ class _MarketplaceChatScreenState extends State<MarketplaceChatScreen> {
   }
 }
 
-// Widget for the message bubble
-class _MessageBubble extends StatelessWidget {
-  final String message;
+class _MessageItem extends StatelessWidget {
+  final MarketplaceMessage message;
   final bool isMe;
-  final bool isFirstInGroup;
-  final DateTime timestamp;
 
-  const _MessageBubble({
-    required this.message,
-    required this.isMe,
-    required this.isFirstInGroup,
-    required this.timestamp,
-  });
+  const _MessageItem({required this.message, required this.isMe});
 
   @override
   Widget build(BuildContext context) {
-    final radius = const Radius.circular(18);
+    if (message.type == 'product') {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 250,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(10),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Enquiring about:",
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: message.productImageUrl ?? '',
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorWidget:
+                          (c, u, e) => Container(
+                            color: Colors.grey,
+                            width: 60,
+                            height: 60,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          message.productTitle ?? 'Unknown',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '₹${message.productPrice?.toStringAsFixed(0) ?? '0'}',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF00C569),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message.text, // "I'm interested in this item"
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.black87),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Text(
+                  DateFormat('h:mm a').format(message.timestamp.toDate()),
+                  style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Normal Text Message
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: EdgeInsets.only(
-          top: isFirstInGroup ? 8.0 : 2.0,
-          bottom: 2.0,
-          left: isMe ? 60 : 0,
-          right: isMe ? 0 : 60,
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isMe ? Colors.blueAccent : Colors.white,
+          color: isMe ? Colors.black : Colors.white,
           borderRadius: BorderRadius.only(
-            topLeft: radius,
-            topRight: radius,
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
             bottomLeft:
-                isMe
-                    ? (isFirstInGroup ? radius : const Radius.circular(4))
-                    : radius,
+                isMe ? const Radius.circular(20) : const Radius.circular(4),
             bottomRight:
-                isMe
-                    ? radius
-                    : (isFirstInGroup ? radius : const Radius.circular(4)),
+                isMe ? const Radius.circular(4) : const Radius.circular(20),
           ),
           boxShadow: [
             BoxShadow(
-              // --- FIXED: Replaced withOpacity with withAlpha ---
-              color: Colors.black.withAlpha(13), // ~5% opacity
-              blurRadius: 5,
-              offset: const Offset(0, 2),
+              color: Colors.black.withAlpha(10),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
         child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              message,
+              message.text,
               style: GoogleFonts.poppins(
                 color: isMe ? Colors.white : Colors.black87,
+                fontSize: 14,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              DateFormat('h:mm a').format(timestamp),
+              DateFormat('h:mm a').format(message.timestamp.toDate()),
               style: GoogleFonts.poppins(
                 fontSize: 10,
-                // --- FIXED: Replaced withOpacity with withAlpha ---
-                color:
-                    isMe
-                        ? Colors.white.withAlpha(179) // ~70% opacity
-                        : Colors.black.withAlpha(102), // ~40% opacity
+                color: isMe ? Colors.white70 : Colors.black45,
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// Widget for the date divider
-class _DateDivider extends StatelessWidget {
-  final DateTime date;
-  const _DateDivider({required this.date});
-
-  String _getFormattedDate(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final dateToCompare = DateTime(date.year, date.month, date.day);
-
-    if (dateToCompare == today) {
-      return 'Today';
-    } else if (dateToCompare == yesterday) {
-      return 'Yesterday';
-    } else {
-      return DateFormat('MMMM d, y').format(date);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            // --- FIXED: Replaced withOpacity with withAlpha ---
-            color: Colors.grey.shade300.withAlpha(204), // ~80% opacity
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            _getFormattedDate(date),
-            style: GoogleFonts.poppins(
-              color: Colors.black54,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ),
       ),
     );

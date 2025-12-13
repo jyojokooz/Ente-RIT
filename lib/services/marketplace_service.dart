@@ -1,8 +1,10 @@
-// --- THIS IS THE FIX ---
-// This import defines all the necessary Firestore classes like DocumentSnapshot,
-// CollectionReference, Timestamp, and FirebaseFirestore.
+// ===============================
+// FILE NAME: marketplace_service.dart
+// FILE PATH: lib/services/marketplace_service.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-// --- END OF FIX ---
+import 'package:firebase_auth/firebase_auth.dart';
 
 // --- DATA MODEL for Product ---
 class Product {
@@ -53,8 +55,10 @@ class Product {
 class MarketplaceService {
   final CollectionReference _productsCollection = FirebaseFirestore.instance
       .collection('products');
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Fetches only UNSOLD products for the main feed
+  // --- PRODUCTS ---
+
   Stream<List<Product>> getProductsStream() {
     return _productsCollection
         .where('isSold', isEqualTo: false)
@@ -66,7 +70,6 @@ class MarketplaceService {
         );
   }
 
-  /// Fetches UNSOLD products for a specific user ("My Ads")
   Stream<List<Product>> getProductsForUserStream(String userId) {
     return _productsCollection
         .where('sellerId', isEqualTo: userId)
@@ -79,7 +82,6 @@ class MarketplaceService {
         );
   }
 
-  /// Fetches a stream of SOLD products listed by a specific seller.
   Stream<List<Product>> getSoldProductsForUserStream(String userId) {
     return _productsCollection
         .where('sellerId', isEqualTo: userId)
@@ -93,17 +95,55 @@ class MarketplaceService {
   }
 
   Future<void> addProduct(Map<String, dynamic> productData) async {
-    // When adding a new product, ensure isSold is set to false
     final dataWithSoldStatus = {...productData, 'isSold': false};
     await _productsCollection.add(dataWithSoldStatus);
   }
 
-  /// Marks a product as sold in the database.
   Future<void> markAsSold(String productId) async {
     await _productsCollection.doc(productId).update({'isSold': true});
   }
 
   Future<void> deleteProduct(String productId) async {
     await _productsCollection.doc(productId).delete();
+  }
+
+  // --- WISHLIST LOGIC ---
+
+  Future<void> toggleWishlist(String productId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final userRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid);
+
+    // Check if item is already in wishlist
+    final doc = await userRef.get();
+    final List<dynamic> wishlist = doc.data()?['wishlist'] ?? [];
+
+    if (wishlist.contains(productId)) {
+      await userRef.update({
+        'wishlist': FieldValue.arrayRemove([productId]),
+      });
+    } else {
+      await userRef.update({
+        'wishlist': FieldValue.arrayUnion([productId]),
+      });
+    }
+  }
+
+  Stream<List<String>> getWishlistStream() {
+    final user = _auth.currentUser;
+    if (user == null) return Stream.value([]);
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data();
+          if (data == null || !data.containsKey('wishlist')) return [];
+          return List<String>.from(data['wishlist']);
+        });
   }
 }

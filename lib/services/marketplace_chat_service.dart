@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: marketplace_chat_service.dart
+// FILE PATH: lib/services/marketplace_chat_service.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// A data model representing a single message in the marketplace chat.
@@ -7,16 +12,25 @@ class MarketplaceMessage {
   final String text;
   final Timestamp timestamp;
 
+  // --- NEW FIELDS FOR PRODUCT TAGGING ---
+  final String? type; // 'text' or 'product'
+  final String? productId;
+  final String? productTitle;
+  final String? productImageUrl;
+  final double? productPrice;
+
   MarketplaceMessage({
     required this.senderId,
     required this.receiverId,
     required this.text,
     required this.timestamp,
+    this.type = 'text',
+    this.productId,
+    this.productTitle,
+    this.productImageUrl,
+    this.productPrice,
   });
 
-  // REMOVED toMap() as it's replaced by toFirestore()
-
-  // --- NEW: Factory constructor to create a message from a Firestore snapshot ---
   factory MarketplaceMessage.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
     SnapshotOptions? options,
@@ -27,21 +41,29 @@ class MarketplaceMessage {
       receiverId: data?['receiverId'] ?? '',
       text: data?['text'] ?? '',
       timestamp: data?['timestamp'] as Timestamp,
+      type: data?['type'] ?? 'text',
+      productId: data?['productId'],
+      productTitle: data?['productTitle'],
+      productImageUrl: data?['productImageUrl'],
+      productPrice: (data?['productPrice'] as num?)?.toDouble(),
     );
   }
 
-  // --- NEW: Method to convert a message instance to a Map for Firestore ---
   Map<String, dynamic> toFirestore() {
     return {
       'senderId': senderId,
       'receiverId': receiverId,
       'text': text,
       'timestamp': timestamp,
+      'type': type,
+      'productId': productId,
+      'productTitle': productTitle,
+      'productImageUrl': productImageUrl,
+      'productPrice': productPrice,
     };
   }
 }
 
-/// A service class to handle all Firestore chat operations for the marketplace.
 class MarketplaceChatService {
   final CollectionReference _chatsCollection = FirebaseFirestore.instance
       .collection('marketplace_chats');
@@ -57,17 +79,28 @@ class MarketplaceChatService {
     required String text,
     required String senderId,
     required String receiverId,
+    // Optional Product Data
+    String type = 'text',
+    String? productId,
+    String? productTitle,
+    String? productImageUrl,
+    double? productPrice,
   }) async {
-    if (text.trim().isEmpty) return;
+    // Allow empty text only if it's a product card
+    if (text.trim().isEmpty && type == 'text') return;
 
     final newMessage = MarketplaceMessage(
       senderId: senderId,
       receiverId: receiverId,
       text: text,
       timestamp: Timestamp.now(),
+      type: type,
+      productId: productId,
+      productTitle: productTitle,
+      productImageUrl: productImageUrl,
+      productPrice: productPrice,
     );
 
-    // --- CHANGE: Use .withConverter() to add the typed object directly ---
     await _chatsCollection
         .doc(chatRoomId)
         .collection('messages')
@@ -75,20 +108,17 @@ class MarketplaceChatService {
           fromFirestore: MarketplaceMessage.fromFirestore,
           toFirestore: (message, _) => message.toFirestore(),
         )
-        .add(newMessage); // No more .toMap() needed here!
+        .add(newMessage);
 
-    // Update the main chat document (this part is unchanged)
+    // Update the main chat document
     await _chatsCollection.doc(chatRoomId).set({
       'participants': [senderId, receiverId],
-      'lastMessage': text,
+      'lastMessage': type == 'product' ? 'Sent a product: $productTitle' : text,
       'lastMessageTimestamp': newMessage.timestamp,
     }, SetOptions(merge: true));
   }
 
-  /// Gets a real-time stream of typed [MarketplaceMessage] objects.
-  // --- CHANGE: The return type is now cleaner and more specific ---
   Stream<QuerySnapshot<MarketplaceMessage>> getMessages(String chatRoomId) {
-    // --- FIX: This is now fully type-safe with NO CAST NEEDED ---
     return _chatsCollection
         .doc(chatRoomId)
         .collection('messages')
@@ -100,8 +130,6 @@ class MarketplaceChatService {
         .snapshots();
   }
 
-  // Note: getChatList is left as is, because it reads the top-level
-  // document which is a simple Map, not a MarketplaceMessage object.
   Stream<QuerySnapshot<Map<String, dynamic>>> getChatList(String userId) {
     return _chatsCollection
             .where('participants', arrayContains: userId)

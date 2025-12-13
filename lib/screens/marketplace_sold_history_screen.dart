@@ -1,9 +1,15 @@
+// ===============================
+// FILE NAME: marketplace_sold_history_screen.dart
+// FILE PATH: lib/screens/marketplace_sold_history_screen.dart
+// ===============================
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/marketplace_service.dart';
 import 'product_detail_screen.dart';
-import 'marketplace_screen.dart'; // For the ProductCard
+// Import marketplace_screen to access the ModernProductCard widget
+import 'marketplace_screen.dart';
 
 class MarketplaceSoldHistoryScreen extends StatelessWidget {
   const MarketplaceSoldHistoryScreen({super.key});
@@ -18,7 +24,7 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         title: Text(
           'Sold History',
@@ -28,7 +34,7 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
           ),
         ),
         backgroundColor: Colors.white,
-        elevation: 1,
+        elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: StreamBuilder<List<Product>>(
@@ -38,7 +44,7 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.red),
+              child: CircularProgressIndicator(color: Colors.black),
             );
           }
           if (snapshot.hasError) {
@@ -56,9 +62,9 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16.0),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 16,
+              crossAxisSpacing: 12,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.75,
+              childAspectRatio: 0.65, // Matches the new card aspect ratio
             ),
             itemCount: products.length,
             itemBuilder: (context, index) {
@@ -72,7 +78,37 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
                     ),
                   );
                 },
-                child: ProductCard(product: product),
+                // UPDATED: Using ModernProductCard, wrapped in opacity to indicate sold status
+                child: Opacity(
+                  opacity: 0.6,
+                  child: Stack(
+                    children: [
+                      ModernProductCard(product: product),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            "SOLD",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           );
@@ -86,7 +122,7 @@ class MarketplaceSoldHistoryScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history_toggle_off, size: 80, color: Colors.grey.shade400),
+          Icon(Icons.history_toggle_off, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(
             'You haven\'t sold any items yet.',
