@@ -6,7 +6,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'web_view_screen.dart';
+import 'department_detail_menu_screen.dart'; // Make sure this import is correct
 
 class DepartmentsScreen extends StatefulWidget {
   const DepartmentsScreen({super.key});
@@ -37,17 +37,22 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
     super.dispose();
   }
 
-  // Helper to generate an acronym (e.g., Computer Science -> CS)
+  // Helper to generate an acronym (e.g., Computer Science -> CSE)
   String _getAcronym(String name) {
     if (name.isEmpty) return "";
-    // Manual overrides for common ones if needed
-    if (name.toLowerCase().contains("computer")) return "CSE";
-    if (name.toLowerCase().contains("mechanical")) return "ME";
-    if (name.toLowerCase().contains("electrical")) return "EEE";
-    if (name.toLowerCase().contains("electronics")) return "ECE";
-    if (name.toLowerCase().contains("civil")) return "CE";
-    if (name.toLowerCase().contains("architecture")) return "B.Arch";
-    if (name.toLowerCase().contains("application")) return "MCA";
+
+    // Manual overrides for standard engineering acronyms
+    String lowerName = name.toLowerCase();
+    if (lowerName.contains("computer")) return "CSE";
+    if (lowerName.contains("mechanical")) return "ME";
+    if (lowerName.contains("electrical") && lowerName.contains("electronics"))
+      return "EEE";
+    if (lowerName.contains("electronics") &&
+        lowerName.contains("communication"))
+      return "ECE";
+    if (lowerName.contains("civil")) return "CE";
+    if (lowerName.contains("architecture")) return "B.Arch";
+    if (lowerName.contains("application")) return "MCA";
 
     // Fallback: First letter of each word
     List<String> words = name.split(" ");
@@ -119,7 +124,7 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                   return _buildEmptyState();
                 }
 
-                // Filter Logic
+                // Filter Logic based on search query
                 final allDocs = snapshot.data!.docs;
                 final filteredDocs =
                     allDocs.where((doc) {
@@ -169,21 +174,37 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
   ) {
     return GestureDetector(
       onTap: () {
-        if (name.toLowerCase().contains("mca") || acronym == "MCA") {
+        // --- NAVIGATION LOGIC ---
+        // Specifically check for MCA or Computer Applications to open the detailed menu
+        if (name.toLowerCase().contains("computer applications") ||
+            name.toLowerCase().contains("mca") ||
+            acronym == "MCA") {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder:
-                  (context) => const WebViewScreen(
-                    title: 'MCA Department',
-                    url: 'https://mca-rit.vercel.app/',
+                  (context) => DepartmentDetailMenuScreen(
+                    deptName: name, // Pass the actual name
+                    deptAcronym: acronym,
+                    // Passing the specific RIT URLs for scraping
+                    hodUrl: "https://www.rit.ac.in/ca.php",
+                    facultyUrl: "https://www.rit.ac.in/ca-faculty.php",
+                    placementUrl: "https://www.rit.ac.in/ca.php",
                   ),
             ),
           );
         } else {
+          // Fallback for other departments (can be expanded later)
+          // For now, we will just direct them to the same menu but with a generic placeholder or the same RIT URLs if the pattern matches
+          // Or show a "Coming Soon" if URLs are unique per dept and not yet known.
+
+          // Let's assume we want to enable this feature for all departments,
+          // but we might not have the correct URLs for others yet.
+          // For safety, we show a snackbar for non-MCA departments.
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$name coming soon!'),
+              content: Text('$name details coming soon!'),
               backgroundColor: Colors.black87,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
