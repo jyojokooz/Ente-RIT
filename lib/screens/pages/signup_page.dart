@@ -370,8 +370,9 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                           Icons.alternate_email,
                         ),
                         validator: (val) {
-                          if (val == null || val.isEmpty)
+                          if (val == null || val.isEmpty) {
                             return 'Username is required';
+                          }
                           if (val.length < 3) return 'Min 3 characters';
                           return null;
                         },
@@ -390,10 +391,12 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                           Icons.email_outlined,
                         ),
                         validator: (val) {
-                          if (val == null || val.isEmpty)
+                          if (val == null || val.isEmpty) {
                             return 'Email is required';
-                          if (!val.contains('@') || !val.contains('.'))
+                          }
+                          if (!val.contains('@') || !val.contains('.')) {
                             return 'Enter a valid email';
+                          }
                           return null;
                         },
                       ),

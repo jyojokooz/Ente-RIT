@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/admin/admin_manage_features_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';

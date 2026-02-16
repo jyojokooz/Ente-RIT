@@ -3,7 +3,7 @@
 // FILE PATH: lib/screens/create_post_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously, unnecessary_import
 
 import 'dart:convert';
 import 'dart:io';
@@ -270,8 +270,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
       if (_postType == PostType.video && _mediaFiles.isNotEmpty) {
         final compressedVideo = await _compressVideo(_mediaFiles.first);
-        if (compressedVideo == null)
+        if (compressedVideo == null) {
           throw Exception("Video compression failed");
+        }
 
         if (_thumbnailFile != null) {
           setState(() => _uploadStatus = 'Uploading thumbnail...');

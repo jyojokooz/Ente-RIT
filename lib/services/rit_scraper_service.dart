@@ -3,11 +3,12 @@
 // FILE PATH: lib/services/rit_scraper_service.dart
 // ===============================
 
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:convert';
 import 'dart:developer'; // For logging
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as parser;
-import 'package:html/dom.dart';
 
 class HODModel {
   final String name;
@@ -86,8 +87,9 @@ class RitScraperService {
         var imgElement = document.querySelector('.team-img img');
         if (imgElement != null) {
           var src = imgElement.attributes['src'];
-          if (src != null)
+          if (src != null) {
             imageUrl = src.startsWith('http') ? src : "$baseUrl/$src";
+          }
         }
         String name =
             document.querySelector('.team-bio h5 a')?.text.trim() ??
@@ -135,8 +137,9 @@ class RitScraperService {
         );
         for (var img in carouselItems) {
           var src = img.attributes['src'];
-          if (src != null && src.isNotEmpty)
+          if (src != null && src.isNotEmpty) {
             imageUrls.add(src.startsWith('http') ? src : "$baseUrl/$src");
+          }
         }
         return imageUrls;
       }

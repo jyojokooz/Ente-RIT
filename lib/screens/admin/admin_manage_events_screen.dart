@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/admin/admin_manage_events_screen.dart
 // ===============================
 
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -151,8 +153,9 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                             firstDate: DateTime.now(),
                             lastDate: DateTime(2100),
                           );
-                          if (pickedDate != null)
+                          if (pickedDate != null) {
                             setDialogState(() => selectedDate = pickedDate);
+                          }
                         },
                       ),
                       ListTile(
@@ -172,8 +175,9 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                             context: context,
                             initialTime: TimeOfDay.now(),
                           );
-                          if (pickedTime != null)
+                          if (pickedTime != null) {
                             setDialogState(() => selectedTime = pickedTime);
+                          }
                         },
                       ),
                     ],
@@ -244,8 +248,9 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                                   SnackBar(content: Text("Error: $e")),
                                 );
                               } finally {
-                                if (mounted)
+                                if (mounted) {
                                   setDialogState(() => isUploading = false);
+                                }
                               }
                             } else {
                               ScaffoldMessenger.of(parentContext).showSnackBar(
@@ -406,8 +411,9 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                 .orderBy('eventDate')
                 .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           if (snapshot.data!.docs.isEmpty) {
             return const Center(child: Text("No events found."));

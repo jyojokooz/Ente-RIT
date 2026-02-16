@@ -71,7 +71,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
           IconButton(
             icon: const Icon(Icons.edit_square, color: brandBlack),
             onPressed: () {
-              // TODO: Implement "New Message" search user screen
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text("New Message feature coming soon!"),

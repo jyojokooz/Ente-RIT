@@ -501,12 +501,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
       validator: (value) {
-        if (label == 'Full Name' && (value == null || value.isEmpty))
+        if (label == 'Full Name' && (value == null || value.isEmpty)) {
           return 'Required';
+        }
         if (isUsername) {
           if (value == null || value.isEmpty) return 'Required';
-          if (value.contains(' ') || value.contains('@'))
+          if (value.contains(' ') || value.contains('@')) {
             return 'Invalid characters';
+          }
         }
         return null;
       },

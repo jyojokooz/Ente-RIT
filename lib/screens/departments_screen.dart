@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/departments_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -45,11 +47,13 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
     String lowerName = name.toLowerCase();
     if (lowerName.contains("computer")) return "CSE";
     if (lowerName.contains("mechanical")) return "ME";
-    if (lowerName.contains("electrical") && lowerName.contains("electronics"))
+    if (lowerName.contains("electrical") && lowerName.contains("electronics")) {
       return "EEE";
+    }
     if (lowerName.contains("electronics") &&
-        lowerName.contains("communication"))
+        lowerName.contains("communication")) {
       return "ECE";
+    }
     if (lowerName.contains("civil")) return "CE";
     if (lowerName.contains("architecture")) return "B.Arch";
     if (lowerName.contains("application")) return "MCA";

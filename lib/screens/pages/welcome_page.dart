@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/pages/welcome_page.dart
 // ===============================
 
+// ignore_for_file: prefer_const_constructors_in_immutables
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;

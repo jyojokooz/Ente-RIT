@@ -6,7 +6,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -404,8 +403,9 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
                   builder: (context, child) {
                     double selected = 0;
                     if (_bannerController.hasClients &&
-                        _bannerController.page != null)
+                        _bannerController.page != null) {
                       selected = _bannerController.page!;
+                    }
                     bool isSelected = (selected.round() == index);
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
@@ -485,14 +485,16 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
         }
 
         List<Product> products = snapshot.data ?? [];
-        if (_selectedCategory != 'All')
+        if (_selectedCategory != 'All') {
           products =
               products.where((p) => p.category == _selectedCategory).toList();
-        if (_searchQuery.isNotEmpty)
+        }
+        if (_searchQuery.isNotEmpty) {
           products =
               products
                   .where((p) => p.title.toLowerCase().contains(_searchQuery))
                   .toList();
+        }
 
         if (products.isEmpty) {
           return Center(

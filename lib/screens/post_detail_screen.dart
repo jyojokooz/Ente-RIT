@@ -33,8 +33,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (!originalUrl.contains('res.cloudinary.com')) return originalUrl;
     const transformations = 'w_1080,q_auto:good,f_auto';
     final parts = originalUrl.split('/upload/');
-    if (parts.length == 2)
+    if (parts.length == 2) {
       return '${parts[0]}/upload/$transformations/${parts[1]}';
+    }
     return originalUrl;
   }
 
@@ -128,8 +129,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           final bool isOwner = userId == user.uid;
 
           String dateString = '';
-          if (timestamp != null)
+          if (timestamp != null) {
             dateString = DateFormat('MMMM d, y').format(timestamp.toDate());
+          }
 
           // --- 2. Main Content (Fade In) ---
           return Column(
@@ -195,7 +197,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       // Media
                       GestureDetector(
                         onTap: () {
-                          if (type == 'video')
+                          if (type == 'video') {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -205,7 +207,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                     ),
                               ),
                             );
-                          else
+                          } else {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -216,6 +218,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                     ),
                               ),
                             );
+                          }
                         },
                         child: Hero(
                           tag: widget.postId,

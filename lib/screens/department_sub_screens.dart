@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/department_sub_screens.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -34,17 +36,19 @@ class HodInfoScreen extends StatelessWidget {
       body: FutureBuilder<HODModel>(
         future: scraper.getHODDetails(url),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.black),
             );
-          if (snapshot.hasError)
+          }
+          if (snapshot.hasError) {
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
                 style: const TextStyle(color: Colors.black),
               ),
             );
+          }
           final hod = snapshot.data!;
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -381,24 +385,27 @@ class StaffProfileScreen extends StatelessWidget {
       body: FutureBuilder<StaffProfileModel?>(
         future: scraper.fetchStaffProfile(staffId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.black),
             );
-          if (snapshot.hasError)
+          }
+          if (snapshot.hasError) {
             return Center(
               child: Text(
                 "Error: ${snapshot.error}",
                 style: const TextStyle(color: Colors.black),
               ),
             );
-          if (!snapshot.hasData || snapshot.data == null)
+          }
+          if (!snapshot.hasData || snapshot.data == null) {
             return const Center(
               child: Text(
                 "Profile details unavailable.",
                 style: TextStyle(color: Colors.black),
               ),
             );
+          }
 
           final profile = snapshot.data!;
 
@@ -651,17 +658,19 @@ class PlacementInfoScreen extends StatelessWidget {
       body: FutureBuilder<List<String>>(
         future: scraper.getPlacementImages(url),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.black),
             );
-          if (!snapshot.hasData || snapshot.data!.isEmpty)
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(
               child: Text(
                 "No placement images found.",
                 style: GoogleFonts.poppins(color: Colors.black),
               ),
             );
+          }
           final images = snapshot.data!;
           return ListView.separated(
             padding: const EdgeInsets.all(20),

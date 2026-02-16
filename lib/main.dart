@@ -3,6 +3,8 @@
 // FILE PATH: lib/main.dart
 // ===============================
 
+// ignore_for_file: unnecessary_import
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';

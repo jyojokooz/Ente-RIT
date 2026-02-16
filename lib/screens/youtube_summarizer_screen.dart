@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/youtube_summarizer_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:google_fonts/google_fonts.dart';
@@ -98,7 +100,6 @@ class _YouTubeSummarizerScreenState extends State<YouTubeSummarizerScreen> {
   Widget build(BuildContext context) {
     // Red accent color for YouTube vibe
     const Color accentColor = Color(0xFFFF0000);
-    const Color textColor = Colors.black87;
 
     return Scaffold(
       backgroundColor: Colors.white, // Modern White Background
