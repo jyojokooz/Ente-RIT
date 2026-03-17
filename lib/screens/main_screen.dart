@@ -3,16 +3,13 @@
 // FILE PATH: lib/screens/main_screen.dart
 // ===============================
 
-// ignore_for_file: sized_box_for_whitespace, curly_braces_in_flow_control_structures
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-// --- Screen Imports ---
-import 'pages/pages.dart'; // Ensure this exports HomeScreen, ExploreScreen, etc.
+import 'pages/pages.dart';
 import 'create_post_screen.dart';
 import '../widgets/notification_badge.dart';
 
@@ -42,42 +39,31 @@ class _MainScreenState extends State<MainScreen> {
         const Center(child: Text("Error: User not found.")),
     ];
 
-    // SETUP PUSH NOTIFICATIONS
     _setupPushNotifications();
   }
 
-  // --- FCM TOKEN SETUP ---
   Future<void> _setupPushNotifications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final messaging = FirebaseMessaging.instance;
-
-    // 1. Request Permission
     await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-    // 2. Get the Token
     try {
       String? token = await messaging.getToken();
-
-      // 3. Save Token to Firestore
       if (token != null) {
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'fcmToken': token,
           'lastLogin': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
-
-        debugPrint("FCM Token saved for user ${user.uid}: $token");
       }
-
-      // 4. Handle token refresh
       messaging.onTokenRefresh.listen((newToken) {
         FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'fcmToken': newToken,
         }, SetOptions(merge: true));
       });
     } catch (e) {
-      debugPrint("Error getting or saving FCM token: $e");
+      debugPrint("Error FCM: $e");
     }
   }
 
@@ -89,7 +75,6 @@ class _MainScreenState extends State<MainScreen> {
       );
       return;
     }
-
     int pageIndex = index > 2 ? index - 1 : index;
     setState(() {
       _currentIndex = pageIndex;
@@ -98,8 +83,9 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color brandPurple = Color(0xFF9983F3);
-    const Color brandBlack = Colors.black;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final brandPurple = isDark ? Colors.yellow : const Color(0xFF9983F3);
 
     return PopScope(
       canPop: false,
@@ -110,10 +96,10 @@ class _MainScreenState extends State<MainScreen> {
             now.difference(_lastPressedAt!) > const Duration(seconds: 2)) {
           _lastPressedAt = now;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Press back again to exit'),
-              duration: Duration(seconds: 2),
-              backgroundColor: brandBlack,
+            SnackBar(
+              content: const Text('Press back again to exit'),
+              duration: const Duration(seconds: 2),
+              backgroundColor: theme.colorScheme.onSurface,
             ),
           );
         } else {
@@ -121,7 +107,7 @@ class _MainScreenState extends State<MainScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: IndexedStack(index: _currentIndex, children: _pages),
 
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -134,11 +120,14 @@ class _MainScreenState extends State<MainScreen> {
               'assets/app_icon.png',
               errorBuilder:
                   (c, e, s) => Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: brandPurple,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.add, color: Colors.white),
+                    child: Icon(
+                      Icons.add,
+                      color: isDark ? Colors.black : Colors.white,
+                    ),
                   ),
             ),
           ),
@@ -146,9 +135,9 @@ class _MainScreenState extends State<MainScreen> {
 
         bottomNavigationBar: BottomAppBar(
           height: 55,
-          color: Colors.white,
+          color: theme.bottomAppBarTheme.color,
           elevation: 0,
-          surfaceTintColor: Colors.white,
+          surfaceTintColor: theme.bottomAppBarTheme.color,
           shape: const CircularNotchedRectangle(),
           notchMargin: 10.0,
           child: Padding(
@@ -156,15 +145,16 @@ class _MainScreenState extends State<MainScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildInstagramIcon(Icons.home, Icons.home_outlined, 0, 0),
-                _buildInstagramIcon(Icons.search, Icons.search_outlined, 1, 1),
-                const SizedBox(width: 48), // Space for FAB
-                _buildInstagramIcon(Icons.apps, Icons.apps_outlined, 2, 3),
-                _buildInstagramIcon(
+                _buildTabIcon(Icons.home, Icons.home_outlined, 0, 0, theme),
+                _buildTabIcon(Icons.search, Icons.search_outlined, 1, 1, theme),
+                const SizedBox(width: 48),
+                _buildTabIcon(Icons.apps, Icons.apps_outlined, 2, 3, theme),
+                _buildTabIcon(
                   Icons.person,
                   Icons.person_outline,
                   3,
                   4,
+                  theme,
                   isProfile: true,
                 ),
               ],
@@ -175,18 +165,21 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildInstagramIcon(
+  Widget _buildTabIcon(
     IconData activeIcon,
     IconData inactiveIcon,
     int pageIndex,
-    int visualIndex, {
+    int visualIndex,
+    ThemeData theme, {
     bool isProfile = false,
   }) {
     final bool isSelected = _currentIndex == pageIndex;
+    final color =
+        isSelected ? theme.colorScheme.onSurface : Colors.grey.shade500;
 
     Widget icon = Icon(
       isSelected ? activeIcon : inactiveIcon,
-      color: isSelected ? Colors.black : Colors.grey.shade600,
+      color: color,
       size: 28,
     );
 
@@ -198,7 +191,7 @@ class _MainScreenState extends State<MainScreen> {
       child: GestureDetector(
         onTap: () => _onTabTapped(visualIndex),
         behavior: HitTestBehavior.opaque,
-        child: Container(height: double.infinity, child: Center(child: icon)),
+        child: SizedBox(height: double.infinity, child: Center(child: icon)),
       ),
     );
   }

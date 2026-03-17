@@ -9,10 +9,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-// --- NEW IMPORTS FOR NOTIFICATIONS ---
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart'; // Import for debugPrint
+import 'package:flutter/foundation.dart';
+
+// --- THEME PROVIDER ---
+import 'package:my_project/theme_provider.dart';
 
 // --- Screen Imports ---
 import 'package:my_project/auth/auth_gate.dart';
@@ -27,11 +28,9 @@ import 'package:my_project/screens/create_username_screen.dart';
 
 import 'firebase_options.dart';
 
-// --- BACKGROUND HANDLER ---
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // FIX 2: Replaced 'print' with 'debugPrint'
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
@@ -50,45 +49,82 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Kampus Konnect',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.yellow,
-          secondary: Colors.yellow,
-          surface: Colors.black,
-          onPrimary: Colors.black,
-          onSurface: Colors.white,
-        ),
-        scaffoldBackgroundColor: Colors.black,
-        textTheme: GoogleFonts.poppinsTextTheme(
-          ThemeData.dark().textTheme,
-        ).apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-          decoration: TextDecoration.none,
-        ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.grey.shade900,
-          elevation: 0,
-        ),
-        // FIX 1: Changed 'BottomAppBarTheme' to 'BottomAppBarThemeData'
-        bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.black87),
-      ),
+    // Listen to theme changes dynamically
+    return AnimatedBuilder(
+      animation: themeProvider,
+      builder: (context, child) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Kampus Konnect',
 
-      home: const SplashScreen(),
+          themeMode: themeProvider.themeMode,
 
-      routes: {
-        '/auth-gate': (context) => const AuthGate(),
-        '/home': (context) => const MainScreen(),
-        '/create-username': (context) => const CreateUsernameScreen(),
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/create-post': (context) => const CreatePostScreen(),
-        '/search': (context) => const SearchScreen(),
-        '/requests': (context) => const RequestsScreen(),
-        '/chat-list': (context) => const ChatListScreen(),
+          // --- LIGHT THEME ---
+          theme: ThemeData(
+            brightness: Brightness.light,
+            scaffoldBackgroundColor: const Color(0xFFF8F9FE), // Soft Light Grey
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF9983F3),
+              secondary: Color(0xFF9983F3),
+              surface: Colors.white,
+              onPrimary: Colors.white,
+              onSurface: Colors.black87,
+            ),
+            textTheme: GoogleFonts.poppinsTextTheme(
+              ThemeData.light().textTheme,
+            ).apply(bodyColor: Colors.black87, displayColor: Colors.black87),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              iconTheme: IconThemeData(color: Colors.black87),
+              titleTextStyle: TextStyle(color: Colors.black87, fontSize: 20),
+            ),
+            bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.white),
+            dividerColor: Colors.grey.shade200,
+          ),
+
+          // --- DARK THEME ---
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: Colors.black, // True Black
+            colorScheme: const ColorScheme.dark(
+              primary: Colors.yellow,
+              secondary: Colors.yellow,
+              surface: Color(0xFF151515), // Very Dark Grey for cards
+              onPrimary: Colors.black,
+              onSurface: Colors.white,
+            ),
+            textTheme: GoogleFonts.poppinsTextTheme(
+              ThemeData.dark().textTheme,
+            ).apply(bodyColor: Colors.white, displayColor: Colors.white),
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.white),
+              titleTextStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+              ),
+            ),
+            bottomAppBarTheme: BottomAppBarThemeData(
+              color: Colors.grey.shade900,
+            ),
+            dividerColor: Colors.grey.shade800,
+          ),
+
+          home: const SplashScreen(),
+
+          routes: {
+            '/auth-gate': (context) => const AuthGate(),
+            '/home': (context) => const MainScreen(),
+            '/create-username': (context) => const CreateUsernameScreen(),
+            '/forgot-password': (context) => const ForgotPasswordScreen(),
+            '/create-post': (context) => const CreatePostScreen(),
+            '/search': (context) => const SearchScreen(),
+            '/requests': (context) => const RequestsScreen(),
+            '/chat-list': (context) => const ChatListScreen(),
+          },
+        );
       },
     );
   }

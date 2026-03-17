@@ -3,8 +3,6 @@
 // FILE PATH: lib/screens/post_card.dart
 // ===============================
 
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
-
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,17 +16,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'full_screen_video_player.dart';
 import 'share_post_sheet.dart';
 import 'likes_list_screen.dart';
-import 'comments_sheet.dart'; // <--- IMPORT THE NEW SHEET
 
-// --- GLOBAL AUDIO HANDLER ---
+// Reuse GlobalAudioHandler from your existing code...
 class GlobalAudioHandler {
   static final AudioPlayer _player = AudioPlayer();
   static String? _currentPostId;
   static Function(bool)? _currentUiUpdater;
 
-  static void init() {
-    _player.setReleaseMode(ReleaseMode.stop);
-  }
+  static void init() => _player.setReleaseMode(ReleaseMode.stop);
 
   static Future<void> playOrPause(
     String postId,
@@ -61,7 +56,6 @@ class GlobalAudioHandler {
         });
       }
     } catch (e) {
-      debugPrint("Audio Error: $e");
       updateUi(false);
     }
   }
@@ -78,8 +72,7 @@ class GlobalAudioHandler {
 
 class PostCard extends StatefulWidget {
   final DocumentSnapshot postSnapshot;
-  final Function()
-  onCommentPressed; // Kept for compatibility, but not used for sheet
+  final Function() onCommentPressed;
   final Function() onDeletePressed;
   final Function() onProfileTapped;
   final Function() onLikePressed;
@@ -100,48 +93,19 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
-  int _currentImageIndex = 0;
   bool _isPlayingMusic = false;
-
-  // Animation State
   AnimationController? _likeController;
   late Animation<double> _likeScaleAnimation;
-
-  AnimationController? _overlayController;
-  late Animation<double> _overlayScale;
-  late Animation<double> _overlayOpacity;
 
   @override
   void initState() {
     super.initState();
-
     _likeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 200),
     );
-
-    _likeScaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.2,
-    ).animate(CurvedAnimation(parent: _likeController!, curve: Curves.easeOut));
-
-    _overlayController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    _overlayScale = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _overlayController!,
-        curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
-      ),
-    );
-
-    _overlayOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _overlayController!,
-        curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
-      ),
+    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _likeController!, curve: Curves.elasticOut),
     );
   }
 
@@ -156,31 +120,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    if (_isPlayingMusic) {
+    if (_isPlayingMusic)
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
-    }
     _likeController?.dispose();
-    _overlayController?.dispose();
     super.dispose();
-  }
-
-  // --- SHOW COMMENTS SHEET ---
-  void _showCommentsSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true, // Needed for full height/keyboard interaction
-      backgroundColor: Colors.transparent, // Allows rounded corners to show
-      useRootNavigator: true, // Ensures it covers bottom nav bar if needed
-      builder:
-          (context) => Padding(
-            // IMPORTANT: Padding for keyboard is handled inside the sheet via MediaQuery
-            // But we add this wrapper to ensure safe area if needed
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: CommentsSheet(postId: widget.postSnapshot.id),
-          ),
-    );
   }
 
   void _onVisibilityChanged(VisibilityInfo info) {
@@ -190,48 +133,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
-  void _toggleMusic(String? url) {
-    if (url == null || url.isEmpty) return;
-    GlobalAudioHandler.playOrPause(widget.postSnapshot.id, url, (isPlaying) {
-      if (mounted) setState(() => _isPlayingMusic = isPlaying);
-    });
-  }
-
-  void _handleDoubleTapLike() {
-    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-
-    FirebaseFirestore.instance
-        .collection('posts')
-        .doc(widget.postSnapshot.id)
-        .update({
-          'likes': FieldValue.arrayUnion([currentUserId]),
-        });
-
-    if (_likeController != null) {
-      _likeController!.forward().then((_) => _likeController!.reverse());
-    }
-
-    if (_overlayController != null) {
-      _overlayController!.reset();
-      _overlayController!.forward();
-    }
-  }
-
   void _triggerLikeButtonPress() {
     widget.onLikePressed();
-    if (_likeController != null) {
+    if (_likeController != null)
       _likeController!.forward().then((_) => _likeController!.reverse());
-    }
-  }
-
-  void _openLikesScreen(List<dynamic> likes) {
-    if (likes.isEmpty) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LikesListScreen(likeUserIds: likes),
-      ),
-    );
   }
 
   String getOptimizedCloudinaryUrl(String originalUrl) {
@@ -243,96 +148,27 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     return originalUrl;
   }
 
-  void _onSharePressed(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SharePostSheet(postId: widget.postSnapshot.id),
-    );
-  }
-
-  Widget _buildAudioControl(String? previewUrl) {
-    if (previewUrl == null) return const SizedBox.shrink();
-
-    return Positioned(
-      bottom: 12,
-      right: 12,
-      child: GestureDetector(
-        onTap: () => _toggleMusic(previewUrl),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.6),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white24),
-          ),
-          child: Icon(
-            _isPlayingMusic
-                ? Icons.volume_up_rounded
-                : Icons.volume_off_rounded,
-            color: Colors.white,
-            size: 18,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLikeOverlay() {
-    return Positioned.fill(
-      child: Center(
-        child: AnimatedBuilder(
-          animation: _overlayController!,
-          builder: (context, child) {
-            return Opacity(
-              opacity: _overlayOpacity.value,
-              child: Transform.scale(
-                scale: _overlayScale.value,
-                child: const Icon(
-                  Icons.favorite,
-                  color: Colors.white,
-                  size: 85,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black26,
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Matching design colors
+    final cardBgColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
+
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData == null) return const SizedBox.shrink();
 
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-    const Color brandBlack = Colors.black;
 
     final authorData = {
       'displayName': postData['userName'] ?? 'Unknown',
-      'username': postData['username'] ?? '',
       'profilePhotoUrl': postData['userImageUrl'] ?? '',
     };
 
-    final Map<String, dynamic>? musicData = postData['music'];
-    final String? musicTitle = musicData?['trackName'];
-    final String? musicArtist = musicData?['artistName'];
-    final String? musicPreviewUrl = musicData?['previewUrl'];
-
     final String postType = postData['postType'] ?? 'image';
-
     List<String> mediaUrls = [];
     if (postData['postImages'] != null &&
         (postData['postImages'] as List).isNotEmpty) {
@@ -346,493 +182,341 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
+    final rtLikes = postData['likes'] ?? [];
+    final bool isLiked = rtLikes.contains(currentUserId);
+    final int commentsCount = postData['comments'] ?? 0;
 
     return VisibilityDetector(
       key: Key('post-vis-${widget.postSnapshot.id}'),
       onVisibilityChanged: _onVisibilityChanged,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 24.0),
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(0),
+          color: cardBgColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // --- HEADER ---
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 12.0,
-              ),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: widget.onProfileTapped,
-                    // --- STYLE: Rounded Square Profile Pic ---
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(14),
-                        image:
-                            authorData['profilePhotoUrl'].isNotEmpty
-                                ? DecorationImage(
-                                  image: CachedNetworkImageProvider(
-                                    authorData['profilePhotoUrl'],
-                                  ),
-                                  fit: BoxFit.cover,
-                                )
-                                : null,
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: widget.onProfileTapped,
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor:
+                        isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    backgroundImage:
+                        authorData['profilePhotoUrl'].isNotEmpty
+                            ? CachedNetworkImageProvider(
+                              authorData['profilePhotoUrl'],
+                            )
+                            : null,
+                    child:
+                        authorData['profilePhotoUrl'].isEmpty
+                            ? Icon(Icons.person, color: subtitleColor)
+                            : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        authorData['displayName'],
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
                       ),
-                      child:
-                          authorData['profilePhotoUrl'].isEmpty
-                              ? const Icon(
-                                Icons.person,
-                                color: Colors.grey,
-                                size: 24,
-                              )
-                              : null,
+                      Text(
+                        timestamp != null ? _formatTimeAgo(timestamp) : '',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: subtitleColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isAuthor)
+                  PopupMenuButton<String>(
+                    color: theme.colorScheme.surface,
+                    onSelected: (val) {
+                      if (val == 'edit') widget.onEditPressed();
+                      if (val == 'delete') widget.onDeletePressed();
+                    },
+                    icon: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(Icons.more_horiz, size: 20),
+                    ),
+                    itemBuilder:
+                        (ctx) => [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text(
+                              'Edit',
+                              style: TextStyle(color: textColor),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // --- CONTENT AREA (Vibrant inner box) ---
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                children: [
+                  // Background: Image OR Gradient
+                  if (mediaUrls.isNotEmpty)
+                    AspectRatio(
+                      aspectRatio: postType == 'video' ? 1.0 : 4 / 3,
+                      child: CachedNetworkImage(
+                        imageUrl: getOptimizedCloudinaryUrl(
+                          postType == 'video'
+                              ? (originalThumbnailUrl ?? '')
+                              : mediaUrls.first,
+                        ),
+                        fit: BoxFit.cover,
+                        placeholder:
+                            (c, u) => Container(
+                              color:
+                                  isDark
+                                      ? Colors.white10
+                                      : Colors.grey.shade200,
+                            ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(minHeight: 180),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFFFF3E8E),
+                            Color(0xFFFF9A44),
+                          ], // Pink to Orange gradient
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
+
+                  // Overlay Gradient for text readability
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.6),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+
+                  // Caption Text over Image/Gradient
+                  Positioned(
+                    bottom: 70,
+                    left: 16,
+                    right: 16,
+                    child: Text(
+                      caption,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  // Interaction Pills inside the box (Bottom)
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          authorData['displayName'],
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: brandBlack,
-                          ),
-                        ),
-                        if (musicTitle != null)
-                          GestureDetector(
-                            onTap: () => _toggleMusic(musicPreviewUrl),
+                        // Comment Pill
+                        GestureDetector(
+                          onTap: widget.onCommentPressed,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(
+                                0.2,
+                              ), // Frosted glass effect
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                             child: Row(
                               children: [
-                                Icon(
-                                  _isPlayingMusic
-                                      ? Icons.graphic_eq
-                                      : Icons.music_note,
-                                  size: 12,
-                                  color:
-                                      _isPlayingMusic
-                                          ? Colors.deepPurple
-                                          : Colors.grey[700],
+                                const Icon(
+                                  Icons.chat_bubble_rounded,
+                                  color: Colors.white,
+                                  size: 16,
                                 ),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    "$musicTitle • $musicArtist",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color:
-                                          _isPlayingMusic
-                                              ? Colors.deepPurple
-                                              : Colors.grey[700],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                const SizedBox(width: 8),
+                                Text(
+                                  "$commentsCount Comments",
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
                             ),
-                          )
-                        else if (authorData['username'].isNotEmpty)
-                          Text(
-                            // Optional: Display location if you have it in data
-                            '@${authorData['username']}',
-                            style: GoogleFonts.poppins(
-                              color: Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
                           ),
-                      ],
-                    ),
-                  ),
-                  if (isAuthor)
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') widget.onEditPressed();
-                        if (value == 'delete') widget.onDeletePressed();
-                      },
-                      icon: const Icon(Icons.more_horiz, color: Colors.black54),
-                      itemBuilder:
-                          (BuildContext context) => <PopupMenuEntry<String>>[
-                            const PopupMenuItem<String>(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit, color: Colors.black54),
-                                  SizedBox(width: 8),
-                                  Text('Edit'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem<String>(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete, color: Colors.red),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                    ),
-                ],
-              ),
-            ),
+                        ),
 
-            // --- MEDIA CONTENT (WITH DEEP CURVE) ---
-            if (postType == 'video')
-              GestureDetector(
-                onTap: () {
-                  if (mediaUrls.isNotEmpty) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => FullScreenVideoPlayer(
-                              videoUrl: mediaUrls.first,
-                            ),
-                      ),
-                    );
-                  }
-                },
-                onDoubleTap: _handleDoubleTapLike,
-                child: Hero(
-                  tag: 'post-${widget.postSnapshot.id}',
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                      child: ClipRRect(
-                        // --- STYLE: Deep Curve ---
-                        borderRadius: BorderRadius.circular(30),
-                        child: Stack(
-                          fit: StackFit.expand,
+                        // Like & Bookmark Row
+                        Row(
                           children: [
-                            CachedNetworkImage(
-                              imageUrl: getOptimizedCloudinaryUrl(
-                                originalThumbnailUrl ?? '',
-                              ),
-                              fit: BoxFit.cover,
-                              placeholder:
-                                  (context, url) =>
-                                      Container(color: Colors.grey[200]),
-                              errorWidget:
-                                  (context, url, error) =>
-                                      Container(color: Colors.grey[100]),
-                            ),
-                            Center(
+                            GestureDetector(
+                              onTap: _triggerLikeButtonPress,
                               child: Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
+                                  color: Colors.black.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  children: [
+                                    ScaleTransition(
+                                      scale: _likeScaleAnimation,
+                                      child: Icon(
+                                        isLiked
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                        color:
+                                            isLiked
+                                                ? Colors.redAccent
+                                                : Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      "${rtLikes.length}",
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: theme.colorScheme.surface,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(20),
+                                    ),
+                                  ),
+                                  builder:
+                                      (context) => SharePostSheet(
+                                        postId: widget.postSnapshot.id,
+                                      ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.4),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
-                                  Icons.play_arrow,
+                                  Icons.near_me_rounded,
                                   color: Colors.white,
-                                  size: 28,
+                                  size: 18,
                                 ),
                               ),
                             ),
-                            _buildAudioControl(musicPreviewUrl),
-                            _buildLikeOverlay(),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ),
-              )
-            else if (mediaUrls.isNotEmpty)
-              Column(
-                children: [
-                  SizedBox(
-                    height: MediaQuery.of(context).size.width,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                      child: ClipRRect(
-                        // --- STYLE: Deep Curve ---
-                        borderRadius: BorderRadius.circular(30),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            PageView.builder(
-                              itemCount: mediaUrls.length,
-                              onPageChanged: (index) {
-                                setState(() {
-                                  _currentImageIndex = index;
-                                });
-                              },
-                              itemBuilder: (context, index) {
-                                return GestureDetector(
-                                  onDoubleTap: _handleDoubleTapLike,
-                                  child: CachedNetworkImage(
-                                    imageUrl: getOptimizedCloudinaryUrl(
-                                      mediaUrls[index],
-                                    ),
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    memCacheWidth: 1080,
-                                    fadeInDuration: const Duration(
-                                      milliseconds: 300,
-                                    ),
-                                    placeholder:
-                                        (context, url) =>
-                                            Container(color: Colors.grey[100]),
-                                    errorWidget:
-                                        (context, url, error) =>
-                                            const Icon(Icons.error),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildAudioControl(musicPreviewUrl),
-                            _buildLikeOverlay(),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (mediaUrls.length > 1)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(mediaUrls.length, (index) {
-                          return Container(
-                            width: 6.0,
-                            height: 6.0,
-                            margin: const EdgeInsets.symmetric(horizontal: 3.0),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color:
-                                  _currentImageIndex == index
-                                      ? Colors.blue
-                                      : Colors.grey.withOpacity(0.4),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
-              ),
 
-            // --- ACTIONS BAR ---
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12.0,
-                vertical: 12.0,
-              ),
-              child: StreamBuilder<DocumentSnapshot>(
-                stream:
-                    FirebaseFirestore.instance
-                        .collection('posts')
-                        .doc(widget.postSnapshot.id)
-                        .snapshots(),
-                builder: (context, snapshot) {
-                  final likesData =
-                      snapshot.hasData
-                          ? snapshot.data!.data() as Map<String, dynamic>
-                          : postData;
-                  final rtLikes = likesData['likes'] ?? [];
-                  final bool isLiked = rtLikes.contains(currentUserId);
-
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(width: 8),
-                          // Like Button
-                          GestureDetector(
-                            onTap: _triggerLikeButtonPress,
-                            child: ScaleTransition(
-                              scale: _likeScaleAnimation,
-                              child: Icon(
-                                isLiked
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: isLiked ? Colors.red : Colors.black87,
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 18),
-
-                          // --- COMMENT BUTTON (Opens Sheet) ---
-                          GestureDetector(
-                            onTap: () => _showCommentsSheet(context),
-                            child: const Icon(
-                              Icons.mode_comment_outlined,
-                              color: Colors.black87,
-                              size: 26,
-                            ),
-                          ),
-
-                          const SizedBox(width: 18),
-                          // Share Button
-                          GestureDetector(
-                            onTap: () => _onSharePressed(context),
-                            child: const Icon(
-                              Icons.near_me_outlined,
-                              color: Colors.black87,
-                              size: 26,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-
-            // --- CAPTION & LIKES COUNT ---
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  StreamBuilder<DocumentSnapshot>(
-                    stream:
-                        FirebaseFirestore.instance
-                            .collection('posts')
-                            .doc(widget.postSnapshot.id)
-                            .snapshots(),
-                    builder: (context, snapshot) {
-                      final likesData =
-                          snapshot.hasData
-                              ? snapshot.data!.data() as Map<String, dynamic>
-                              : postData;
-                      final rtLikes = likesData['likes'] ?? [];
-                      final bool isLiked = rtLikes.contains(currentUserId);
-                      final int count = rtLikes.length;
-
-                      if (count == 0) return const SizedBox.shrink();
-
-                      Widget likeTextWidget;
-                      if (isLiked) {
-                        if (count == 1) {
-                          likeTextWidget = RichText(
-                            text: TextSpan(
-                              style: GoogleFonts.poppins(
-                                color: Colors.black,
-                                fontSize: 14,
-                              ),
-                              children: [
-                                const TextSpan(text: "Liked by "),
-                                TextSpan(
-                                  text: "you",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        } else {
-                          likeTextWidget = RichText(
-                            text: TextSpan(
-                              style: GoogleFonts.poppins(
-                                color: Colors.black,
-                                fontSize: 14,
-                              ),
-                              children: [
-                                const TextSpan(text: "Liked by "),
-                                TextSpan(
-                                  text: "you",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const TextSpan(text: " and "),
-                                TextSpan(
-                                  text: "${count - 1} others",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      } else {
-                        likeTextWidget = Text(
-                          "$count ${count == 1 ? 'like' : 'likes'}",
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: Colors.black,
-                          ),
-                        );
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6.0),
+                  // Play button for video
+                  if (postType == 'video')
+                    Positioned.fill(
+                      child: Center(
                         child: GestureDetector(
-                          onTap: () => _openLikesScreen(rtLikes),
-                          child: likeTextWidget,
-                        ),
-                      );
-                    },
-                  ),
-                  if (caption.isNotEmpty)
-                    RichText(
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      text: TextSpan(
-                        style: GoogleFonts.poppins(
-                          color: brandBlack,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: "${authorData['displayName']} ",
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          onTap:
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => FullScreenVideoPlayer(
+                                        videoUrl: mediaUrls.first,
+                                      ),
+                                ),
+                              ),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 36,
+                            ),
                           ),
-                          TextSpan(text: caption),
-                        ],
-                      ),
-                    ),
-
-                  // --- View All Comments Text (Opens Sheet) ---
-                  GestureDetector(
-                    onTap: () => _showCommentsSheet(context),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        "View all comments",
-                        style: GoogleFonts.poppins(
-                          color: Colors.grey,
-                          fontSize: 13,
                         ),
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 2),
-                  Text(
-                    timestamp != null ? formatTimeAgo(timestamp) : '',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -842,12 +526,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     );
   }
 
-  String formatTimeAgo(DateTime date) {
+  String _formatTimeAgo(DateTime date) {
     final diff = DateTime.now().difference(date);
     if (diff.inDays > 7) return DateFormat('MMM d').format(date);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    if (diff.inDays > 0) return '${diff.inDays} days ago';
+    if (diff.inHours > 0) return '${diff.inHours} hours ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
     return 'Just now';
   }
 }

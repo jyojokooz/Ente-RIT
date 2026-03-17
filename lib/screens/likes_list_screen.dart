@@ -16,37 +16,61 @@ class LikesListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Custom colors matching the modern design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final mutedTextColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: bgColor,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           "Likes",
           style: GoogleFonts.poppins(
-            color: Colors.black,
+            color: textColor,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: Colors.grey.shade200, height: 1.0),
         ),
       ),
       body:
           likeUserIds.isEmpty
               ? Center(
-                child: Text(
-                  "No likes yet.",
-                  style: GoogleFonts.poppins(color: Colors.grey),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.favorite_border,
+                      size: 60,
+                      color: isDark ? Colors.white24 : Colors.black12,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "No likes yet.",
+                      style: GoogleFonts.poppins(
+                        color: mutedTextColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
               )
               : ListView.builder(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 itemCount: likeUserIds.length,
                 itemBuilder: (context, index) {
                   final userId = likeUserIds[index];
@@ -59,9 +83,13 @@ class LikesListScreen extends StatelessWidget {
                             .get(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
-                        return const ListTile(
-                          leading: CircleAvatar(backgroundColor: Colors.grey),
-                          title: Text("Loading..."),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         );
                       }
 
@@ -75,7 +103,7 @@ class LikesListScreen extends StatelessWidget {
                       final displayName = userData['displayName'] ?? 'User';
                       final username = userData['username'] ?? '';
 
-                      return ListTile(
+                      return GestureDetector(
                         onTap: () {
                           Navigator.push(
                             context,
@@ -85,32 +113,98 @@ class LikesListScreen extends StatelessWidget {
                             ),
                           );
                         },
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.grey.shade200,
-                          backgroundImage:
-                              profilePic.isNotEmpty
-                                  ? CachedNetworkImageProvider(profilePic)
-                                  : null,
-                          child:
-                              profilePic.isEmpty
-                                  ? const Icon(Icons.person, color: Colors.grey)
-                                  : null,
-                        ),
-                        title: Text(
-                          displayName,
-                          // FIX: Explicitly set color to Black
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Colors.black,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              if (!isDark)
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                            ],
                           ),
-                        ),
-                        subtitle: Text(
-                          "@$username",
-                          // FIX: Explicitly set color to Dark Grey
-                          style: GoogleFonts.poppins(
-                            color: Colors.grey[700],
-                            fontSize: 12,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF3E8E),
+                                      Color(0xFFFF9A44),
+                                    ], // Pink to Orange gradient
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: cardColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor:
+                                        isDark
+                                            ? Colors.grey.shade800
+                                            : Colors.grey.shade200,
+                                    backgroundImage:
+                                        profilePic.isNotEmpty
+                                            ? CachedNetworkImageProvider(
+                                              profilePic,
+                                            )
+                                            : null,
+                                    child:
+                                        profilePic.isEmpty
+                                            ? Icon(
+                                              Icons.person,
+                                              color: mutedTextColor,
+                                            )
+                                            : null,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      displayName,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                        color: textColor,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      "@$username",
+                                      style: GoogleFonts.poppins(
+                                        color: mutedTextColor,
+                                        fontSize: 12,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: mutedTextColor,
+                                size: 20,
+                              ),
+                            ],
                           ),
                         ),
                       );

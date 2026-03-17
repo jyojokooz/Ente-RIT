@@ -3,14 +3,11 @@
 // FILE PATH: lib/screens/pages/classify_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// Import the centralized config
 import '../../config/feature_config.dart';
 
 class ClassifyScreen extends StatefulWidget {
@@ -41,33 +38,40 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color brandBlack = Colors.black;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Custom colors matching the "About Life" design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Very light grey background
+      backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // --- HEADER ---
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
+              padding: const EdgeInsets.fromLTRB(24, 30, 24, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Tools & Utilities',
                     style: GoogleFonts.poppins(
-                      fontSize: 26,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: brandBlack,
+                      color: textColor,
                     ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
-                    'Explore what\'s available',
+                    'Explore what\'s available on campus',
                     style: GoogleFonts.poppins(
                       fontSize: 14,
-                      color: Colors.grey[600],
+                      color: subtitleColor,
                     ),
                   ),
                 ],
@@ -77,8 +81,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
             // --- DYNAMIC GRID CONTENT ---
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                // FIX: Removed 'where' clause. We fetch all and filter in Dart.
-                // This avoids needing a composite index immediately.
                 stream:
                     FirebaseFirestore.instance
                         .collection('features')
@@ -92,7 +94,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                         child: Text(
                           "Error loading tools: ${snapshot.error}",
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(color: Colors.grey),
+                          style: GoogleFonts.poppins(color: subtitleColor),
                         ),
                       ),
                     );
@@ -100,14 +102,13 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
-                      child: CircularProgressIndicator(color: Colors.black),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFF3E8E),
+                      ), // Pink loading indicator
                     );
                   }
 
-                  // 1. Get all docs
                   final allDocs = snapshot.data!.docs;
-
-                  // 2. Filter locally for isVisible == true
                   final visibleDocs =
                       allDocs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
@@ -116,43 +117,57 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 
                   if (visibleDocs.isEmpty) {
                     return Center(
-                      child: Text(
-                        "No tools enabled yet.\nAsk Admin to enable features.",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(color: Colors.grey),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.construction,
+                            size: 60,
+                            color: isDark ? Colors.white24 : Colors.black12,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No tools enabled yet.\nAsk Admin to enable features.",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(color: subtitleColor),
+                          ),
+                        ],
                       ),
                     );
                   }
 
                   return RefreshIndicator(
                     onRefresh: _handleRefresh,
-                    color: Colors.black,
+                    color: const Color(0xFFFF3E8E),
+                    backgroundColor:
+                        isDark ? const Color(0xFF252528) : Colors.white,
                     child: GridView.builder(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 10,
                       ),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, // 2 Columns
+                            crossAxisCount: 2,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
-                            childAspectRatio: 1.3, // Wider cards
+                            childAspectRatio:
+                                1.05, // Slightly taller for breathing room
                           ),
                       itemCount: visibleDocs.length,
                       itemBuilder: (context, index) {
-                        final doc = visibleDocs[index];
-                        final id = doc.id;
-
-                        // Look up the static configuration for this ID
+                        final id = visibleDocs[index].id;
                         final config = FeatureConfig.featureMap[id];
 
-                        // If configuration exists in code
                         if (config != null) {
                           return _ModernFeatureCard(
                             label: config['label'],
                             icon: config['icon'],
                             color: config['color'],
+                            isDark: isDark,
                             onTap: () {
                               if (config.containsKey('url')) {
                                 _launchURL(config['url']);
@@ -167,7 +182,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                             },
                           );
                         } else {
-                          // Fallback if ID is in DB but not in Code (e.g. old version)
                           return const SizedBox.shrink();
                         }
                       },
@@ -184,65 +198,115 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 }
 
 // --- CUSTOM MODERN CARD WIDGET ---
-class _ModernFeatureCard extends StatelessWidget {
+class _ModernFeatureCard extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _ModernFeatureCard({
     required this.label,
     required this.icon,
     required this.color,
+    required this.isDark,
     required this.onTap,
   });
 
   @override
+  State<_ModernFeatureCard> createState() => _ModernFeatureCardState();
+}
+
+class _ModernFeatureCardState extends State<_ModernFeatureCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cardColor = widget.isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = widget.isDark ? Colors.white : Colors.black87;
+
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon Container with subtle background
-            Container(
-              height: 50,
-              width: 50,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1), // Light pastel version of color
-                shape: BoxShape.circle,
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(
+              30,
+            ), // Heavy rounding matching the reference
+            boxShadow: [
+              if (!widget.isDark)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  spreadRadius: 1,
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Icon Container with vibrant tinted background
+              Container(
+                height: 56,
+                width: 56,
+                decoration: BoxDecoration(
+                  color: widget.color.withOpacity(0.15), // Tinted background
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  widget.icon,
+                  color: widget.color, // Vibrant icon color
+                  size: 28,
+                ),
               ),
-              child: Icon(
-                icon,
-                color: color, // The main vibrant color
-                size: 28,
+              const SizedBox(height: 16),
+              // Label
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                    height: 1.2,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            // Label
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

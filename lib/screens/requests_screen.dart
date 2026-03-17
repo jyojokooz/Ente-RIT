@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'pages/profile_screen.dart';
 
 class RequestsScreen extends StatefulWidget {
@@ -20,31 +22,41 @@ class _RequestsScreenState extends State<RequestsScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
   Future<void> _acceptRequest(String requestFromId) async {
-    final currentUserRef = FirebaseFirestore.instance.collection('users').doc(_currentUser.uid);
-    final otherUserRef = FirebaseFirestore.instance.collection('users').doc(requestFromId);
-    
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final otherUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(requestFromId);
+
     final batch = FirebaseFirestore.instance.batch();
 
-    // Update connection arrays for both users
-    batch.update(currentUserRef, {'connections': FieldValue.arrayUnion([requestFromId])});
-    batch.update(otherUserRef, {'connections': FieldValue.arrayUnion([_currentUser.uid])});
+    batch.update(currentUserRef, {
+      'connections': FieldValue.arrayUnion([requestFromId]),
+    });
+    batch.update(otherUserRef, {
+      'connections': FieldValue.arrayUnion([_currentUser.uid]),
+    });
 
-    // Remove from request arrays for both users
-    batch.update(currentUserRef, {'receivedRequests': FieldValue.arrayRemove([requestFromId])});
-    batch.update(otherUserRef, {'sentRequests': FieldValue.arrayRemove([_currentUser.uid])});
-    
+    batch.update(currentUserRef, {
+      'receivedRequests': FieldValue.arrayRemove([requestFromId]),
+    });
+    batch.update(otherUserRef, {
+      'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+    });
+
     await batch.commit();
 
-    // --- NEW: LOGIC TO CREATE "CONNECTION ACCEPTED" NOTIFICATION ---
     final currentUserDoc = await currentUserRef.get();
     final currentUserData = currentUserDoc.data() ?? {};
-    
+
     await FirebaseFirestore.instance.collection('notifications').add({
-      'userId': requestFromId, // The ID of the user to be notified
+      'userId': requestFromId,
       'title': 'Connection Accepted',
-      'body': '${currentUserData['displayName'] ?? 'Someone'} accepted your connection request.',
-      'type': 'connection_accepted', 
-      'relatedDocId': _currentUser.uid, // Link back to the current user's profile
+      'body':
+          '${currentUserData['displayName'] ?? 'Someone'} accepted your connection request.',
+      'type': 'connection_accepted',
+      'relatedDocId': _currentUser.uid,
       'triggeringUserId': _currentUser.uid,
       'triggeringUserName': currentUserData['displayName'] ?? 'Someone',
       'triggeringUserAvatarUrl': currentUserData['profilePhotoUrl'] ?? '',
@@ -54,132 +66,325 @@ class _RequestsScreenState extends State<RequestsScreen> {
   }
 
   Future<void> _declineRequest(String requestFromId) async {
-    final currentUserRef = FirebaseFirestore.instance.collection('users').doc(_currentUser.uid);
-    final otherUserRef = FirebaseFirestore.instance.collection('users').doc(requestFromId);
+    final currentUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser.uid);
+    final otherUserRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(requestFromId);
 
     final batch = FirebaseFirestore.instance.batch();
-    batch.update(currentUserRef, {'receivedRequests': FieldValue.arrayRemove([requestFromId])});
-    batch.update(otherUserRef, {'sentRequests': FieldValue.arrayRemove([_currentUser.uid])});
+    batch.update(currentUserRef, {
+      'receivedRequests': FieldValue.arrayRemove([requestFromId]),
+    });
+    batch.update(otherUserRef, {
+      'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+    });
 
     await batch.commit();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Custom colors matching the modern design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text('Connection Requests', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: Colors.grey.shade200, height: 1.0),
+        title: Text(
+          'Connection Requests',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
         ),
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).snapshots(),
+        stream:
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(_currentUser.uid)
+                .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: Colors.black));
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+            );
           }
           final userData = snapshot.data!.data() as Map<String, dynamic>;
-          final List<dynamic> receivedRequests = userData['receivedRequests'] ?? [];
+          final List<dynamic> receivedRequests =
+              userData['receivedRequests'] ?? [];
 
           if (receivedRequests.isEmpty) {
-            return Center(
-              child: Text('No new requests.', style: GoogleFonts.poppins(color: Colors.grey)),
-            );
+            return _buildEmptyState(isDark, textColor);
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             itemCount: receivedRequests.length,
             itemBuilder: (context, index) {
               final userId = receivedRequests[index];
-              
-              // Use FutureBuilder to fetch details of the user who sent the request
+
               return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
+                future:
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(userId)
+                        .get(),
                 builder: (context, userSnapshot) {
                   if (!userSnapshot.hasData) {
-                    return const ListTile(title: Text("Loading..."));
+                    return _buildRequestTilePlaceholder(isDark);
                   }
                   if (!userSnapshot.data!.exists) {
-                    // This can happen if the user who sent the request deletes their account.
-                    // We can choose to show nothing or a placeholder.
-                    return const SizedBox.shrink(); 
+                    return const SizedBox.shrink();
                   }
-                  final requestUserData = userSnapshot.data!.data() as Map<String, dynamic>;
-                  final userImage = requestUserData['profilePhotoUrl'] ?? '';
+                  final requestUserData =
+                      userSnapshot.data!.data() as Map<String, dynamic>;
 
-                  // Simple fade-in animation for each item
-                  return TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: 1.0),
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOut,
-                    builder: (context, value, child) {
-                      return Opacity(opacity: value, child: child);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId))),
-                            child: CircleAvatar(
-                              radius: 24,
-                              backgroundImage: userImage.isNotEmpty ? NetworkImage(userImage) : null,
-                              child: userImage.isEmpty ? const Icon(Icons.person) : null,
-                            ),
+                  return _RequestTile(
+                    userData: requestUserData,
+                    onAccept: () => _acceptRequest(userId),
+                    onDecline: () => _declineRequest(userId),
+                    onProfileTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfileScreen(userId: userId),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(requestUserData['displayName'] ?? 'A User', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                                Text('@${requestUserData['username'] ?? ''}', style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Action Buttons
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ElevatedButton(
-                                onPressed: () => _acceptRequest(userId),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF9983F3),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                ),
-                                child: const Text('Accept'),
-                              ),
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: () => _declineRequest(userId),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.black,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                ),
-                                child: const Text('Decline'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                    isDark: isDark,
                   );
                 },
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark, Color textColor) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark ? Colors.white10 : Colors.black12,
+            ),
+            child: Icon(
+              Icons.person_add_disabled_outlined,
+              size: 60,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'No new requests',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your connection requests will appear here.',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestTilePlaceholder(bool isDark) {
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      height: 100,
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+      ),
+    );
+  }
+}
+
+// --- NEW STYLIZED REQUEST TILE WIDGET ---
+class _RequestTile extends StatelessWidget {
+  final Map<String, dynamic> userData;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  final VoidCallback onProfileTap;
+  final bool isDark;
+
+  const _RequestTile({
+    required this.userData,
+    required this.onAccept,
+    required this.onDecline,
+    required this.onProfileTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final mutedTextColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    final userImage = userData['profilePhotoUrl'] ?? '';
+    final displayName = userData['displayName'] ?? 'A User';
+    final username = userData['username'] ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: onProfileTap,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFFB165FF),
+                        Color(0xFFFF4B72),
+                      ], // Purple to Pink
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: CircleAvatar(
+                      radius: 24,
+                      backgroundColor:
+                          isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      backgroundImage:
+                          userImage.isNotEmpty
+                              ? CachedNetworkImageProvider(userImage)
+                              : null,
+                      child:
+                          userImage.isEmpty
+                              ? Icon(Icons.person, color: mutedTextColor)
+                              : null,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      '@$username',
+                      style: GoogleFonts.poppins(
+                        color: mutedTextColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              // Decline Button
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onDecline,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        isDark ? const Color(0xFF161618) : Colors.grey.shade100,
+                    foregroundColor: mutedTextColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Decline',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Accept Button with Gradient
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: onAccept,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(
+                      'Accept',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

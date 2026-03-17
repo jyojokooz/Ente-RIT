@@ -7,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // Ensure this is in pubspec.yaml
+import 'package:cached_network_image/cached_network_image.dart';
 import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -45,38 +45,47 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color brandBlack = Colors.black;
-    const Color brandPurple = Color(0xFF9983F3);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Custom colors matching the modern design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: bgColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: brandBlack),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          _currentUser.displayName ?? 'Username',
+          'Messages',
           style: GoogleFonts.poppins(
-            color: brandBlack,
-            fontWeight: FontWeight.w700,
-            fontSize: 22,
+            color: textColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_square, color: brandBlack),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("New Message feature coming soon!"),
-                ),
-              );
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(color: cardColor, shape: BoxShape.circle),
+            child: IconButton(
+              icon: Icon(Icons.edit_square, color: textColor, size: 20),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("New Message feature coming soon!"),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -90,12 +99,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: brandPurple),
+              child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
             );
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(isDark, textColor);
           }
 
           final conversations = snapshot.data!.docs;
@@ -104,15 +113,26 @@ class _ChatListScreenState extends State<ChatListScreen> {
             physics: const BouncingScrollPhysics(),
             slivers: [
               // Search Bar Header
-              SliverToBoxAdapter(child: _buildSearchBar()),
+              SliverToBoxAdapter(
+                child: _buildSearchBar(isDark, cardColor, textColor),
+              ),
 
               // Messages List
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final chatDoc = conversations[index];
-                  return _buildChatTile(chatDoc, brandPurple);
-                }, childCount: conversations.length),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final chatDoc = conversations[index];
+                    return _buildChatTile(
+                      chatDoc,
+                      isDark,
+                      cardColor,
+                      textColor,
+                    );
+                  }, childCount: conversations.length),
+                ),
               ),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           );
         },
@@ -120,30 +140,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar(bool isDark, Color cardColor, Color textColor) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
       child: Container(
-        height: 40,
+        height: 50,
         decoration: BoxDecoration(
-          color: const Color(0xFFEFEFEF), // Instagram-style grey
-          borderRadius: BorderRadius.circular(10),
+          color: cardColor,
+          borderRadius: BorderRadius.circular(25),
         ),
         child: TextField(
           controller: _searchController,
+          style: GoogleFonts.poppins(color: textColor, fontSize: 14),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search, color: Colors.grey),
-            hintText: 'Search',
-            hintStyle: GoogleFonts.poppins(color: Colors.grey, fontSize: 15),
+            prefixIcon: Icon(
+              Icons.search,
+              color: isDark ? Colors.white54 : Colors.grey,
+            ),
+            hintText: 'Search messages...',
+            hintStyle: GoogleFonts.poppins(
+              color: isDark ? Colors.white54 : Colors.grey,
+              fontSize: 14,
+            ),
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildChatTile(DocumentSnapshot chatDoc, Color accentColor) {
+  Widget _buildChatTile(
+    DocumentSnapshot chatDoc,
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+  ) {
     final chatData = chatDoc.data() as Map<String, dynamic>;
     final chatRoomId = chatDoc.id;
 
@@ -167,159 +199,223 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final timestamp =
         (chatData['lastMessageTimestamp'] as Timestamp?)?.toDate();
 
-    return Dismissible(
-      key: Key(chatRoomId),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.redAccent,
-        child: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
-      ),
-      onDismissed: (_) => _deleteConversation(chatRoomId),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => ChatScreen(
-                    receiverId: otherUserId,
-                    receiverName: otherUserName,
-                    receiverImageUrl: otherUserImage,
-                  ),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              // Avatar
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.grey.shade200,
-                backgroundImage:
-                    otherUserImage.isNotEmpty
-                        ? CachedNetworkImageProvider(otherUserImage)
-                        : null,
-                child:
-                    otherUserImage.isEmpty
-                        ? const Icon(Icons.person, color: Colors.grey)
-                        : null,
-              ),
-              const SizedBox(width: 14),
+    final mutedTextColor = isDark ? Colors.white54 : Colors.black54;
 
-              // Name & Message
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      otherUserName,
-                      style: GoogleFonts.poppins(
-                        color: Colors.black,
-                        fontWeight:
-                            isUnread ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 15,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Dismissible(
+          key: Key(chatRoomId),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 24),
+            color: Colors.redAccent,
+            child: const Icon(
+              Icons.delete_outline,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          onDismissed: (_) => _deleteConversation(chatRoomId),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => ChatScreen(
+                        receiverId: otherUserId,
+                        receiverName: otherUserName,
+                        receiverImageUrl: otherUserImage,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  // Avatar with Gradient Ring if unread
+                  Container(
+                    padding: EdgeInsets.all(isUnread ? 3 : 0),
+                    decoration:
+                        isUnread
+                            ? const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFFFF3E8E),
+                                  Color(0xFFFF9A44),
+                                ], // Pink to Orange
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            )
+                            : null,
+                    child: Container(
+                      padding: EdgeInsets.all(isUnread ? 2 : 0),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircleAvatar(
+                        radius: 26,
+                        backgroundColor:
+                            isDark
+                                ? Colors.grey.shade800
+                                : Colors.grey.shade200,
+                        backgroundImage:
+                            otherUserImage.isNotEmpty
+                                ? CachedNetworkImageProvider(otherUserImage)
+                                : null,
+                        child:
+                            otherUserImage.isEmpty
+                                ? Icon(Icons.person, color: mutedTextColor)
+                                : null,
+                      ),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
+                  ),
+                  const SizedBox(width: 16),
+
+                  // Name & Message
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: Text(
-                            lastMessage,
-                            style: GoogleFonts.poppins(
-                              color: isUnread ? Colors.black : Colors.grey[600],
-                              fontWeight:
-                                  isUnread
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                              fontSize: 14,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                otherUserName,
+                                style: GoogleFonts.poppins(
+                                  color: textColor,
+                                  fontWeight:
+                                      isUnread
+                                          ? FontWeight.bold
+                                          : FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                            if (timestamp != null)
+                              Text(
+                                _formatTime(timestamp),
+                                style: GoogleFonts.poppins(
+                                  color:
+                                      isUnread
+                                          ? const Color(0xFFFF3E8E)
+                                          : mutedTextColor,
+                                  fontSize: 11,
+                                  fontWeight:
+                                      isUnread
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                ),
+                              ),
+                          ],
                         ),
-                        if (timestamp != null) ...[
-                          const SizedBox(width: 4),
-                          Text(
-                            " · ${_formatTime(timestamp)}",
-                            style: GoogleFonts.poppins(
-                              color: Colors.grey[500],
-                              fontSize: 12,
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                lastMessage,
+                                style: GoogleFonts.poppins(
+                                  color: isUnread ? textColor : mutedTextColor,
+                                  fontWeight:
+                                      isUnread
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                            if (isUnread)
+                              Container(
+                                margin: const EdgeInsets.only(left: 8),
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFF3E8E),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  unreadCount > 9
+                                      ? '9+'
+                                      : unreadCount.toString(),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-
-              // Unread Indicator (Blue/Purple Dot)
-              if (isUnread)
-                Container(
-                  margin: const EdgeInsets.only(left: 10),
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-
-              // Optional: Camera Icon like Instagram (Purely visual here)
-              if (!isUnread)
-                Padding(
-                  padding: const EdgeInsets.only(left: 10),
-                  child: Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.grey[400],
-                    size: 24,
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark, Color textColor) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black, width: 2),
+              color: isDark ? Colors.white10 : Colors.black12,
             ),
-            child: const Icon(
-              Icons.near_me_outlined,
+            child: Icon(
+              Icons.chat_bubble_outline,
               size: 60,
-              color: Colors.black,
+              color: isDark ? Colors.white54 : Colors.black54,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Text(
-            'Message your friends',
+            'No messages yet',
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.black,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Send private photos and messages to a friend.',
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+            'Connect with friends to start chatting.',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
           ),
         ],
       ),
@@ -335,8 +431,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
       return '${diff.inDays}d';
     } else if (diff.inHours > 0) {
       return '${diff.inHours}h';
-    } else {
+    } else if (diff.inMinutes > 0) {
       return '${diff.inMinutes}m';
+    } else {
+      return 'Now';
     }
   }
 }

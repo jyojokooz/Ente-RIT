@@ -1,5 +1,9 @@
-// ignore_for_file: deprecated_member_use
+// ===============================
+// FILE NAME: id_card_screen.dart
+// FILE PATH: lib/screens/id_card_screen.dart
+// ===============================
 
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,24 +13,54 @@ import 'package:flip_card/flip_card.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
-class IdCardScreen extends StatelessWidget {
+class IdCardScreen extends StatefulWidget {
   const IdCardScreen({super.key});
+
+  @override
+  State<IdCardScreen> createState() => _IdCardScreenState();
+}
+
+class _IdCardScreenState extends State<IdCardScreen> {
+  double _tiltX = 0.0;
+  double _tiltY = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to gyroscope events to create the tilt effect
+    gyroscopeEvents.listen((GyroscopeEvent event) {
+      if (mounted) {
+        setState(() {
+          // Adjust sensitivity by multiplying event data
+          _tiltY += event.y * 0.02;
+          _tiltX += event.x * 0.02;
+          // Clamp the values to prevent extreme tilting
+          _tiltX = _tiltX.clamp(-0.2, 0.2);
+          _tiltY = _tiltY.clamp(-0.2, 0.2);
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
 
-    // Set status bar styles
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
+      SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       ),
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7), // iOS-style light grey
+      backgroundColor: bgColor,
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -34,14 +68,13 @@ class IdCardScreen extends StatelessWidget {
         title: Text(
           'Virtual ID',
           style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-            letterSpacing: -0.5,
+            fontWeight: FontWeight.bold,
+            color: textColor,
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -55,11 +88,16 @@ class IdCardScreen extends StatelessWidget {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(color: Colors.black),
+                child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
               );
             }
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return const Center(child: Text('User data not found'));
+              return Center(
+                child: Text(
+                  'User data not found',
+                  style: TextStyle(color: textColor),
+                ),
+              );
             }
             final userData = snapshot.data!.data() as Map<String, dynamic>;
 
@@ -68,12 +106,21 @@ class IdCardScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FlipCard(
-                    direction: FlipDirection.HORIZONTAL,
-                    speed: 600,
-                    onFlipDone: (isFront) => HapticFeedback.selectionClick(),
-                    front: _buildCardFront(userData),
-                    back: _buildCardBack(userData),
+                  // Animated 3D Tilt Effect
+                  Transform(
+                    transform:
+                        Matrix4.identity()
+                          ..setEntry(3, 2, 0.001) // perspective
+                          ..rotateX(_tiltX)
+                          ..rotateY(_tiltY),
+                    alignment: FractionalOffset.center,
+                    child: FlipCard(
+                      direction: FlipDirection.HORIZONTAL,
+                      speed: 600,
+                      onFlipDone: (isFront) => HapticFeedback.selectionClick(),
+                      front: _buildCardFront(userData, isDark),
+                      back: _buildCardBack(userData, isDark),
+                    ),
                   ),
                   const SizedBox(height: 40),
                   Row(
@@ -81,14 +128,14 @@ class IdCardScreen extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.touch_app_rounded,
-                        color: Colors.grey[400],
+                        color: isDark ? Colors.white24 : Colors.black12,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        "Tap card to flip for QR Code",
+                        "Tap card to flip",
                         style: GoogleFonts.poppins(
-                          color: Colors.grey[500],
+                          color: isDark ? Colors.white30 : Colors.black26,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -104,12 +151,11 @@ class IdCardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCardFront(Map<String, dynamic> userData) {
+  Widget _buildCardFront(Map<String, dynamic> userData, bool isDark) {
     final displayName = userData['displayName'] ?? 'Student Name';
     final department = userData['department'] ?? 'General Engineering';
     final studentId = userData['studentId'] ?? 'RIT-000000';
     final profilePhotoUrl = userData['profilePhotoUrl'] ?? '';
-    final dob = userData['dob']; // Assuming you might have this, or fallback
     final validThru =
         (userData['validThru'] as Timestamp?)?.toDate() ??
         DateTime.now().add(const Duration(days: 365 * 4));
@@ -118,118 +164,97 @@ class IdCardScreen extends StatelessWidget {
       width: 340,
       height: 540,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color:
+            isDark
+                ? const Color(0xFF252528)
+                : Colors.black, // Front is always dark
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(
+              51,
+            ), // FIX: Replaced .withOpacity(0.2)
             blurRadius: 30,
             offset: const Offset(0, 15),
-            spreadRadius: 0,
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(30),
         child: Stack(
           children: [
-            // 1. Watermark Background
+            // Watermark Background
             Positioned(
               right: -40,
-              bottom: -40,
+              top: -40,
               child: Opacity(
                 opacity: 0.05,
-                child: Image.asset(
-                  'assets/app_icon.png', // Ensure you have an asset here
-                  height: 300,
-                  width: 300,
-                  errorBuilder:
-                      (c, e, s) => const Icon(Icons.school, size: 300),
-                ),
+                child: Icon(Icons.shield, size: 250, color: Colors.white),
               ),
             ),
-
-            // 2. Top Header Bar
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 100,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1A1A1A), // Dark elegant header
-                ),
-                child: Stack(
-                  children: [
-                    // Decorative Curves
-                    Positioned(
-                      right: -20,
-                      top: -20,
-                      child: Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  // Top Header
+                  Row(
+                    children: [
+                      Image.asset(
+                        'assets/app_icon.png',
+                        height: 40,
+                        errorBuilder:
+                            (c, e, s) => const Icon(
+                              Icons.school,
+                              color: Colors.white,
+                              size: 40,
+                            ),
                       ),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "RIT KOTTAYAM",
+                            "Ente RIT",
                             style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
                             ),
                           ),
-                          const SizedBox(height: 2),
                           Text(
-                            "RAJIV GANDHI INSTITUTE OF TECHNOLOGY",
+                            "STUDENT ID",
                             style: GoogleFonts.poppins(
-                              color: Colors.white70,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.5,
+                              color: Colors.white54,
+                              fontSize: 10,
+                              letterSpacing: 1,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                    ],
+                  ),
+                  const Spacer(),
 
-            // 3. Main Content
-            Padding(
-              padding: const EdgeInsets.only(
-                top: 70.0,
-              ), // Push down below header
-              child: Column(
-                children: [
-                  // Profile Photo Container
-                  Center(
+                  // Profile Photo with Gradient Ring
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFB165FF), Color(0xFFFF4B72)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: isDark ? const Color(0xFF252528) : Colors.black,
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.15),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
                       ),
                       child: CircleAvatar(
                         radius: 65,
-                        backgroundColor: Colors.grey[200],
+                        backgroundColor: Colors.grey[800],
                         backgroundImage:
                             profilePhotoUrl.isNotEmpty
                                 ? NetworkImage(profilePhotoUrl)
@@ -245,101 +270,56 @@ class IdCardScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
                   // Name and Verified Badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          displayName,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.verified, color: Colors.blue, size: 20),
-                    ],
+                  Text(
+                    displayName,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
+                  const SizedBox(height: 8),
 
-                  // Role Badge
+                  // Department Chip
                   Container(
-                    margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
+                      horizontal: 16,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black87,
+                      color: Colors.white.withAlpha(26),
                       borderRadius: BorderRadius.circular(20),
-                    ),
+                    ), // FIX: Replaced .withOpacity(0.1)
                     child: Text(
-                      "STUDENT",
+                      department,
                       style: GoogleFonts.poppins(
                         color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-
                   const Spacer(),
 
                   // Info Grid
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30.0),
-                    child: Column(
-                      children: [
-                        _buildInfoRow("ID Number", studentId),
-                        const Divider(height: 24, color: Colors.black12),
-                        _buildInfoRow("Department", department),
-                        const Divider(height: 24, color: Colors.black12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildInfoRow(
-                                "Valid Thru",
-                                DateFormat('MM/yy').format(validThru),
-                              ),
-                            ),
-                            Expanded(
-                              child: _buildInfoRow(
-                                "DOB",
-                                dob != null
-                                    ? DateFormat(
-                                      'dd/MM/yyyy',
-                                    ).format((dob as Timestamp).toDate())
-                                    : "N/A",
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Spacer(),
-
-                  // Bottom Color Strip
-                  Container(
-                    height: 12,
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.yellow, Colors.black],
-                        stops: [0.3, 0.3],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildInfoCol("ID Number", studentId),
+                      _buildInfoCol(
+                        "Valid Thru",
+                        DateFormat('MM/yy').format(validThru),
+                        crossAxisAlignment: CrossAxisAlignment.end,
                       ),
-                    ),
+                    ],
                   ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -349,86 +329,71 @@ class IdCardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCardBack(Map<String, dynamic> userData) {
+  Widget _buildCardBack(Map<String, dynamic> userData, bool isDark) {
     final userUid = FirebaseAuth.instance.currentUser!.uid;
     final studentId = userData['studentId'] ?? '000000';
     final qrData = 'https://enterit.web.app/verify/$userUid';
+
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
 
     return Container(
       width: 340,
       height: 540,
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(24),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
+            color: Colors.black.withAlpha(26),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
+          ), // FIX: Replaced .withOpacity(0.1)
         ],
       ),
       child: Column(
         children: [
           const SizedBox(height: 40),
-          // Magnetic Stripe
           Container(
             height: 50,
             width: double.infinity,
-            color: const Color(0xFF2D2D2D),
+            color: isDark ? const Color(0xFF161618) : Colors.black,
           ),
-
           const Spacer(),
-
-          // QR Code Container
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.black12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                ),
-              ],
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.grey.shade200),
             ),
             child: QrImageView(
               data: qrData,
               version: QrVersions.auto,
-              size: 180.0,
+              size: 170.0,
               gapless: false,
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Colors.black87,
-              ),
               eyeStyle: const QrEyeStyle(
                 eyeShape: QrEyeShape.square,
                 color: Colors.black,
               ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Colors.black,
+              ),
             ),
           ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             "Scan to verify identity",
-            style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+            style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12),
           ),
-
           const Spacer(),
-
-          // Barcode
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40.0),
-            child: SizedBox(
-              height: 50,
-              child: BarcodeWidget(
-                barcode: Barcode.code128(),
-                data: studentId,
-                drawText: false,
-                color: Colors.black87,
-              ),
+          SizedBox(
+            height: 50,
+            child: BarcodeWidget(
+              barcode: Barcode.code128(),
+              data: studentId,
+              drawText: false,
+              color: isDark ? Colors.white70 : Colors.black,
             ),
           ),
           const SizedBox(height: 8),
@@ -437,19 +402,16 @@ class IdCardScreen extends StatelessWidget {
             style: GoogleFonts.robotoMono(
               fontSize: 14,
               letterSpacing: 2,
-              color: Colors.black54,
+              color: Colors.grey,
             ),
           ),
-
           const Spacer(),
-
-          // Footer Text
           Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Text(
               "This card is the property of RIT Kottayam. If found, please return to the administrative office.",
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[400]),
+              style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey),
             ),
           ),
         ],
@@ -457,25 +419,29 @@ class IdCardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoCol(
+    String label,
+    String value, {
+    CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+  }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: crossAxisAlignment,
       children: [
         Text(
           label.toUpperCase(),
           style: GoogleFonts.poppins(
-            color: Colors.grey[500],
+            color: Colors.white54,
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
+            letterSpacing: 1,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
           value,
           style: GoogleFonts.poppins(
-            color: Colors.black87,
-            fontSize: 15,
+            color: Colors.white,
+            fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
           maxLines: 1,

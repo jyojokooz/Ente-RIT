@@ -3,7 +3,7 @@
 // FILE PATH: lib/screens/create_post_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously, unnecessary_import
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously
 
 import 'dart:convert';
 import 'dart:io';
@@ -12,7 +12,7 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Needed for PlatformException
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_compress/video_compress.dart';
@@ -22,6 +22,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -46,7 +47,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Map<String, dynamic>? _selectedMusic;
 
   bool _isUploading = false;
-  // FIX: New flag to prevent double-tap crashes on Image Picker
   bool _isPickingMedia = false;
 
   String _uploadStatus = '';
@@ -56,10 +56,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   void _showMusicSearch() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder:
           (context) => _MusicSearchSheet(
@@ -73,25 +73,29 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  // --- HELPER: Music Overlay Button ---
   Widget _buildMusicOverlayButton() {
     bool hasMusic = _selectedMusic != null;
     return GestureDetector(
       onTap: _showMusicSearch,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
+          color: Colors.black.withOpacity(0.6), // Glassmorphic feel
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              hasMusic ? Icons.music_note : Icons.add_circle_outline,
+              hasMusic
+                  ? Icons.music_note_rounded
+                  : Icons.add_circle_outline_rounded,
               color: Colors.white,
-              size: 14,
+              size: 16,
             ),
             const SizedBox(width: 6),
             ConstrainedBox(
@@ -110,10 +114,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               ),
             ),
             if (hasMusic) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: () => setState(() => _selectedMusic = null),
-                child: const Icon(Icons.close, color: Colors.white70, size: 14),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: Colors.white24,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 12),
+                ),
               ),
             ],
           ],
@@ -122,7 +133,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  // --- COMPRESSION & SELECTION METHODS ---
+  // --- COMPRESSION LOGIC ---
   Future<File?> _compressImage(File file) async {
     final tempDir = await getTemporaryDirectory();
     final targetPath = p.join(
@@ -160,13 +171,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
-  // --- FIXED MEDIA PICKER FUNCTIONS ---
-
+  // --- MEDIA PICKERS ---
   Future<void> _pickMultipleImages() async {
-    // 1. Check if already picking
     if (_isPickingMedia) return;
-
-    // 2. Lock
     setState(() => _isPickingMedia = true);
 
     try {
@@ -179,7 +186,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       }
 
       final List<XFile> pickedFiles = await _picker.pickMultiImage();
-
       if (pickedFiles.isNotEmpty) {
         setState(() {
           _postType = PostType.image;
@@ -189,7 +195,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     } catch (e) {
       debugPrint("Error picking images: $e");
     } finally {
-      // 3. Unlock immediately after
       if (mounted) setState(() => _isPickingMedia = false);
     }
   }
@@ -246,10 +251,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   // --- UPLOAD LOGIC ---
   Future<void> _createPost() async {
-    if (_mediaFiles.isEmpty) {
+    if (_mediaFiles.isEmpty && _captionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select an image or video to post.'),
+          content: Text('Please add media or write something to post.'),
         ),
       );
       return;
@@ -270,9 +275,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
       if (_postType == PostType.video && _mediaFiles.isNotEmpty) {
         final compressedVideo = await _compressVideo(_mediaFiles.first);
-        if (compressedVideo == null) {
+        if (compressedVideo == null)
           throw Exception("Video compression failed");
-        }
 
         if (_thumbnailFile != null) {
           setState(() => _uploadStatus = 'Uploading thumbnail...');
@@ -294,7 +298,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         );
         mediaUrls.add(videoResponse.secureUrl);
-      } else {
+      } else if (_mediaFiles.isNotEmpty) {
         for (int i = 0; i < _mediaFiles.length; i++) {
           setState(
             () =>
@@ -361,43 +365,69 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool isShareEnabled = _mediaFiles.isNotEmpty;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Exact colors matching design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final mutedTextColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    bool isShareEnabled =
+        _mediaFiles.isNotEmpty || _captionController.text.trim().isNotEmpty;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: bgColor,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.black),
+          icon: Icon(Icons.close, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "New Post",
+          "Create Post",
           style: GoogleFonts.poppins(
-            color: Colors.black,
+            color: textColor,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: 18,
           ),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: ElevatedButton(
-              onPressed: isShareEnabled && !_isUploading ? _createPost : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF9983F3),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                disabledBackgroundColor: Colors.grey.shade300,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient:
+                    (isShareEnabled && !_isUploading)
+                        ? const LinearGradient(
+                          colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
+                        )
+                        : null,
+                color:
+                    (isShareEnabled && !_isUploading)
+                        ? null
+                        : (isDark ? Colors.white10 : Colors.grey.shade300),
               ),
-              child: Text(
-                "Share",
-                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              child: ElevatedButton(
+                onPressed: isShareEnabled && !_isUploading ? _createPost : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Text(
+                  "Share",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ),
@@ -409,36 +439,102 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             children: [
               Expanded(
                 child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildUserInfo(),
-                      _buildTextField(),
-                      if (_mediaFiles.isNotEmpty) _buildMediaPreview(),
+                      // --- AUTHOR INFO & INPUT CARD ---
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            if (!isDark)
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            _buildUserInfo(textColor, isDark),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _captionController,
+                              maxLines: null,
+                              minLines: 3,
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                color: textColor,
+                              ),
+                              onChanged:
+                                  (_) => setState(
+                                    () {},
+                                  ), // To trigger share button state
+                              decoration: InputDecoration(
+                                hintText: "What's bothering you?",
+                                hintStyle: GoogleFonts.poppins(
+                                  color: mutedTextColor,
+                                ),
+                                border: InputBorder.none,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // --- MEDIA PREVIEW ---
+                      if (_mediaFiles.isNotEmpty)
+                        _buildMediaPreview(isDark, cardColor),
+                      const SizedBox(height: 100), // Space for floating dock
                     ],
                   ),
                 ),
               ),
-              _buildBottomActionDock(),
             ],
           ),
+
+          // --- FLOATING ACTION DOCK ---
+          Positioned(
+            bottom: 24,
+            left: 24,
+            right: 24,
+            child: _buildBottomActionDock(cardColor, textColor, isDark),
+          ),
+
+          // --- LOADING OVERLAY ---
           if (_isUploading)
             Container(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.black.withOpacity(0.7),
               child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(color: Colors.black),
-                    const SizedBox(height: 20),
-                    Text(
-                      _uploadStatus,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+                      const SizedBox(height: 20),
+                      Text(
+                        _uploadStatus,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -447,112 +543,128 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  Widget _buildUserInfo() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: FutureBuilder<DocumentSnapshot>(
-        future:
-            FirebaseFirestore.instance.collection('users').doc(_user.uid).get(),
-        builder: (context, snapshot) {
-          String? photoUrl;
-          String name = 'Me';
-          if (snapshot.hasData && snapshot.data!.exists) {
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            photoUrl = data['profilePhotoUrl'];
-            name = data['displayName'] ?? 'Me';
-          }
-          return Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.grey.shade200,
-                backgroundImage:
-                    photoUrl != null ? NetworkImage(photoUrl) : null,
-                child:
-                    photoUrl == null
-                        ? const Icon(Icons.person, color: Colors.grey)
-                        : null,
+  Widget _buildUserInfo(Color textColor, bool isDark) {
+    return FutureBuilder<DocumentSnapshot>(
+      future:
+          FirebaseFirestore.instance.collection('users').doc(_user.uid).get(),
+      builder: (context, snapshot) {
+        String? photoUrl;
+        String name = 'Me';
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          photoUrl = data['profilePhotoUrl'];
+          name = data['displayName'] ?? 'Me';
+        }
+        return Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor:
+                  isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              backgroundImage:
+                  photoUrl != null && photoUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(photoUrl)
+                      : null,
+              child:
+                  (photoUrl == null || photoUrl.isEmpty)
+                      ? Icon(
+                        Icons.person,
+                        color: isDark ? Colors.white54 : Colors.grey,
+                      )
+                      : null,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              name,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: textColor,
               ),
-              const SizedBox(width: 12),
-              Text(
-                name,
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildTextField() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: TextField(
-        controller: _captionController,
-        maxLines: null,
-        minLines: 2,
-        style: GoogleFonts.poppins(fontSize: 16, color: Colors.black),
-        decoration: InputDecoration(
-          hintText: "Write a caption...",
-          hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400),
-          border: InputBorder.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMediaPreview() {
-    if (_mediaFiles.isEmpty) return const SizedBox.shrink();
-
+  Widget _buildMediaPreview(bool isDark, Color cardColor) {
     return Column(
       children: [
-        SizedBox(
+        Container(
           height: 350,
-          child: Stack(
-            children: [
-              if (_postType == PostType.video)
-                _buildVideoPreviewLayer()
-              else
-                _buildImageCarouselLayer(),
-
-              Positioned(top: 12, left: 12, child: _buildMusicOverlayButton()),
-
-              Positioned(
-                top: 12,
-                right: 12,
-                child: _buildRemoveButton(() {
-                  setState(() {
-                    _mediaFiles.clear();
-                    _thumbnailFile = null;
-                    _selectedMusic = null;
-                  });
-                }),
-              ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(30), // Deep curves
+            boxShadow: [
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
             ],
           ),
-        ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_postType == PostType.video)
+                  _buildVideoPreviewLayer(isDark)
+                else
+                  _buildImageCarouselLayer(isDark),
 
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: _buildMusicOverlayButton(),
+                ),
+
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: GestureDetector(
+                    onTap:
+                        () => setState(() {
+                          _mediaFiles.clear();
+                          _thumbnailFile = null;
+                          _selectedMusic = null;
+                        }),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         if (_postType == PostType.image && _mediaFiles.length > 1)
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.only(top: 12.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(_mediaFiles.length, (index) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: 6,
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentImageIndex == index ? 20 : 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(3),
                     color:
                         _currentImageIndex == index
-                            ? Colors.blue
-                            : Colors.grey.shade300,
+                            ? const Color(0xFFFF3E8E)
+                            : (isDark ? Colors.white24 : Colors.grey.shade300),
                   ),
                 );
               }),
@@ -562,139 +674,117 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  Widget _buildVideoPreviewLayer() {
+  Widget _buildVideoPreviewLayer(bool isDark) {
     return Container(
-      width: double.infinity,
-      color: Colors.black,
+      color: isDark ? Colors.grey.shade900 : Colors.black,
       child: Stack(
         alignment: Alignment.center,
+        fit: StackFit.expand,
         children: [
           if (_thumbnailFile != null)
-            Image.file(
-              _thumbnailFile!,
-              fit: BoxFit.contain,
-              width: double.infinity,
-              height: double.infinity,
-            ),
+            Image.file(_thumbnailFile!, fit: BoxFit.cover),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.black.withOpacity(0.5),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 40,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildImageCarouselLayer() {
+  Widget _buildImageCarouselLayer(bool isDark) {
     return PageView.builder(
       itemCount: _mediaFiles.length,
       onPageChanged: (index) => setState(() => _currentImageIndex = index),
       controller: PageController(viewportFraction: 1.0),
       itemBuilder: (context, index) {
-        return Image.file(
-          _mediaFiles[index],
-          fit: BoxFit.cover,
-          width: double.infinity,
-        );
+        return Image.file(_mediaFiles[index], fit: BoxFit.cover);
       },
     );
   }
 
-  Widget _buildRemoveButton(VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: const BoxDecoration(
-          color: Colors.black54,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.close, color: Colors.white, size: 18),
-      ),
-    );
-  }
-
-  Widget _buildBottomActionDock() {
+  Widget _buildBottomActionDock(Color cardColor, Color textColor, bool isDark) {
     return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.15),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildActionItem(
-                icon: Icons.photo_library_rounded,
-                color: Colors.green.shade600,
-                label: "Gallery",
-                onTap: _pickMultipleImages,
-              ),
-              _buildActionItem(
-                icon: Icons.camera_alt_rounded,
-                color: Colors.blue.shade600,
-                label: "Camera",
-                onTap: _pickCameraImage,
-              ),
-              _buildActionItem(
-                icon: Icons.videocam_rounded,
-                color: Colors.red.shade600,
-                label: "Video",
-                onTap: () => _pickVideo(ImageSource.camera),
-              ),
-            ],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildDockButton(
+            Icons.photo_library_rounded,
+            "Gallery",
+            const Color(0xFF00C6FB),
+            _pickMultipleImages,
+            isDark,
           ),
-        ),
+          _buildDockButton(
+            Icons.camera_alt_rounded,
+            "Camera",
+            const Color(0xFFFF9A44),
+            _pickCameraImage,
+            isDark,
+          ),
+          _buildDockButton(
+            Icons.videocam_rounded,
+            "Video",
+            const Color(0xFFFF3E8E),
+            () => _pickVideo(ImageSource.camera),
+            isDark,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildActionItem({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildDockButton(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+    bool isDark,
+  ) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 26),
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15), // Tinted background
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey.shade700,
-              ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -711,11 +801,10 @@ class _MusicSearchSheet extends StatefulWidget {
 
 class _MusicSearchSheetState extends State<_MusicSearchSheet> {
   final _searchController = TextEditingController();
-  final AudioPlayer _audioPlayer = AudioPlayer(); // Audio Player
+  final AudioPlayer _audioPlayer = AudioPlayer();
   List<dynamic> _songs = [];
   bool _isLoading = false;
 
-  // Audio State
   String? _currentPreviewUrl;
   bool _isPlaying = false;
   String? _loadingPreviewUrl;
@@ -735,15 +824,9 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
   void initState() {
     super.initState();
     _loadTrendingSongs();
-
     _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = state == PlayerState.playing;
-        });
-      }
+      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
     });
-
     _audioPlayer.onPlayerComplete.listen((event) {
       if (mounted) setState(() => _isPlaying = false);
     });
@@ -780,9 +863,7 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        setState(() {
-          _songs = data['results'];
-        });
+        setState(() => _songs = data['results']);
       }
     } catch (e) {
       debugPrint("Music API Error: $e");
@@ -796,13 +877,9 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
       await _audioPlayer.pause();
       setState(() => _isPlaying = false);
     } else {
-      setState(() {
-        _loadingPreviewUrl = url;
-      });
-
+      setState(() => _loadingPreviewUrl = url);
       await _audioPlayer.stop();
       await _audioPlayer.play(UrlSource(url));
-
       if (mounted) {
         setState(() {
           _loadingPreviewUrl = null;
@@ -815,8 +892,15 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = theme.colorScheme.onSurface;
+    final mutedColor = isDark ? Colors.white54 : Colors.black54;
+    final brandColor = const Color(0xFFFF3E8E);
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.85,
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -824,7 +908,7 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
             height: 4,
             width: 40,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: Colors.grey[600],
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -834,21 +918,21 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _searchController,
-            style: const TextStyle(color: Colors.black),
+            style: TextStyle(color: textColor),
             decoration: InputDecoration(
               hintText: "Search songs, artists...",
-              hintStyle: TextStyle(color: Colors.grey[500]),
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              hintStyle: TextStyle(color: mutedColor),
+              prefixIcon: Icon(Icons.search, color: mutedColor),
               filled: true,
-              fillColor: Colors.grey[200],
+              fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
                 borderSide: BorderSide.none,
               ),
             ),
@@ -858,126 +942,122 @@ class _MusicSearchSheetState extends State<_MusicSearchSheet> {
           Expanded(
             child:
                 _isLoading
-                    ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.deepPurple,
-                      ),
+                    ? Center(
+                      child: CircularProgressIndicator(color: brandColor),
                     )
                     : ListView.builder(
                       itemCount: _songs.length,
                       itemBuilder: (context, index) {
                         final song = _songs[index];
                         final previewUrl = song['previewUrl'];
-
                         final bool isThisSongLoading =
                             _loadingPreviewUrl == previewUrl;
                         final bool isThisSongPlaying =
                             _currentPreviewUrl == previewUrl && _isPlaying;
 
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.network(
-                              song['artworkUrl100'] ?? '',
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (c, e, s) => Container(
-                                    color: Colors.grey,
-                                    width: 50,
-                                    height: 50,
-                                  ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
                             ),
-                          ),
-                          title: Text(
-                            song['trackName'],
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black,
-                              fontSize: 15,
-                            ),
-                          ),
-                          subtitle: Text(
-                            song['artistName'],
-                            maxLines: 1,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-
-                          trailing: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child:
-                                isThisSongLoading
-                                    ? const Padding(
-                                      padding: EdgeInsets.all(8.0),
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.deepPurple,
-                                      ),
-                                    )
-                                    : IconButton(
-                                      icon: Icon(
-                                        isThisSongPlaying
-                                            ? Icons.pause_circle_filled
-                                            : Icons.play_circle_fill,
-                                        color:
-                                            isThisSongPlaying
-                                                ? Colors.deepPurple
-                                                : Colors.grey[400],
-                                        size: 32,
-                                      ),
-                                      onPressed:
-                                          () => _togglePreview(previewUrl),
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                song['artworkUrl100'] ?? '',
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (c, e, s) => Container(
+                                      color: Colors.grey,
+                                      width: 50,
+                                      height: 50,
                                     ),
+                              ),
+                            ),
+                            title: Text(
+                              song['trackName'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              song['artistName'],
+                              maxLines: 1,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: mutedColor,
+                              ),
+                            ),
+                            trailing: SizedBox(
+                              width: 40,
+                              height: 40,
+                              child:
+                                  isThisSongLoading
+                                      ? Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: brandColor,
+                                        ),
+                                      )
+                                      : IconButton(
+                                        icon: Icon(
+                                          isThisSongPlaying
+                                              ? Icons.pause_circle_filled
+                                              : Icons.play_circle_fill,
+                                          color:
+                                              isThisSongPlaying
+                                                  ? brandColor
+                                                  : mutedColor,
+                                          size: 32,
+                                        ),
+                                        onPressed:
+                                            () => _togglePreview(previewUrl),
+                                      ),
+                            ),
+                            onTap: () {
+                              _audioPlayer.stop();
+                              widget.onMusicSelected({
+                                'trackName': song['trackName'],
+                                'artistName': song['artistName'],
+                                'previewUrl': song['previewUrl'],
+                                'artworkUrl': song['artworkUrl100'],
+                              });
+                            },
                           ),
-
-                          onTap: () {
-                            _audioPlayer.stop();
-                            widget.onMusicSelected({
-                              'trackName': song['trackName'],
-                              'artistName': song['artistName'],
-                              'previewUrl': song['previewUrl'],
-                              'artworkUrl': song['artworkUrl100'],
-                            });
-                          },
                         );
                       },
                     ),
           ),
-
           if (_currentPreviewUrl != null)
             Container(
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.graphic_eq,
-                    color: Colors.deepPurple,
-                    size: 20,
-                  ),
+                  Icon(Icons.graphic_eq, color: brandColor, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       "Previewing 30s clip (Tap song to select)",
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        color: Colors.grey[800],
+                        color: mutedColor,
                       ),
                     ),
                   ),

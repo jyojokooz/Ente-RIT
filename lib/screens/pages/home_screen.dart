@@ -3,23 +3,22 @@
 // FILE PATH: lib/screens/pages/home_screen.dart
 // ===============================
 
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-// --- Screen Imports ---
-import '../comments_sheet.dart'; // Ensure you have this
+import '../comments_sheet.dart';
 import '../edit_post_screen.dart';
 import '../notifications_screen.dart';
 import '../chat_list_screen.dart';
 import '../post_card.dart';
 import '../post_card_placeholder.dart';
+import '../create_post_screen.dart';
 import 'profile_screen.dart';
 import '../../widgets/notification_badge.dart';
-import '../../widgets/stories_bar.dart'; // <--- NEW IMPORT
+import '../../widgets/stories_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +29,29 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
+  String _displayName = '';
+  String _profilePic = '';
+  int _selectedTab = 0; // 0: Recent, 1: Trending
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+    if (doc.exists && mounted) {
+      setState(() {
+        _displayName = doc.data()?['displayName'] ?? 'User';
+        _profilePic = doc.data()?['profilePhotoUrl'] ?? '';
+      });
+    }
+  }
 
   Future<void> _refreshPosts() async {
     setState(() {});
@@ -40,19 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return PageRouteBuilder(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        var fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-          CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
-        );
-        var scaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
-          CurvedAnimation(parent: animation, curve: Curves.easeOutQuart),
-        );
-        return FadeTransition(
-          opacity: fadeAnimation,
-          child: ScaleTransition(scale: scaleAnimation, child: child),
-        );
+        return FadeTransition(opacity: animation, child: child);
       },
       transitionDuration: const Duration(milliseconds: 250),
-      reverseTransitionDuration: const Duration(milliseconds: 200),
     );
   }
 
@@ -69,21 +81,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _deletePost(String postId) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
+
     final bool? didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.colorScheme.surface,
           title: Text(
             'Delete Post?',
             style: GoogleFonts.poppins(
-              color: Colors.black,
+              color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
             ),
           ),
           content: Text(
             'Are you sure you want to permanently remove this post?',
-            style: GoogleFonts.poppins(color: Colors.grey[800]),
+            style: GoogleFonts.poppins(
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
           ),
           actions: <Widget>[
             TextButton(
@@ -107,15 +123,15 @@ class _HomeScreenState extends State<HomeScreen> {
             .delete();
         if (mounted)
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Post deleted.'),
-              backgroundColor: Colors.black,
+            SnackBar(
+              content: const Text('Post deleted.'),
+              backgroundColor: theme.colorScheme.onSurface,
             ),
           );
       } catch (e) {
         if (scaffoldMessenger.mounted)
           scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text('Failed to delete: ${e.toString()}')),
+            SnackBar(content: Text('Failed to delete: $e')),
           );
       }
     }
@@ -137,25 +153,16 @@ class _HomeScreenState extends State<HomeScreen> {
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
-
       if (postAuthorId != user.uid) {
-        final currentUserDoc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .get();
-        final currentUserData = currentUserDoc.data() ?? {};
-
         await FirebaseFirestore.instance.collection('notifications').add({
           'userId': postAuthorId,
           'title': 'New Like',
-          'body':
-              '${currentUserData['displayName'] ?? 'Someone'} liked your post.',
+          'body': '$_displayName liked your post.',
           'type': 'like',
           'relatedDocId': postId,
           'triggeringUserId': user.uid,
-          'triggeringUserName': currentUserData['displayName'] ?? 'Someone',
-          'triggeringUserAvatarUrl': currentUserData['profilePhotoUrl'] ?? '',
+          'triggeringUserName': _displayName,
+          'triggeringUserAvatarUrl': _profilePic,
           'isRead': false,
           'timestamp': FieldValue.serverTimestamp(),
         });
@@ -163,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- CHANGED: This now opens the bottom sheet instead of navigating ---
   void _onCommentTapped(String postId) {
     showModalBottomSheet(
       context: context,
@@ -189,34 +195,185 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const Color brandPurple = Color(0xFF9983F3);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Custom colors matching the design
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       body: RefreshIndicator(
         onRefresh: _refreshPosts,
-        color: brandPurple,
-        backgroundColor: Colors.white,
+        color: const Color(0xFFFF3E8E),
+        backgroundColor: cardColor,
         child: SafeArea(
           child: CustomScrollView(
             cacheExtent: 1000,
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // 1. TOP APP BAR
-              SliverToBoxAdapter(child: _buildTopBar()),
-
-              // 2. STORIES BAR (NEW FEATURE)
-              const SliverToBoxAdapter(child: StoriesBar()),
-
-              // 3. DIVIDER
-              const SliverToBoxAdapter(
+              // 1. TOP APP BAR & GREETING
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.only(bottom: 8.0),
-                  child: Divider(height: 1, thickness: 0.5, color: Colors.grey),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Ente RIT',
+                            style: GoogleFonts.satisfy(
+                              // Stylish font for logo
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          // --- UPDATED TOP RIGHT BUTTONS ---
+                          Row(
+                            children: [
+                              NotificationBadge(
+                                child: _buildTopBarButton(
+                                  icon:
+                                      Icons
+                                          .notifications_none_rounded, // Replaced Heart with Bell
+                                  onTap:
+                                      () => Navigator.push(
+                                        context,
+                                        _createSmoothRoute(
+                                          const NotificationsScreen(),
+                                        ),
+                                      ),
+                                  isDark: isDark,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              _buildTopBarButton(
+                                icon:
+                                    Icons
+                                        .maps_ugc_rounded, // Modern message/forum icon instead of plain chat bubble
+                                onTap:
+                                    () => Navigator.push(
+                                      context,
+                                      _createSmoothRoute(
+                                        const ChatListScreen(),
+                                      ),
+                                    ),
+                                isDark: isDark,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Hello ${_displayName.split(' ').first}! 👋',
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "What's bothering you?",
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
-              // 4. POST FEED
+              // 2. FAKE INPUT BOX
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: cardColor,
+                        backgroundImage:
+                            _profilePic.isNotEmpty
+                                ? CachedNetworkImageProvider(_profilePic)
+                                : null,
+                        child:
+                            _profilePic.isEmpty
+                                ? Icon(
+                                  Icons.person,
+                                  color: isDark ? Colors.white54 : Colors.grey,
+                                )
+                                : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap:
+                              () => Navigator.push(
+                                context,
+                                _createSmoothRoute(const CreatePostScreen()),
+                              ),
+                          child: Container(
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "Share anything you want.",
+                              style: GoogleFonts.poppins(
+                                color: isDark ? Colors.white54 : Colors.black45,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 3. STORIES BAR
+              const SliverToBoxAdapter(child: StoriesBar()),
+
+              // 4. SEGMENTED TABS
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(
+                      children: [
+                        _buildTab("Recent", 0, isDark),
+                        _buildTab("Trending", 1, isDark),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // 5. POST FEED
               StreamBuilder<QuerySnapshot>(
                 stream:
                     FirebaseFirestore.instance
@@ -226,10 +383,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return SliverFillRemaining(
-                      child: Center(child: Text("Something went wrong")),
+                      child: Center(
+                        child: Text(
+                          "Error loading posts",
+                          style: TextStyle(color: textColor),
+                        ),
+                      ),
                     );
                   }
-
                   if (snapshot.connectionState == ConnectionState.waiting &&
                       !snapshot.hasData) {
                     return SliverList(
@@ -239,59 +400,46 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   }
-
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.post_add,
-                              size: 64,
-                              color: Colors.grey[300],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No posts yet.',
-                              style: GoogleFonts.poppins(
-                                color: Colors.grey[400],
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'No posts yet.',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     );
                   }
 
                   final posts = snapshot.data!.docs;
-
                   return SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final postSnapshot = posts[index];
                       final postData =
                           postSnapshot.data() as Map<String, dynamic>;
-                      final postAuthorId = postData['userId'] ?? '';
-                      final currentLikes = postData['likes'] ?? [];
-                      final currentCaption = postData['caption'] ?? '';
-
                       return PostCard(
                         key: ValueKey(postSnapshot.id),
                         postSnapshot: postSnapshot,
                         onCommentPressed:
                             () => _onCommentTapped(postSnapshot.id),
                         onDeletePressed: () => _deletePost(postSnapshot.id),
-                        onProfileTapped: () => _onProfileTapped(postAuthorId),
+                        onProfileTapped:
+                            () => _onProfileTapped(postData['userId'] ?? ''),
                         onLikePressed:
                             () => _toggleLike(
                               postSnapshot.id,
-                              currentLikes,
-                              postAuthorId,
+                              postData['likes'] ?? [],
+                              postData['userId'] ?? '',
                             ),
                         onEditPressed:
-                            () => _editPost(postSnapshot.id, currentCaption),
+                            () => _editPost(
+                              postSnapshot.id,
+                              postData['caption'] ?? '',
+                            ),
                       );
                     }, childCount: posts.length),
                   );
@@ -305,57 +453,75 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Ente RIT',
+  // --- NEW: Helper method to build the stylized top bar buttons ---
+  Widget _buildTopBarButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? const Color(0xFF252528) : Colors.white,
+          border: Border.all(
+            color:
+                isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.05),
+            width: 1.5,
+          ),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
+        ),
+        child: Icon(
+          icon,
+          color: isDark ? Colors.white : Colors.black87,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTab(String title, int index, bool isDark) {
+    final isSelected = _selectedTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedTab = index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          decoration: BoxDecoration(
+            gradient:
+                isSelected
+                    ? const LinearGradient(
+                      colors: [Color(0xFFB165FF), Color(0xFFFF4B72)],
+                    ) // Purple to Pink
+                    : null,
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            title,
             style: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-              letterSpacing: -0.5,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color:
+                  isSelected
+                      ? Colors.white
+                      : (isDark ? Colors.white54 : Colors.black54),
+              fontSize: 13,
             ),
           ),
-
-          Row(
-            children: [
-              NotificationBadge(
-                child: IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      _createSmoothRoute(const NotificationsScreen()),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.favorite_border,
-                    color: Colors.black,
-                    size: 28,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    _createSmoothRoute(const ChatListScreen()),
-                  );
-                },
-                icon: const Icon(
-                  Icons.chat_bubble_outline,
-                  color: Colors.black,
-                  size: 26,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
