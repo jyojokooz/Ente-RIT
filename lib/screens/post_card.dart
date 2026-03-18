@@ -17,7 +17,6 @@ import 'full_screen_video_player.dart';
 import 'full_screen_image_viewer.dart';
 import 'share_post_sheet.dart';
 
-// Reuse GlobalAudioHandler from your existing code...
 class GlobalAudioHandler {
   static final AudioPlayer _player = AudioPlayer();
   static String? _currentPostId;
@@ -124,7 +123,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _likesCount = rtLikes.length;
   }
 
-  // Update state when snapshot changes externally (e.g. parent stream)
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -142,8 +140,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    if (_isPlayingMusic)
+    if (_isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+    }
     _likeController?.dispose();
     super.dispose();
   }
@@ -156,7 +155,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   void _triggerLikeButtonPress() {
-    // 1. Optimistic UI Update (Instantly change UI)
+    // 1. Optimistic UI Update
     setState(() {
       _isLiked = !_isLiked;
       _likesCount += _isLiked ? 1 : -1;
@@ -167,7 +166,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
 
-    // 3. Trigger Backend logic in background
+    // 3. Trigger Backend logic
     widget.onLikePressed();
   }
 
@@ -175,8 +174,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     if (!originalUrl.contains('res.cloudinary.com')) return originalUrl;
     const transformations = 'w_1080,q_auto:good,f_auto';
     final parts = originalUrl.split('/upload/');
-    if (parts.length == 2)
+    if (parts.length == 2) {
       return '${parts[0]}/upload/$transformations/${parts[1]}';
+    }
     return originalUrl;
   }
 
@@ -319,7 +319,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 16),
 
-            // --- CONTENT AREA (Vibrant inner box) ---
+            // --- CONTENT AREA ---
             ClipRRect(
               borderRadius: BorderRadius.circular(24),
               child: Stack(
@@ -335,6 +335,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                               builder:
                                   (_) => FullScreenVideoPlayer(
                                     videoUrl: mediaUrls.first,
+                                    postId:
+                                        widget
+                                            .postSnapshot
+                                            .id, // <-- ADDED POST ID HERE
                                   ),
                             ),
                           );
@@ -346,6 +350,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   (_) => FullScreenImageViewer(
                                     imageUrl: mediaUrls.first,
                                     heroTag: 'post_${widget.postSnapshot.id}',
+                                    postId:
+                                        widget
+                                            .postSnapshot
+                                            .id, // <-- ADDED POST ID HERE
                                   ),
                             ),
                           );
@@ -404,7 +412,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // Caption Text over Image/Gradient
+                  // Caption Text
                   Positioned(
                     bottom: 70,
                     left: 16,
@@ -421,7 +429,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // Interaction Pills inside the box (Bottom)
+                  // Interaction Pills (Bottom)
                   Positioned(
                     bottom: 16,
                     left: 16,

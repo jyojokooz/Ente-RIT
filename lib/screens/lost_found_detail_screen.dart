@@ -41,8 +41,9 @@ class LostFoundDetailScreen extends StatelessWidget {
               .collection('users')
               .doc(posterId)
               .get();
-      if (posterDoc.exists)
+      if (posterDoc.exists) {
         posterPhotoUrl = posterDoc.data()?['profilePhotoUrl'] ?? '';
+      }
     } catch (e) {}
 
     if (context.mounted) {
@@ -155,6 +156,9 @@ class LostFoundDetailScreen extends StatelessWidget {
                                         (_) => FullScreenImageViewer(
                                           imageUrl: imageUrl,
                                           heroTag: 'lf_${itemDoc.id}',
+                                          postId:
+                                              itemDoc
+                                                  .id, // <-- ADDED THIS TO FIX THE ERROR
                                         ),
                                   ),
                                 ),

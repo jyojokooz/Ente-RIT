@@ -71,6 +71,8 @@ class HodInfoScreen extends StatelessWidget {
                               (_) => FullScreenImageViewer(
                                 imageUrl: hod.imageUrl,
                                 heroTag: 'hod_img',
+                                postId:
+                                    'hod_dummy', // <-- ADDED THIS TO FIX THE ERROR
                               ),
                         ),
                       );
@@ -536,6 +538,8 @@ class StaffProfileScreen extends StatelessWidget {
                                           (_) => FullScreenImageViewer(
                                             imageUrl: profile.photoUrl,
                                             heroTag: 'staff_full_$staffId',
+                                            postId:
+                                                'staff_dummy_$staffId', // <-- ADDED THIS TO FIX THE ERROR
                                           ),
                                     ),
                                   ),
