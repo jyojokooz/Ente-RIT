@@ -1,17 +1,19 @@
+// ===============================
+// FILE NAME: lost_and_found_screen.dart
+// FILE PATH: lib/screens/lost_and_found_screen.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Import all the necessary widgets and screens.
 import '../widgets/lost_found_item_card.dart';
 import 'create_lost_found_post_screen.dart';
 import 'lost_found_detail_screen.dart';
 import 'resolved_items_screen.dart';
-import 'edit_lost_found_post_screen.dart'; // Import the new edit screen
+import 'edit_lost_found_post_screen.dart';
 
-/// The main screen for the Lost & Found feature. It displays a list of
-/// active items and allows users to switch between "Lost" and "Found" categories.
 class LostAndFoundScreen extends StatefulWidget {
   const LostAndFoundScreen({super.key});
 
@@ -24,19 +26,30 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: bgColor,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
         title: Text(
           'Lost & Found',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 24),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            color: textColor,
+          ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.history_outlined, size: 28),
-            tooltip: 'Resolved Items History',
+            icon: Icon(Icons.history_rounded, color: textColor, size: 26),
+            tooltip: 'Resolved History',
             onPressed:
                 () => Navigator.push(
                   context,
@@ -49,9 +62,12 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
         ],
       ),
       body: Column(
-        children: [_buildTabSwitcher(), Expanded(child: _buildItemsList())],
+        children: [
+          _buildTabSwitcher(isDark),
+          Expanded(child: _buildItemsList(isDark)),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed:
             () => Navigator.push(
               context,
@@ -59,52 +75,96 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
                 builder: (_) => const CreateLostFoundPostScreen(),
               ),
             ),
-        backgroundColor: Colors.yellow,
-        child: const Icon(Icons.add, color: Colors.black, size: 30),
+        backgroundColor: isDark ? Colors.white : Colors.black,
+        foregroundColor: isDark ? Colors.black : Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: Text(
+          "Report",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
 
-  /// Builds the custom, animated tab switcher widget.
-  Widget _buildTabSwitcher() {
+  Widget _buildTabSwitcher(bool isDark) {
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final activeColor = isDark ? Colors.white : Colors.black;
+    final inactiveColor = isDark ? Colors.white54 : Colors.black54;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(4),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
+        color: cardColor,
         borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
       ),
       child: Row(
         children: [
-          _buildTabItem('lost', 'Lost Items'),
-          _buildTabItem('found', 'Found Items'),
+          _buildTabItem(
+            'lost',
+            'Lost Items',
+            activeColor,
+            inactiveColor,
+            isDark,
+          ),
+          _buildTabItem(
+            'found',
+            'Found Items',
+            activeColor,
+            inactiveColor,
+            isDark,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTabItem(String status, String label) {
+  Widget _buildTabItem(
+    String status,
+    String label,
+    Color activeColor,
+    Color inactiveColor,
+    bool isDark,
+  ) {
     final isSelected = _selectedStatus == status;
+
+    // Dynamic gradient based on tab
+    final gradient =
+        isSelected
+            ? LinearGradient(
+              colors:
+                  status == 'lost'
+                      ? const [Color(0xFFFF9A44), Color(0xFFFF3E8E)]
+                      : const [Color(0xFF00C6FB), Color(0xFF005BEA)],
+            )
+            : null;
+
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedStatus = status;
-          });
-        },
+        onTap: () => setState(() => _selectedStatus = status),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.yellow : Colors.transparent,
-            borderRadius: BorderRadius.circular(25),
+            gradient: gradient,
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
-              color: isSelected ? Colors.black : Colors.white70,
-              fontWeight: FontWeight.w600,
+              color: isSelected ? Colors.white : inactiveColor,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+              fontSize: 14,
             ),
           ),
         ),
@@ -112,9 +172,7 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
     );
   }
 
-  /// Builds the grid of items fetched from Firestore and handles owner-specific actions.
-  Widget _buildItemsList() {
-    // Get the current user to check for item ownership.
+  Widget _buildItemsList(bool isDark) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final query = FirebaseFirestore.instance
         .collection('lost_and_found')
@@ -126,69 +184,81 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
       stream: query.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.yellow),
+          return Center(
+            child: CircularProgressIndicator(
+              color: isDark ? Colors.white : Colors.black,
+            ),
           );
         }
         if (snapshot.hasError) {
           return Center(
             child: Text(
-              "Error: ${snapshot.error}",
-              style: const TextStyle(color: Colors.red),
+              "Error loading items.",
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
             ),
           );
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
-            child: Text(
-              'No $_selectedStatus items reported yet.',
-              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 60,
+                  color: isDark ? Colors.white24 : Colors.black12,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No ${_selectedStatus.toUpperCase()} items reported.',
+                  style: GoogleFonts.poppins(
+                    color: isDark ? Colors.white54 : Colors.black54,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
           );
         }
 
         final items = snapshot.data!.docs;
-        return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 1,
-            childAspectRatio: 1.2,
-            mainAxisSpacing: 20,
-          ),
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
           itemCount: items.length,
           itemBuilder: (context, index) {
             final itemDoc = items[index];
             final item = itemDoc.data() as Map<String, dynamic>;
-
-            // Check if the current user is the owner of this specific item.
             final bool isOwner =
                 currentUser != null && currentUser.uid == item['userId'];
 
-            return LostFoundItemCard(
-              title: item['title'] ?? 'No Title',
-              status: item['status'] ?? 'N/A',
-              location: item['location'] ?? 'N/A',
-              userName: item['userName'] ?? 'Anonymous',
-              imageUrl: item['imageUrl'],
-              isOwner: isOwner, // Pass the ownership status to the card.
-              onTap:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LostFoundDetailScreen(itemDoc: itemDoc),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: LostFoundItemCard(
+                title: item['title'] ?? 'No Title',
+                status: item['status'] ?? 'N/A',
+                location: item['location'] ?? 'N/A',
+                userName: item['userName'] ?? 'Anonymous',
+                imageUrl: item['imageUrl'],
+                isOwner: isOwner,
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LostFoundDetailScreen(itemDoc: itemDoc),
+                      ),
                     ),
-                  ),
-              // Define the callback for the "Edit" action.
-              onEdit: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditLostFoundPostScreen(itemDoc: itemDoc),
-                  ),
-                );
-              },
-              // Define the callback for the "Delete" action.
-              onDelete: () => _showDeleteConfirmation(context, itemDoc.id),
+                onEdit:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => EditLostFoundPostScreen(itemDoc: itemDoc),
+                      ),
+                    ),
+                onDelete:
+                    () => _showDeleteConfirmation(context, itemDoc.id, isDark),
+              ),
             );
           },
         );
@@ -196,36 +266,56 @@ class _LostAndFoundScreenState extends State<LostAndFoundScreen> {
     );
   }
 
-  /// Shows a confirmation dialog before deleting an item from Firestore.
-  void _showDeleteConfirmation(BuildContext context, String itemId) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    String itemId,
+    bool isDark,
+  ) {
     showDialog(
       context: context,
       builder:
           (ctx) => AlertDialog(
-            backgroundColor: Colors.grey.shade800,
+            backgroundColor: isDark ? const Color(0xFF252528) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Text(
-              'Confirm Deletion',
-              style: GoogleFonts.poppins(color: Colors.white),
+              'Delete Post?',
+              style: GoogleFonts.poppins(
+                color: isDark ? Colors.white : Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             content: Text(
-              'Are you sure you want to permanently delete this post?',
-              style: GoogleFonts.poppins(color: Colors.white70),
+              'Are you sure you want to permanently delete this report?',
+              style: GoogleFonts.poppins(
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
             ),
             actions: [
               TextButton(
-                child: const Text(
+                child: Text(
                   'Cancel',
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
                 ),
                 onPressed: () => Navigator.of(ctx).pop(),
               ),
-              TextButton(
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: const Text(
                   'Delete',
-                  style: TextStyle(color: Colors.redAccent),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 onPressed: () {
-                  // Delete the document from Firestore and close the dialog.
                   FirebaseFirestore.instance
                       .collection('lost_and_found')
                       .doc(itemId)

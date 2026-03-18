@@ -1,4 +1,7 @@
-// lib/screens/edit_lost_found_post_screen.dart
+// ===============================
+// FILE NAME: edit_lost_found_post_screen.dart
+// FILE PATH: lib/screens/edit_lost_found_post_screen.dart
+// ===============================
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -6,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class EditLostFoundPostScreen extends StatefulWidget {
   final QueryDocumentSnapshot itemDoc;
@@ -71,9 +75,7 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
   Future<void> _submitUpdate() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     String? finalImageUrl = widget.itemDoc['imageUrl'];
 
@@ -103,170 +105,174 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post updated successfully!')),
+        const SnackBar(
+          content: Text('Post updated!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      // --- FIX: Added curly braces {} ---
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update post: $e')));
-      }
+        ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
-      // --- FIX: Added curly braces {} ---
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final inputColor = isDark ? const Color(0xFF252528) : Colors.white;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text('Edit Item', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
+        title: Text(
+          'Edit Item',
+          style: GoogleFonts.poppins(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: inputColor,
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Row(
+                  children: [
+                    _buildStatusTab('lost', 'I Lost It', isDark, inputColor),
+                    _buildStatusTab('found', 'I Found It', isDark, inputColor),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
               GestureDetector(
-                onTap: () => _showImagePickerOptions(context),
+                onTap: () => _showImagePickerOptions(context, isDark),
                 child: Container(
-                  height: 200,
-                  width: double.infinity,
+                  height: 180,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade700),
+                    color: inputColor,
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(24),
                     child:
                         _imageFile != null
                             ? Image.file(_imageFile!, fit: BoxFit.cover)
                             : (_currentImageUrl != null &&
                                     _currentImageUrl!.isNotEmpty
-                                ? Image.network(
-                                  _currentImageUrl!,
+                                ? CachedNetworkImage(
+                                  imageUrl: _currentImageUrl!,
                                   fit: BoxFit.cover,
                                 )
-                                : const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.camera_alt_outlined,
-                                        color: Colors.white70,
-                                        size: 50,
+                                : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_a_photo_rounded,
+                                      color: theme.colorScheme.primary,
+                                      size: 40,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Change photo',
+                                      style: GoogleFonts.poppins(
+                                        color:
+                                            isDark
+                                                ? Colors.white54
+                                                : Colors.black54,
                                       ),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'Change photo',
-                                        style: TextStyle(color: Colors.white70),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 )),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                onChanged: (value) {
-                  setState(() {
-                    _status = value!;
-                  });
-                },
-                decoration: InputDecoration(
-                  labelText: 'Status',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.grey.shade800,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                dropdownColor: Colors.grey.shade800,
-                style: const TextStyle(color: Colors.white),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'lost',
-                    child: Text('I Lost Something'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'found',
-                    child: Text('I Found Something'),
-                  ),
-                ],
+              const SizedBox(height: 24),
+
+              _buildTextField(
+                _titleController,
+                'Item Title',
+                inputColor,
+                textColor,
+                isRequired: true,
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _titleController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Item Title'),
-                validator:
-                    (value) =>
-                        value!.trim().isEmpty ? 'Please enter a title.' : null,
+              const SizedBox(height: 16),
+              _buildTextField(
+                _locationController,
+                'Last Known Location',
+                inputColor,
+                textColor,
+                icon: Icons.location_on_outlined,
+                isRequired: true,
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _descriptionController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Description'),
+              const SizedBox(height: 16),
+              _buildTextField(
+                _descriptionController,
+                'Description',
+                inputColor,
+                textColor,
                 maxLines: 4,
-                validator:
-                    (value) =>
-                        value!.trim().isEmpty
-                            ? 'Please enter a description.'
-                            : null,
+                isRequired: true,
               ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _locationController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Last Known Location',
+
+              const SizedBox(height: 40),
+
+              Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
+                  ), // Blue save button
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                validator:
-                    (value) =>
-                        value!.trim().isEmpty
-                            ? 'Please enter a location.'
-                            : null,
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitUpdate,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.yellow,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submitUpdate,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : Text(
+                            'Save Changes',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                 ),
-                child:
-                    _isLoading
-                        ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 3,
-                            color: Colors.black,
-                          ),
-                        )
-                        : Text(
-                          'Save Changes',
-                          style: GoogleFonts.poppins(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
               ),
             ],
           ),
@@ -275,34 +281,128 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
     );
   }
 
-  void _showImagePickerOptions(BuildContext context) {
+  Widget _buildStatusTab(
+    String status,
+    String label,
+    bool isDark,
+    Color inputColor,
+  ) {
+    final isSelected = _status == status;
+    final gradient =
+        isSelected
+            ? LinearGradient(
+              colors:
+                  status == 'lost'
+                      ? [const Color(0xFFFF9A44), const Color(0xFFFF3E8E)]
+                      : [const Color(0xFF00C6FB), const Color(0xFF005BEA)],
+            )
+            : null;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _status = status),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            gradient: gradient,
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(25),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              color:
+                  isSelected
+                      ? Colors.white
+                      : (isDark ? Colors.white54 : Colors.black54),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    Color bgColor,
+    Color textColor, {
+    int maxLines = 1,
+    bool isRequired = false,
+    IconData? icon,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      style: GoogleFonts.poppins(color: textColor, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.poppins(color: textColor.withOpacity(0.3)),
+        prefixIcon:
+            icon != null
+                ? Icon(icon, color: textColor.withOpacity(0.5), size: 20)
+                : null,
+        filled: true,
+        fillColor: bgColor,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      validator:
+          isRequired
+              ? (v) => v!.isEmpty ? 'This field is required' : null
+              : null,
+    );
+  }
+
+  void _showImagePickerOptions(BuildContext context, bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey.shade900,
+      backgroundColor: isDark ? const Color(0xFF252528) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (builder) {
         return SafeArea(
           child: Wrap(
-            children: <Widget>[
+            children: [
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Colors.white),
-                title: const Text(
+                leading: Icon(
+                  Icons.photo_library_rounded,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
                   'Gallery',
-                  style: TextStyle(color: Colors.white),
+                  style: GoogleFonts.poppins(
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
                 ),
                 onTap: () {
                   _pickImage(ImageSource.gallery);
-                  Navigator.of(context).pop();
+                  Navigator.pop(context);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_camera, color: Colors.white),
-                title: const Text(
+                leading: Icon(
+                  Icons.camera_alt_rounded,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
                   'Camera',
-                  style: TextStyle(color: Colors.white),
+                  style: GoogleFonts.poppins(
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
                 ),
                 onTap: () {
                   _pickImage(ImageSource.camera);
-                  Navigator.of(context).pop();
+                  Navigator.pop(context);
                 },
               ),
             ],

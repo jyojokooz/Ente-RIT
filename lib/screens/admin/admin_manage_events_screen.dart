@@ -3,8 +3,6 @@
 // FILE PATH: lib/screens/admin/admin_manage_events_screen.dart
 // ===============================
 
-// ignore_for_file: use_build_context_synchronously
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +10,7 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -25,257 +24,467 @@ class AdminManageEventsScreen extends StatefulWidget {
 }
 
 class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
-  // --- ADD EVENT DIALOG ---
-  Future<void> _showAddEventDialog() async {
+  // --- MODERN BOTTOM SHEET TO ADD EVENT ---
+  Future<void> _showAddEventSheet() async {
     final formKey = GlobalKey<FormState>();
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final whatsappController = TextEditingController();
     final bookingController = TextEditingController();
 
-    DateTime? selectedDate;
-    TimeOfDay? selectedTime;
+    DateTime? selectedDate = DateTime.now();
+    TimeOfDay? selectedTime = TimeOfDay.now();
     File? eventImageFile;
     bool isUploading = false;
     final ImagePicker picker = ImagePicker();
 
-    // Capture context to avoid async gap issues
-    final parentContext = context;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final inputColor = isDark ? const Color(0xFF161618) : Colors.grey.shade100;
 
-    await showDialog<void>(
-      context: parentContext,
-      barrierDismissible: false,
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: Colors.grey.shade900,
-              title: Text(
-                'Add New Event',
-                style: GoogleFonts.poppins(color: Colors.white),
+          builder: (context, setSheetState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.9,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(30),
+                ),
               ),
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Image Picker
-                      GestureDetector(
-                        onTap:
-                            isUploading
-                                ? null
-                                : () async {
-                                  final XFile? image = await picker.pickImage(
-                                    source: ImageSource.gallery,
-                                  );
-                                  if (image != null) {
-                                    setDialogState(
-                                      () => eventImageFile = File(image.path),
-                                    );
-                                  }
-                                },
-                        child: Container(
-                          height: 150,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade700,
-                            borderRadius: BorderRadius.circular(12),
-                            image:
-                                eventImageFile != null
-                                    ? DecorationImage(
-                                      image: FileImage(eventImageFile!),
-                                      fit: BoxFit.cover,
-                                    )
-                                    : null,
-                          ),
-                          child:
-                              eventImageFile == null
-                                  ? const Center(
-                                    child: Icon(
-                                      Icons.add_a_photo_outlined,
-                                      color: Colors.white70,
-                                      size: 40,
-                                    ),
-                                  )
-                                  : null,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Text Fields
-                      _buildTextField(
-                        titleController,
-                        'Event Title',
-                        isRequired: true,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        descriptionController,
-                        'Description',
-                        maxLines: 3,
-                        isRequired: true,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Optional Fields
-                      _buildTextField(
-                        whatsappController,
-                        'WhatsApp Group Link (Optional)',
-                        icon: Icons.chat,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        bookingController,
-                        'Booking/Register Link (Optional)',
-                        icon: Icons.link,
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Date & Time Pickers
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(
-                          Icons.date_range,
-                          color: Colors.yellow,
-                        ),
-                        title: Text(
-                          selectedDate == null
-                              ? 'Select Date'
-                              : DateFormat.yMMMMd().format(selectedDate!),
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        onTap: () async {
-                          final pickedDate = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2100),
-                          );
-                          if (pickedDate != null) {
-                            setDialogState(() => selectedDate = pickedDate);
-                          }
-                        },
-                      ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(
-                          Icons.access_time,
-                          color: Colors.yellow,
-                        ),
-                        title: Text(
-                          selectedTime == null
-                              ? 'Select Time'
-                              : selectedTime!.format(context),
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        onTap: () async {
-                          final pickedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.now(),
-                          );
-                          if (pickedTime != null) {
-                            setDialogState(() => selectedTime = pickedTime);
-                          }
-                        },
-                      ),
-                    ],
+              child: Column(
+                children: [
+                  // Handle indicator
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    height: 5,
+                    width: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                ElevatedButton(
-                  onPressed:
-                      isUploading
-                          ? null
-                          : () async {
-                            if (formKey.currentState!.validate() &&
-                                selectedDate != null &&
-                                selectedTime != null &&
-                                eventImageFile != null) {
-                              setDialogState(() => isUploading = true);
+                  Text(
+                    'Create New Event',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                              try {
-                                // 1. Upload Image
-                                final cloudinary = CloudinaryPublic(
-                                  cloudinaryCloudName,
-                                  cloudinaryUploadPreset,
-                                );
-                                CloudinaryResponse response = await cloudinary
-                                    .uploadFile(
-                                      CloudinaryFile.fromFile(
-                                        eventImageFile!.path,
-                                        folder: 'events',
-                                      ),
-                                    );
-
-                                final eventTimestamp = Timestamp.fromDate(
-                                  DateTime(
-                                    selectedDate!.year,
-                                    selectedDate!.month,
-                                    selectedDate!.day,
-                                    selectedTime!.hour,
-                                    selectedTime!.minute,
-                                  ),
-                                );
-
-                                // 2. Save to Firestore
-                                await FirebaseFirestore.instance
-                                    .collection('events')
-                                    .add({
-                                      'title': titleController.text.trim(),
-                                      'description':
-                                          descriptionController.text.trim(),
-                                      'whatsappLink':
-                                          whatsappController.text.trim(),
-                                      'bookingLink':
-                                          bookingController.text.trim(),
-                                      'eventDate': eventTimestamp,
-                                      'imageUrl': response.secureUrl,
-                                      'createdAt': FieldValue.serverTimestamp(),
-                                    });
-
-                                if (mounted) Navigator.of(context).pop();
-                              } catch (e) {
-                                ScaffoldMessenger.of(
-                                  parentContext,
-                                ).showSnackBar(
-                                  SnackBar(content: Text("Error: $e")),
-                                );
-                              } finally {
-                                if (mounted) {
-                                  setDialogState(() => isUploading = false);
-                                }
-                              }
-                            } else {
-                              ScaffoldMessenger.of(parentContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Please fill all required fields and image.",
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        left: 24,
+                        right: 24,
+                        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                      ),
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Image Picker
+                            GestureDetector(
+                              onTap:
+                                  isUploading
+                                      ? null
+                                      : () async {
+                                        final XFile? image = await picker
+                                            .pickImage(
+                                              source: ImageSource.gallery,
+                                            );
+                                        if (image != null) {
+                                          setSheetState(
+                                            () =>
+                                                eventImageFile = File(
+                                                  image.path,
+                                                ),
+                                          );
+                                        }
+                                      },
+                              child: Container(
+                                height: 180,
+                                decoration: BoxDecoration(
+                                  color: inputColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                  image:
+                                      eventImageFile != null
+                                          ? DecorationImage(
+                                            image: FileImage(eventImageFile!),
+                                            fit: BoxFit.cover,
+                                          )
+                                          : null,
+                                  border: Border.all(
+                                    color:
+                                        isDark
+                                            ? Colors.white10
+                                            : Colors.black12,
                                   ),
                                 ),
-                              );
-                            }
-                          },
-                  child:
-                      isUploading
-                          ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Text('Add Event'),
-                ),
-              ],
+                                child:
+                                    eventImageFile == null
+                                        ? Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.add_photo_alternate_rounded,
+                                              size: 40,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              "Upload Event Poster",
+                                              style: GoogleFonts.poppins(
+                                                color: textColor.withOpacity(
+                                                  0.6,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            _buildInputLabel("Event Title *", textColor),
+                            _buildTextField(
+                              titleController,
+                              'e.g., Tech Symposium 2024',
+                              inputColor,
+                              textColor,
+                              isRequired: true,
+                            ),
+
+                            const SizedBox(height: 16),
+                            _buildInputLabel("Description *", textColor),
+                            _buildTextField(
+                              descriptionController,
+                              'Details about the event...',
+                              inputColor,
+                              textColor,
+                              maxLines: 4,
+                              isRequired: true,
+                            ),
+
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      final pickedDate = await showDatePicker(
+                                        context: context,
+                                        initialDate:
+                                            selectedDate ?? DateTime.now(),
+                                        firstDate: DateTime.now(),
+                                        lastDate: DateTime(2100),
+                                      );
+                                      if (pickedDate != null)
+                                        setSheetState(
+                                          () => selectedDate = pickedDate,
+                                        );
+                                    },
+                                    child: _buildPickerBox(
+                                      Icons.calendar_month_rounded,
+                                      selectedDate == null
+                                          ? 'Date'
+                                          : DateFormat(
+                                            'MMM dd, yyyy',
+                                          ).format(selectedDate!),
+                                      inputColor,
+                                      textColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      final pickedTime = await showTimePicker(
+                                        context: context,
+                                        initialTime:
+                                            selectedTime ?? TimeOfDay.now(),
+                                      );
+                                      if (pickedTime != null)
+                                        setSheetState(
+                                          () => selectedTime = pickedTime,
+                                        );
+                                    },
+                                    child: _buildPickerBox(
+                                      Icons.access_time_rounded,
+                                      selectedTime == null
+                                          ? 'Time'
+                                          : selectedTime!.format(context),
+                                      inputColor,
+                                      textColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 16),
+                            _buildInputLabel("WhatsApp Group Link", textColor),
+                            _buildTextField(
+                              whatsappController,
+                              'https://chat.whatsapp.com/...',
+                              inputColor,
+                              textColor,
+                              icon: Icons.link_rounded,
+                            ),
+
+                            const SizedBox(height: 16),
+                            _buildInputLabel(
+                              "Booking/Registration Link",
+                              textColor,
+                            ),
+                            _buildTextField(
+                              bookingController,
+                              'https://forms.gle/...',
+                              inputColor,
+                              textColor,
+                              icon: Icons.confirmation_number_outlined,
+                            ),
+
+                            const SizedBox(height: 32),
+
+                            // Submit Button
+                            Container(
+                              height: 56,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFF3E8E),
+                                    Color(0xFFFF9A44),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: ElevatedButton(
+                                onPressed:
+                                    isUploading
+                                        ? null
+                                        : () async {
+                                          if (formKey.currentState!
+                                                  .validate() &&
+                                              selectedDate != null &&
+                                              selectedTime != null &&
+                                              eventImageFile != null) {
+                                            setSheetState(
+                                              () => isUploading = true,
+                                            );
+
+                                            try {
+                                              final cloudinary =
+                                                  CloudinaryPublic(
+                                                    cloudinaryCloudName,
+                                                    cloudinaryUploadPreset,
+                                                  );
+                                              CloudinaryResponse response =
+                                                  await cloudinary.uploadFile(
+                                                    CloudinaryFile.fromFile(
+                                                      eventImageFile!.path,
+                                                      folder: 'events',
+                                                    ),
+                                                  );
+
+                                              final eventTimestamp =
+                                                  Timestamp.fromDate(
+                                                    DateTime(
+                                                      selectedDate!.year,
+                                                      selectedDate!.month,
+                                                      selectedDate!.day,
+                                                      selectedTime!.hour,
+                                                      selectedTime!.minute,
+                                                    ),
+                                                  );
+
+                                              await FirebaseFirestore.instance
+                                                  .collection('events')
+                                                  .add({
+                                                    'title':
+                                                        titleController.text
+                                                            .trim(),
+                                                    'description':
+                                                        descriptionController
+                                                            .text
+                                                            .trim(),
+                                                    'whatsappLink':
+                                                        whatsappController.text
+                                                            .trim(),
+                                                    'bookingLink':
+                                                        bookingController.text
+                                                            .trim(),
+                                                    'eventDate': eventTimestamp,
+                                                    'imageUrl':
+                                                        response.secureUrl,
+                                                    'createdAt':
+                                                        FieldValue.serverTimestamp(),
+                                                  });
+
+                                              if (mounted)
+                                                Navigator.pop(context);
+                                            } catch (e) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text("Error: $e"),
+                                                ),
+                                              );
+                                            } finally {
+                                              if (mounted)
+                                                setSheetState(
+                                                  () => isUploading = false,
+                                                );
+                                            }
+                                          } else {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Please fill all required fields and upload an image.",
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child:
+                                    isUploading
+                                        ? const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                        : Text(
+                                          "Publish Event",
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildInputLabel(String text, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
+      child: Text(
+        text,
+        style: GoogleFonts.poppins(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint,
+    Color bgColor,
+    Color textColor, {
+    int maxLines = 1,
+    bool isRequired = false,
+    IconData? icon,
+  }) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      style: GoogleFonts.poppins(color: textColor, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.poppins(color: textColor.withOpacity(0.3)),
+        prefixIcon:
+            icon != null
+                ? Icon(icon, color: textColor.withOpacity(0.5), size: 20)
+                : null,
+        filled: true,
+        fillColor: bgColor,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      validator:
+          isRequired
+              ? (v) => v!.isEmpty ? 'This field is required' : null
+              : null,
+    );
+  }
+
+  Widget _buildPickerBox(
+    IconData icon,
+    String text,
+    Color bgColor,
+    Color textColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: const Color(0xFFFF3E8E), size: 20),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(
+                color: textColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -284,36 +493,40 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
     final messageController = TextEditingController(
       text: "Don't miss out! $eventTitle is starting soon.",
     );
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     await showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: Colors.grey.shade900,
+            backgroundColor: isDark ? const Color(0xFF252528) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Text(
-              "Send Reminder",
-              style: GoogleFonts.poppins(color: Colors.white),
+              "Send Push Reminder",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "This will send a push notification to ALL users via Cloud Functions.",
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                  "This will send a notification to all users.",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: messageController,
-                  style: const TextStyle(color: Colors.white),
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: "Notification Body",
-                    labelStyle: TextStyle(color: Colors.white70),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.yellow),
+                  maxLines: 3,
+                  style: GoogleFonts.poppins(),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor:
+                        isDark ? const Color(0xFF161618) : Colors.grey.shade100,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
@@ -322,18 +535,28 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Cancel"),
+                child: Text(
+                  "Cancel",
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
               ),
               ElevatedButton.icon(
-                icon: const Icon(Icons.send, size: 16),
-                label: const Text("Send Now"),
+                icon: const Icon(
+                  Icons.send_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  "Broadcast",
+                  style: TextStyle(color: Colors.white),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.yellow,
-                  foregroundColor: Colors.black,
+                  backgroundColor: const Color(0xFFFF3E8E),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () async {
-                  // Write to 'notification_requests' collection
-                  // The deployed Cloud Function will listen to this and send the FCM
                   await FirebaseFirestore.instance
                       .collection('notification_requests')
                       .add({
@@ -348,7 +571,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("Notification queued for delivery!"),
+                        content: Text("Notification sent successfully!"),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -364,45 +587,40 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
     await FirebaseFirestore.instance.collection('events').doc(docId).delete();
   }
 
-  // Helper for fields
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label, {
-    int maxLines = 1,
-    bool isRequired = false,
-    IconData? icon,
-  }) {
-    return TextFormField(
-      controller: controller,
-      style: const TextStyle(color: Colors.white),
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white60),
-        prefixIcon: icon != null ? Icon(icon, color: Colors.white60) : null,
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade600),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.yellow),
-        ),
-      ),
-      validator: isRequired ? (v) => v!.isEmpty ? 'Required' : null : null,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text('Manage Events', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        title: Text(
+          'Manage Events',
+          style: GoogleFonts.poppins(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddEventDialog,
-        backgroundColor: Colors.yellow,
-        child: const Icon(Icons.add, color: Colors.black),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddEventSheet,
+        backgroundColor: textColor,
+        icon: Icon(Icons.add, color: bgColor),
+        label: Text(
+          "New Event",
+          style: GoogleFonts.poppins(
+            color: bgColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream:
@@ -411,81 +629,127 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                 .orderBy('eventDate')
                 .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
-
           if (snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No events found."));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.event_note_rounded,
+                    size: 60,
+                    color: isDark ? Colors.white24 : Colors.black12,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No events to manage.",
+                    style: GoogleFonts.poppins(
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            );
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
               final doc = snapshot.data!.docs[index];
               final data = doc.data() as Map<String, dynamic>;
               final eventDate = (data['eventDate'] as Timestamp?)?.toDate();
 
-              return Card(
-                color: Colors.grey.shade900,
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  leading:
-                      data['imageUrl'] != null
-                          ? Image.network(
-                            data['imageUrl'],
-                            width: 50,
-                            fit: BoxFit.cover,
-                          )
-                          : const Icon(Icons.event),
-                  title: Text(
-                    data['title'],
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        eventDate != null
-                            ? DateFormat.yMMMMd().add_jm().format(eventDate)
-                            : '',
-                        style: const TextStyle(color: Colors.white70),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    if (!isDark)
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                      if (data['whatsappLink'] != null &&
-                          data['whatsappLink'].toString().isNotEmpty)
-                        const Text(
-                          "• WhatsApp Link",
-                          style: TextStyle(color: Colors.green, fontSize: 10),
-                        ),
-                      if (data['bookingLink'] != null &&
-                          data['bookingLink'].toString().isNotEmpty)
-                        const Text(
-                          "• Booking Link",
-                          style: TextStyle(color: Colors.blue, fontSize: 10),
-                        ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
                     children: [
-                      // Notification Trigger Button
-                      IconButton(
-                        icon: const Icon(
-                          Icons.notifications_active_outlined,
-                          color: Colors.yellow,
-                        ),
-                        tooltip: "Send Reminder",
-                        onPressed:
-                            () => _triggerNotification(data['title'], doc.id),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child:
+                            data['imageUrl'] != null
+                                ? CachedNetworkImage(
+                                  imageUrl: data['imageUrl'],
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                )
+                                : Container(
+                                  width: 80,
+                                  height: 80,
+                                  color:
+                                      isDark
+                                          ? Colors.black26
+                                          : Colors.grey.shade200,
+                                  child: const Icon(Icons.event),
+                                ),
                       ),
-                      // Delete Button
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              data['title'],
+                              style: GoogleFonts.poppins(
+                                color: textColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              eventDate != null
+                                  ? DateFormat(
+                                    'MMM dd, yyyy • h:mm a',
+                                  ).format(eventDate)
+                                  : '',
+                              style: GoogleFonts.poppins(
+                                color: const Color(0xFFFF9A44),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                        onPressed: () => _deleteEvent(doc.id),
+                      ),
+                      Column(
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.campaign_rounded,
+                              color: Color(0xFFFF3E8E),
+                            ),
+                            tooltip: "Send Push Reminder",
+                            onPressed:
+                                () =>
+                                    _triggerNotification(data['title'], doc.id),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: Colors.grey.shade400,
+                            ),
+                            onPressed: () => _deleteEvent(doc.id),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: driver_tracking_screen.dart
+// FILE PATH: lib/screens/driver_tracking_screen.dart
+// ===============================
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,7 +17,8 @@ class DriverTrackingScreen extends StatefulWidget {
   State<DriverTrackingScreen> createState() => _DriverTrackingScreenState();
 }
 
-class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
+class _DriverTrackingScreenState extends State<DriverTrackingScreen>
+    with SingleTickerProviderStateMixin {
   final Location _location = Location();
   StreamSubscription<LocationData>? _locationSubscription;
   bool _isSharing = false;
@@ -23,6 +29,9 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
   DocumentSnapshot? _selectedRoute;
   bool _isLoadingRoutes = true;
 
+  // Animation for the "Live" radar pulse
+  late AnimationController _pulseController;
+
   @override
   void initState() {
     super.initState();
@@ -30,11 +39,17 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
       'live_locations/${_currentUser.uid}',
     );
     _fetchAssignedRoutes();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
   }
 
   @override
   void dispose() {
     _stopSharing();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -67,7 +82,10 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
     } else {
       if (_selectedRoute == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please select a route first.")),
+          const SnackBar(
+            content: Text("Please select a route first."),
+            backgroundColor: Colors.redAccent,
+          ),
         );
         return;
       }
@@ -100,7 +118,10 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
     final busNumber = _selectedRoute!['busNumber'];
     final routeName = _selectedRoute!['routeName'];
 
-    setState(() => _isSharing = true);
+    setState(() {
+      _isSharing = true;
+      _pulseController.repeat();
+    });
 
     final initialLocation = await _location.getLocation();
     await _locationRef.set({
@@ -132,118 +153,265 @@ class _DriverTrackingScreenState extends State<DriverTrackingScreen> {
     _locationSubscription = null;
     _locationRef.remove();
     if (mounted) {
-      setState(() => _isSharing = false);
+      setState(() {
+        _isSharing = false;
+        _pulseController.stop();
+        _pulseController.reset();
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Driver Mode', style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
-      ),
-      backgroundColor: Colors.black,
-      body: SingleChildScrollView(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child:
-                _isLoadingRoutes
-                    ? const CircularProgressIndicator()
-                    : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (!_isSharing) ...[
-                          Text(
-                            'Select Your Route',
-                            style: GoogleFonts.poppins(fontSize: 18),
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<DocumentSnapshot>(
-                            initialValue: _selectedRoute,
-                            hint: const Text('Choose a route'),
-                            isExpanded: true,
-                            items:
-                                _assignedRoutes.map((route) {
-                                  return DropdownMenuItem<DocumentSnapshot>(
-                                    value: route,
-                                    child: Text(
-                                      "${route['routeName']} (${route['busNumber']})",
-                                    ),
-                                  );
-                                }).toList(),
-                            onChanged: (value) {
-                              setState(() => _selectedRoute = value);
-                            },
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                        ],
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-                        Icon(
-                          _isSharing
-                              ? Icons.local_shipping
-                              : Icons.bus_alert_outlined,
-                          size: 100,
-                          color: _isSharing ? Colors.green : Colors.grey,
-                        ),
-                        const SizedBox(height: 24),
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
+
+    return Scaffold(
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        title: Text(
+          'Driver Console',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+        ),
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
+      ),
+      body: SafeArea(
+        child:
+            _isLoadingRoutes
+                ? Center(
+                  child: CircularProgressIndicator(
+                    color: theme.colorScheme.primary,
+                  ),
+                )
+                : Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 20,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Target Route Selection
+                      if (!_isSharing) ...[
                         Text(
-                          _isSharing
-                              ? 'Live Location is ON'
-                              : 'Live Location is OFF',
+                          'Select Active Route',
                           style: GoogleFonts.poppins(
-                            fontSize: 22,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: textColor,
                           ),
                         ),
                         const SizedBox(height: 12),
-                        if (_isSharing && _selectedRoute != null)
-                          Text(
-                            'Sharing for Route: ${_selectedRoute!['routeName']}',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(color: Colors.white70),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
                           ),
-                        Text(
-                          _isSharing
-                              ? 'Students can now see you on the map.'
-                              : 'Tap the button to start sharing.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(color: Colors.white70),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<DocumentSnapshot>(
+                              value: _selectedRoute,
+                              hint: Text(
+                                'Choose your current route',
+                                style: TextStyle(color: subtitleColor),
+                              ),
+                              isExpanded: true,
+                              dropdownColor: cardColor,
+                              icon: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: subtitleColor,
+                              ),
+                              style: GoogleFonts.poppins(
+                                color: textColor,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              items:
+                                  _assignedRoutes.map((route) {
+                                    return DropdownMenuItem<DocumentSnapshot>(
+                                      value: route,
+                                      child: Text(
+                                        "${route['routeName']} (Bus ${route['busNumber']})",
+                                      ),
+                                    );
+                                  }).toList(),
+                              onChanged:
+                                  (value) =>
+                                      setState(() => _selectedRoute = value),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 40),
-                        ElevatedButton(
-                          onPressed: _toggleSharing,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                _isSharing ? Colors.red : Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 15,
-                            ),
-                            textStyle: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          child: Text(
-                            _isSharing ? 'Stop Sharing' : 'Start Sharing',
+                      ],
+
+                      // Radar / Status Icon
+                      Expanded(
+                        child: Center(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (_isSharing)
+                                AnimatedBuilder(
+                                  animation: _pulseController,
+                                  builder: (context, child) {
+                                    return Container(
+                                      width:
+                                          200 + (_pulseController.value * 100),
+                                      height:
+                                          200 + (_pulseController.value * 100),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: const Color(
+                                          0xFF00C569,
+                                        ).withOpacity(
+                                          1 - _pulseController.value,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color:
+                                      _isSharing
+                                          ? const Color(0xFF00C569)
+                                          : cardColor,
+                                  boxShadow: [
+                                    if (!isDark && !_isSharing)
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 10),
+                                      ),
+                                    if (_isSharing)
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFF00C569,
+                                        ).withOpacity(0.4),
+                                        blurRadius: 30,
+                                        spreadRadius: 5,
+                                      ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  _isSharing
+                                      ? Icons.satellite_alt_rounded
+                                      : Icons.location_off_rounded,
+                                  size: 60,
+                                  color:
+                                      _isSharing ? Colors.white : subtitleColor,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-          ),
-        ),
+                      ),
+
+                      // Status Text
+                      Text(
+                        _isSharing
+                            ? 'Transmitting Location'
+                            : 'Transmission Offline',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              _isSharing ? const Color(0xFF00C569) : textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isSharing
+                            ? 'Students can now track Bus ${_selectedRoute!['busNumber']} on ${String.fromCharCode(0x2022)} ${_selectedRoute!['routeName']}'
+                            : 'Select a route and go online to share location.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          color: subtitleColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+
+                      // Giant Action Button
+                      Container(
+                        height: 65,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          gradient:
+                              _isSharing
+                                  ? const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF3E8E),
+                                      Color(0xFFFF0000),
+                                    ],
+                                  ) // Red Gradient
+                                  : const LinearGradient(
+                                    colors: [
+                                      Color(0xFF00C6FB),
+                                      Color(0xFF005BEA),
+                                    ],
+                                  ), // Blue Gradient
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isSharing ? Colors.red : Colors.blue)
+                                  .withOpacity(0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: _toggleSharing,
+                          icon: Icon(
+                            _isSharing
+                                ? Icons.power_settings_new_rounded
+                                : Icons.wifi_tethering_rounded,
+                            color: Colors.white,
+                          ),
+                          label: Text(
+                            _isSharing ? 'GO OFFLINE' : 'GO ONLINE',
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
       ),
     );
   }

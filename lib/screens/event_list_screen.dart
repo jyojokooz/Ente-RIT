@@ -3,24 +3,22 @@
 // FILE PATH: lib/screens/event_list_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use
-
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart'; // REQUIRED
+import 'package:url_launcher/url_launcher.dart';
 
-// --- Event Model ---
 class Event {
   final String title;
   final String description;
   final DateTime date;
   final String? imageUrl;
-  final String? whatsappLink; // New
-  final String? bookingLink; // New
+  final String? whatsappLink;
+  final String? bookingLink;
 
   Event({
     required this.title,
@@ -61,21 +59,28 @@ class _EventListScreenState extends State<EventListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
           'Campus Events',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
-            color: Colors.black,
+            color: textColor,
             fontSize: 24,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: bgColor,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream:
@@ -86,8 +91,10 @@ class _EventListScreenState extends State<EventListScreen> {
                 .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.black),
+            return Center(
+              child: CircularProgressIndicator(
+                color: theme.colorScheme.primary,
+              ),
             );
           }
 
@@ -107,8 +114,8 @@ class _EventListScreenState extends State<EventListScreen> {
                 description: data['description'] ?? '',
                 date: eventDate,
                 imageUrl: data['imageUrl'],
-                whatsappLink: data['whatsappLink'], // Map New Field
-                bookingLink: data['bookingLink'], // Map New Field
+                whatsappLink: data['whatsappLink'],
+                bookingLink: data['bookingLink'],
               );
 
               if (_events[eventDay] == null) _events[eventDay] = [];
@@ -117,42 +124,75 @@ class _EventListScreenState extends State<EventListScreen> {
             _selectedEvents = _getEventsForDay(_selectedDay);
           }
 
-          return Column(
-            children: [
-              _buildModernCalendar(),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Row(
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "Upcoming",
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                    _buildModernCalendar(isDark, theme),
+                    const SizedBox(height: 24),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                      child: Row(
+                        children: [
+                          Text(
+                            "Upcoming",
+                            style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              "${_selectedEvents.length}",
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        "${_selectedEvents.length}",
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Expanded(child: _buildEventList()),
+              _selectedEvents.isEmpty
+                  ? SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _buildEmptyState(isDark),
+                  )
+                  : SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: _ModernEventCard(
+                            event: _selectedEvents[index],
+                            isDark: isDark,
+                          ),
+                        ),
+                        childCount: _selectedEvents.length,
+                      ),
+                    ),
+                  ),
             ],
           );
         },
@@ -160,20 +200,22 @@ class _EventListScreenState extends State<EventListScreen> {
     );
   }
 
-  Widget _buildModernCalendar() {
-    // ... (Keep existing calendar code exactly as is)
+  Widget _buildModernCalendar(bool isDark, ThemeData theme) {
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-            spreadRadius: 5,
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
         ],
       ),
       child: TableCalendar<Event>(
@@ -191,39 +233,54 @@ class _EventListScreenState extends State<EventListScreen> {
           titleCentered: true,
           formatButtonVisible: false,
           titleTextStyle: GoogleFonts.poppins(
-            color: Colors.black,
-            fontSize: 17.0,
-            fontWeight: FontWeight.w600,
-          ),
-          leftChevronIcon: const Icon(Icons.chevron_left, color: Colors.black),
-          rightChevronIcon: const Icon(
-            Icons.chevron_right,
-            color: Colors.black,
-          ),
-        ),
-        calendarStyle: CalendarStyle(
-          defaultTextStyle: GoogleFonts.poppins(color: Colors.black87),
-          weekendTextStyle: GoogleFonts.poppins(color: Colors.redAccent),
-          outsideTextStyle: GoogleFonts.poppins(color: Colors.grey.shade400),
-          todayDecoration: BoxDecoration(
-            color: Colors.transparent,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.yellow.shade700, width: 2),
-          ),
-          todayTextStyle: GoogleFonts.poppins(
-            color: Colors.black,
+            color: textColor,
+            fontSize: 18.0,
             fontWeight: FontWeight.bold,
           ),
-          selectedDecoration: const BoxDecoration(
-            color: Colors.black,
+          leftChevronIcon: Icon(Icons.chevron_left, color: textColor),
+          rightChevronIcon: Icon(Icons.chevron_right, color: textColor),
+        ),
+        calendarStyle: CalendarStyle(
+          defaultTextStyle: GoogleFonts.poppins(
+            color: textColor,
+            fontWeight: FontWeight.w500,
+          ),
+          weekendTextStyle: GoogleFonts.poppins(
+            color: Colors.redAccent,
+            fontWeight: FontWeight.w600,
+          ),
+          outsideTextStyle: GoogleFonts.poppins(
+            color: isDark ? Colors.white24 : Colors.black26,
+          ),
+          todayDecoration: BoxDecoration(
+            color: theme.colorScheme.primary.withOpacity(0.2),
             shape: BoxShape.circle,
+          ),
+          todayTextStyle: GoogleFonts.poppins(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.bold,
+          ),
+          selectedDecoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF3E8E).withOpacity(0.4),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           selectedTextStyle: GoogleFonts.poppins(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
           markerDecoration: const BoxDecoration(
-            color: Colors.yellow,
+            color: Color(0xFF00C6FB),
             shape: BoxShape.circle,
           ),
         ),
@@ -231,50 +288,43 @@ class _EventListScreenState extends State<EventListScreen> {
     );
   }
 
-  Widget _buildEventList() {
-    if (_selectedEvents.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.event_available,
-                size: 40,
-                color: Colors.grey.shade400,
-              ),
+  Widget _buildEmptyState(bool isDark) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark ? Colors.white10 : Colors.black12,
             ),
-            const SizedBox(height: 16),
-            Text(
-              "No events on this day",
-              style: GoogleFonts.poppins(
-                color: Colors.grey.shade500,
-                fontSize: 15,
-              ),
+            child: Icon(
+              Icons.event_busy_rounded,
+              size: 50,
+              color: isDark ? Colors.white30 : Colors.black38,
             ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-      itemCount: _selectedEvents.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 24),
-      itemBuilder:
-          (context, index) => _ModernEventCard(event: _selectedEvents[index]),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            "No events scheduled",
+            style: GoogleFonts.poppins(
+              color: isDark ? Colors.white54 : Colors.black54,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _ModernEventCard extends StatelessWidget {
   final Event event;
-  const _ModernEventCard({required this.event});
+  final bool isDark;
+
+  const _ModernEventCard({required this.event, required this.isDark});
 
   Future<void> _launchURL(String url) async {
     final uri = Uri.parse(url);
@@ -285,211 +335,231 @@ class _ModernEventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         child: Column(
-          // Changed to Column to hold image + buttons
           children: [
-            // 1. The Image Poster Section
+            // --- IMAGE & DATE BADGE ---
             SizedBox(
-              height: 240,
+              height: 220,
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Positioned.fill(
-                    child:
-                        event.imageUrl != null && event.imageUrl!.isNotEmpty
-                            ? CachedNetworkImage(
-                              imageUrl: event.imageUrl!,
-                              fit: BoxFit.cover,
-                              placeholder:
-                                  (context, url) =>
-                                      Container(color: Colors.grey.shade200),
-                              errorWidget:
-                                  (context, url, error) =>
-                                      _buildFallbackGradient(),
-                            )
-                            : _buildFallbackGradient(),
-                  ),
+                  event.imageUrl != null && event.imageUrl!.isNotEmpty
+                      ? CachedNetworkImage(
+                        imageUrl: event.imageUrl!,
+                        fit: BoxFit.cover,
+                        placeholder:
+                            (context, url) => Container(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                        errorWidget:
+                            (context, url, error) => _buildFallbackGradient(),
+                      )
+                      : _buildFallbackGradient(),
 
-                  // Gradient Overlay
-                  Positioned.fill(
+                  // Bottom Gradient for seamless blend
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 80,
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: const [0.5, 1.0],
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.95),
-                          ],
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [cardColor, cardColor.withOpacity(0.0)],
                         ),
                       ),
                     ),
                   ),
 
-                  // Date Badge
+                  // Floating Date Badge
                   Positioned(
                     top: 16,
                     right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            DateFormat('MMM').format(event.date).toUpperCase(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.grey.shade400,
-                            ),
-                          ),
-                          Text(
-                            DateFormat('dd').format(event.date),
-                            style: GoogleFonts.poppins(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              height: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Text Content
-                  Positioned(
-                    bottom: 24,
-                    left: 20,
-                    right: 20,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                            horizontal: 16,
+                            vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.yellow,
-                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.black.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                            ),
                           ),
-                          child: Row(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.schedule,
-                                size: 14,
-                                color: Colors.black,
-                              ),
-                              const SizedBox(width: 4),
                               Text(
-                                DateFormat('h:mm a').format(event.date),
+                                DateFormat(
+                                  'MMM',
+                                ).format(event.date).toUpperCase(),
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFFF9A44),
+                                ),
+                              ),
+                              Text(
+                                DateFormat('dd').format(event.date),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  height: 1.1,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          event.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            height: 1.1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          event.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // 2. Action Buttons Section (New)
-            if ((event.whatsappLink != null &&
-                    event.whatsappLink!.isNotEmpty) ||
-                (event.bookingLink != null && event.bookingLink!.isNotEmpty))
-              Container(
-                color: Colors.black, // Dark strip at bottom to match image fade
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Row(
-                  children: [
-                    if (event.whatsappLink != null &&
-                        event.whatsappLink!.isNotEmpty)
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _launchURL(event.whatsappLink!),
-                          icon: const Icon(Icons.chat_bubble, size: 18),
-                          label: const Text("Join Group"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade600,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
+            // --- TEXT CONTENT & ACTION BUTTONS ---
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        size: 16,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        DateFormat('EEEE, h:mm a').format(event.date),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white54 : Colors.black54,
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    event.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    event.description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      height: 1.5,
+                    ),
+                  ),
 
-                    if (event.whatsappLink != null && event.bookingLink != null)
-                      const SizedBox(width: 12),
-
-                    if (event.bookingLink != null &&
-                        event.bookingLink!.isNotEmpty)
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _launchURL(event.bookingLink!),
-                          icon: const Icon(Icons.confirmation_number, size: 18),
-                          label: const Text("Book Now"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                  // Action Buttons
+                  if ((event.whatsappLink != null &&
+                          event.whatsappLink!.isNotEmpty) ||
+                      (event.bookingLink != null &&
+                          event.bookingLink!.isNotEmpty)) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        if (event.whatsappLink != null &&
+                            event.whatsappLink!.isNotEmpty)
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _launchURL(event.whatsappLink!),
+                              icon: const Icon(Icons.chat_rounded, size: 18),
+                              label: const Text("Join Group"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(
+                                  0xFF25D366,
+                                ), // WhatsApp Green
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        if (event.whatsappLink != null &&
+                            event.bookingLink != null)
+                          const SizedBox(width: 12),
+                        if (event.bookingLink != null &&
+                            event.bookingLink!.isNotEmpty)
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF00C6FB),
+                                    Color(0xFF005BEA),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: ElevatedButton.icon(
+                                onPressed: () => _launchURL(event.bookingLink!),
+                                icon: const Icon(
+                                  Icons.local_activity_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text("Book Now"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
-                ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -502,15 +572,11 @@ class _ModernEventCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2C3E50), Color(0xFF000000)],
+          colors: [Color(0xFF3B2667), Color(0xFFBC78EC)],
         ),
       ),
-      child: Center(
-        child: Icon(
-          Icons.event,
-          color: Colors.white.withOpacity(0.1),
-          size: 80,
-        ),
+      child: const Center(
+        child: Icon(Icons.event_note_rounded, color: Colors.white24, size: 80),
       ),
     );
   }

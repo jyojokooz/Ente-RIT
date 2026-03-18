@@ -1,8 +1,13 @@
+// ===============================
+// FILE NAME: lost_found_item_card.dart
+// FILE PATH: lib/widgets/lost_found_item_card.dart
+// ===============================
+
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-/// A reusable and stylish card widget for displaying a single Lost & Found item.
-/// It includes owner-specific actions like Edit and Delete.
 class LostFoundItemCard extends StatelessWidget {
   final String title;
   final String status;
@@ -31,220 +36,279 @@ class LostFoundItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white60 : Colors.black54;
+
+    // Status Colors
+    final isLost = status.toLowerCase() == 'lost';
+    final statusColors =
+        isResolved
+            ? const [Color(0xFF43E97B), Color(0xFF38F9D7)] // Green
+            : isLost
+            ? const [Color(0xFFFF9A44), Color(0xFFFF3E8E)] // Orange/Pink
+            : const [Color(0xFF00C6FB), Color(0xFF005BEA)]; // Blue
+
     return GestureDetector(
       onTap: onTap,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        elevation: 4,
-        color: Colors.grey.shade900,
-        child: Stack(
-          children: [
-            _buildBackgroundImage(),
-            _buildGradientOverlay(),
-            _buildTextContent(context),
-            if (isResolved) _buildResolvedBanner(),
-            if (isOwner && !isResolved) _buildOwnerOptionsButton(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Builds the background image with loading and error placeholders.
-  Widget _buildBackgroundImage() {
-    return (imageUrl != null && imageUrl!.isNotEmpty)
-        ? Positioned.fill(
-          child: Image.network(
-            imageUrl!,
-            fit: BoxFit.cover,
-            loadingBuilder:
-                (context, child, progress) =>
-                    progress == null
-                        ? child
-                        : const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-            errorBuilder:
-                (context, error, stack) => const Center(
-                  child: Icon(Icons.broken_image, color: Colors.grey, size: 40),
-                ),
-          ),
-        )
-        : Container(color: Colors.grey.shade800);
-  }
-
-  /// Builds a gradient over the image to ensure text is always readable.
-  Widget _buildGradientOverlay() {
-    return Positioned.fill(
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.black.withAlpha(204),
-              Colors.transparent,
-              Colors.black.withAlpha(204),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0.0, 0.4, 1.0],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Builds the main text content, including title, location, and user name.
-  Widget _buildTextContent(BuildContext context) {
-    final statusColor =
-        status == 'lost' ? Colors.orange.shade300 : Colors.lightBlue.shade300;
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              status.toUpperCase(),
-              style: GoogleFonts.poppins(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+          color: cardColor,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
-            ),
-          ),
-          Column(
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  shadows: [const Shadow(blurRadius: 2, color: Colors.black)],
+              // --- IMAGE SECTION ---
+              SizedBox(
+                height: 200,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (imageUrl != null && imageUrl!.isNotEmpty)
+                      CachedNetworkImage(
+                        imageUrl: imageUrl!,
+                        fit: BoxFit.cover,
+                        placeholder:
+                            (c, u) => Container(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                        errorWidget: (c, u, e) => _buildFallbackGradient(),
+                      )
+                    else
+                      _buildFallbackGradient(),
+
+                    // Gradient Overlay for Text/Badges
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.4),
+                              Colors.transparent,
+                              cardColor,
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Top Left Status Badge
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: statusColors),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColors.last.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          isResolved ? "RESOLVED" : status.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Top Right Owner Actions
+                    if (isOwner && !isResolved)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
+                              ),
+                              child: PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') onEdit();
+                                  if (value == 'delete') onDelete();
+                                },
+                                icon: const Icon(
+                                  Icons.more_horiz,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                color:
+                                    isDark
+                                        ? Colors.grey.shade900
+                                        : Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                itemBuilder:
+                                    (ctx) => [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.edit_outlined,
+                                              color: textColor,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Edit',
+                                              style: TextStyle(
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.redAccent,
+                                              size: 18,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Delete',
+                                              style: TextStyle(
+                                                color: Colors.redAccent,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    Icons.location_on_outlined,
-                    color: Colors.white70,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      location,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
+
+              // --- TEXT CONTENT ---
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.person_outline, color: Colors.white70, size: 16),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      "by $userName",
                       style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_rounded,
+                          color: statusColors.first,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            location,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: subtitleColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.person_rounded,
+                          color: subtitleColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            "Reported by $userName",
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: subtitleColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  /// Builds the three-dot options menu for the item's owner.
-  Widget _buildOwnerOptionsButton(BuildContext context) {
-    return Positioned(
-      top: 8,
-      right: 8,
-      child: Material(
-        // Corrected from withOpacity to withAlpha
-        color: Colors.black.withAlpha(128), // 128 is 50% opacity
-        borderRadius: BorderRadius.circular(20),
-        child: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'edit') {
-              onEdit();
-            } else if (value == 'delete') {
-              onDelete();
-            }
-          },
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          itemBuilder:
-              (BuildContext context) => <PopupMenuEntry<String>>[
-                const PopupMenuItem<String>(
-                  value: 'edit',
-                  child: ListTile(
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Edit'),
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.delete_outline,
-                      color: Colors.redAccent,
-                    ),
-                    title: Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                  ),
-                ),
-              ],
         ),
       ),
     );
   }
 
-  /// Builds the diagonal "RESOLVED" banner.
-  Widget _buildResolvedBanner() {
-    return Positioned(
-      top: 10,
-      right: -45,
-      child: Transform.rotate(
-        angle: 0.785398, // 45 degrees in radians
-        child: Container(
-          color: Colors.green,
-          padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 2),
-          child: Text(
-            "RESOLVED",
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-            ),
-          ),
+  Widget _buildFallbackGradient() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2C3E50), Color(0xFF000000)],
+        ),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.find_in_page_rounded,
+          color: Colors.white24,
+          size: 60,
         ),
       ),
     );

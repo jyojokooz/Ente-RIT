@@ -1,4 +1,10 @@
+// ===============================
+// FILE NAME: user_bus_tracking_screen.dart
+// FILE PATH: lib/screens/user_bus_tracking_screen.dart
+// ===============================
+
 import 'dart:async';
+import 'dart:ui';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -28,7 +34,6 @@ class _UserBusTrackingScreenState extends State<UserBusTrackingScreen> {
 
   double? _distanceInKm;
   int? _timeToArriveInMinutes;
-
   bool _isFirstLocationUpdate = true;
 
   @override
@@ -117,60 +122,85 @@ class _UserBusTrackingScreenState extends State<UserBusTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    // Dynamic map tiles based on theme
+    final mapUrl =
+        isDark
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
     if (_busLocation != null && _isFirstLocationUpdate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _mapController.move(_busLocation!, 15.0);
-          setState(() {
-            _isFirstLocationUpdate = false;
-          });
+          setState(() => _isFirstLocationUpdate = false);
         }
       });
     }
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(widget.routeDoc['routeName'], style: GoogleFonts.poppins()),
-        backgroundColor: Colors.grey.shade900,
+        title: Text(
+          widget.routeDoc['routeName'],
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+        ),
+        backgroundColor:
+            isDark
+                ? Colors.black.withOpacity(0.7)
+                : Colors.white.withOpacity(0.8),
+        elevation: 0,
+        flexibleSpace: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(color: Colors.transparent),
+          ),
+        ),
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: Stack(
         children: [
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _busLocation ?? const LatLng(9.5916, 76.5222),
+              initialCenter:
+                  _busLocation ??
+                  const LatLng(9.5916, 76.5222), // RIT Coordinates fallback
               initialZoom: 15.0,
               minZoom: 5,
               maxZoom: 18,
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                userAgentPackageName: 'com.example.my_project',
+                urlTemplate: mapUrl,
+                userAgentPackageName: 'com.enterit.app',
               ),
               MarkerLayer(
                 markers: [
                   if (_userLocation != null)
                     Marker(
                       point: _userLocation!,
-                      width: 80,
-                      height: 80,
-                      child: const Icon(
-                        Icons.my_location,
-                        color: Colors.white,
-                        size: 25,
+                      width: 60,
+                      height: 60,
+                      child: _buildCustomMarker(
+                        Icons.person_rounded,
+                        Colors.blueAccent,
                       ),
                     ),
                   if (_busLocation != null)
                     Marker(
                       point: _busLocation!,
-                      width: 80,
-                      height: 80,
-                      child: const Icon(
-                        Icons.directions_bus,
-                        color: Colors.cyanAccent,
-                        size: 40,
+                      width: 70,
+                      height: 70,
+                      child: _buildCustomMarker(
+                        Icons.directions_bus_rounded,
+                        const Color(0xFF30CFD0),
                       ),
                     ),
                 ],
@@ -184,64 +214,157 @@ class _UserBusTrackingScreenState extends State<UserBusTrackingScreen> {
                           Uri.parse('https://openstreetmap.org/copyright'),
                         ),
                   ),
-                  TextSourceAttribution(
-                    'CARTO',
-                    onTap:
-                        () => launchUrl(
-                          Uri.parse('https://carto.com/attributions'),
-                        ),
-                  ),
                 ],
               ),
             ],
           ),
+
+          // Loading Overlay if waiting for GPS
           if (_busLocation == null || _userLocation == null)
-            const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text("Waiting for location data..."),
-                ],
+            Positioned.fill(
+              child: Container(
+                color: isDark ? Colors.black54 : Colors.white54,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF252528) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 20,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(
+                          color: Color(0xFF30CFD0),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Locating bus...",
+                          style: GoogleFonts.poppins(
+                            color: textColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
+
+          // Bottom Info Panel
           if (_distanceInKm != null && _timeToArriveInMinutes != null)
-            _buildInfoPanel(),
+            _buildGlassInfoPanel(isDark),
         ],
+      ),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(
+          bottom: (_distanceInKm != null) ? 120.0 : 16.0,
+        ), // Adjust FAB position above panel
+        child: FloatingActionButton(
+          onPressed: () {
+            if (_userLocation != null) {
+              _mapController.move(_userLocation!, 16.0);
+            }
+          },
+          backgroundColor: isDark ? const Color(0xFF252528) : Colors.white,
+          foregroundColor: const Color(0xFF30CFD0),
+          elevation: 4,
+          child: const Icon(Icons.my_location_rounded),
+        ),
       ),
     );
   }
 
-  Widget _buildInfoPanel() {
+  Widget _buildCustomMarker(IconData icon, Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.5),
+                blurRadius: 10,
+                spreadRadius: 2,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: Icon(icon, color: Colors.white, size: 24),
+        ),
+        // Map Pin Pointer Triangle
+        Container(
+          width: 0,
+          height: 0,
+          decoration: BoxDecoration(
+            border: Border(
+              left: const BorderSide(width: 6, color: Colors.transparent),
+              right: const BorderSide(width: 6, color: Colors.transparent),
+              top: BorderSide(width: 8, color: color),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlassInfoPanel(bool isDark) {
     return Positioned(
-      bottom: 20,
+      bottom: 24,
       left: 20,
       right: 20,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          // --- THIS IS THE FIX ---
-          // Replaced deprecated .withOpacity(0.7) with .withAlpha(178)
-          color: Colors.black.withAlpha(178), // 255 * 0.7 = 178.5
-          // --- END OF FIX ---
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white24),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildInfoColumn(
-              icon: Icons.social_distance,
-              value: '${_distanceInKm!.toStringAsFixed(1)} km',
-              label: 'Distance Left',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+            decoration: BoxDecoration(
+              color:
+                  isDark
+                      ? Colors.black.withOpacity(0.6)
+                      : Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDark ? Colors.white10 : Colors.white,
+                width: 1.5,
+              ),
             ),
-            _buildInfoColumn(
-              icon: Icons.timer_outlined,
-              value: '~ $_timeToArriveInMinutes min',
-              label: 'Est. Arrival',
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildInfoColumn(
+                  icon: Icons.route_rounded,
+                  value: '${_distanceInKm!.toStringAsFixed(1)} km',
+                  label: 'Distance Left',
+                  color: const Color(0xFF30CFD0),
+                  isDark: isDark,
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: isDark ? Colors.white24 : Colors.black12,
+                ),
+                _buildInfoColumn(
+                  icon: Icons.timer_rounded,
+                  value: '$_timeToArriveInMinutes min',
+                  label: 'Est. Arrival',
+                  color: const Color(0xFFFF9A44),
+                  isDark: isDark,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -251,23 +374,28 @@ class _UserBusTrackingScreenState extends State<UserBusTrackingScreen> {
     required IconData icon,
     required String value,
     required String label,
+    required Color color,
+    required bool isDark,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.cyanAccent, size: 28),
+        Icon(icon, color: color, size: 28),
         const SizedBox(height: 4),
         Text(
           value,
           style: GoogleFonts.poppins(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: isDark ? Colors.white : Colors.black87,
           ),
         ),
         Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
         ),
       ],
     );

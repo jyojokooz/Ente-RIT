@@ -31,6 +31,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+  bool _obscurePassword = true;
 
   late AnimationController _entranceController;
   late Animation<double> _fadeAnimation;
@@ -90,6 +91,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           SnackBar(
             content: Text(e.message ?? "Login failed"),
             backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       } finally {
@@ -108,8 +113,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (FirebaseAuth.instance.currentUser == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Google Sign In Failed"),
+            content: const Text("Google Sign In Failed"),
             backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       } else {
@@ -122,25 +131,39 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Future<void> _forgotPassword() async {
     if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Enter email first")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Enter your email first to reset password"),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
       return;
     }
     try {
       await _auth.sendPasswordResetEmail(email: _emailController.text.trim());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Reset link sent"),
+        SnackBar(
+          content: const Text("Password reset link sent! Check your email."),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error sending link"),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: const Text("Error sending reset link"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -148,27 +171,43 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const Color brandPurple = Color(0xFF9983F3);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final inputBgColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: Colors.black,
-            size: 20,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: inputBgColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                ),
+            ],
           ),
-          onPressed: widget.onBackTapped,
+          child: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 18),
+            onPressed: widget.onBackTapped,
+          ),
         ),
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
             child: FadeTransition(
               opacity: _fadeAnimation,
               child: SlideTransition(
@@ -179,13 +218,28 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // --- Header ---
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF9983F3).withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.lock_person_rounded,
+                          size: 60,
+                          color: Color(0xFF9983F3),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       Text(
                         "Welcome Back!",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                          letterSpacing: -0.5,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -193,24 +247,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         "Log in to continue your journey.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                          color: subtitleColor,
                         ),
                       ),
-                      const SizedBox(height: 48),
+                      const SizedBox(height: 40),
 
-                      TextFormField(
+                      // --- Input Fields ---
+                      _buildTextField(
                         controller: _emailController,
+                        hint: "Email Address",
+                        icon: Icons.email_outlined,
                         keyboardType: TextInputType.emailAddress,
-                        // FIX: Explicitly set text color to Black
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                        decoration: _buildInputDecoration(
-                          "Email",
-                          Icons.email_outlined,
-                        ),
+                        bgColor: inputBgColor,
+                        textColor: textColor,
+                        isDark: isDark,
                         validator:
                             (val) =>
                                 val!.contains('@')
@@ -219,21 +270,32 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 16),
 
-                      TextFormField(
+                      _buildTextField(
                         controller: _passwordController,
-                        obscureText: true,
-                        // FIX: Explicitly set text color to Black
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                        decoration: _buildInputDecoration(
-                          "Password",
-                          Icons.lock_outline,
+                        hint: "Password",
+                        icon: Icons.lock_outline,
+                        obscureText: _obscurePassword,
+                        bgColor: inputBgColor,
+                        textColor: textColor,
+                        isDark: isDark,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: isDark ? Colors.white30 : Colors.black38,
+                            size: 20,
+                          ),
+                          onPressed:
+                              () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
                         ),
                         validator:
                             (val) =>
-                                val!.length >= 6 ? null : 'Min 6 characters',
+                                val!.length >= 6
+                                    ? null
+                                    : 'Min 6 characters required',
                       ),
 
                       Align(
@@ -243,25 +305,44 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           child: Text(
                             "Forgot Password?",
                             style: GoogleFonts.poppins(
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF9983F3),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 24),
 
-                      SizedBox(
-                        height: 55,
+                      // --- Login Button ---
+                      Container(
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF9983F3),
+                              Color(0xFFFF4B72),
+                            ], // Purple to Pink
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF9983F3).withOpacity(0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
                         child: ElevatedButton(
                           onPressed:
                               _isLoading ? null : _loginWithEmailPassword,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: brandPurple,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                           ),
                           child:
@@ -278,40 +359,53 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     "Log In",
                                     style: GoogleFonts.poppins(
                                       fontSize: 16,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: 1,
                                     ),
                                   ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 32),
 
+                      // --- Divider ---
                       Row(
                         children: [
-                          const Expanded(child: Divider()),
+                          Expanded(
+                            child: Divider(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                          ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
-                              "or",
+                              "or continue with",
                               style: GoogleFonts.poppins(
-                                color: Colors.grey.shade500,
+                                color: subtitleColor,
+                                fontSize: 12,
                               ),
                             ),
                           ),
-                          const Expanded(child: Divider()),
+                          Expanded(
+                            child: Divider(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 32),
 
+                      // --- Google Button ---
                       SizedBox(
-                        height: 55,
-                        child: OutlinedButton.icon(
+                        height: 56,
+                        child: ElevatedButton.icon(
                           onPressed: _isGoogleLoading ? null : _loginWithGoogle,
                           icon:
                               _isGoogleLoading
                                   ? const SizedBox.shrink()
                                   : Image.asset(
                                     'assets/google_logo.png',
-                                    height: 22,
+                                    height: 24,
                                   ),
                           label:
                               _isGoogleLoading
@@ -323,30 +417,38 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     ),
                                   )
                                   : Text(
-                                    "Continue with Google",
+                                    "Google",
                                     style: GoogleFonts.poppins(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: textColor,
                                     ),
                                   ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: inputBgColor,
+                            foregroundColor: textColor,
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            side: BorderSide(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                              width: 1.5,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 40),
 
+                      // --- Footer ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             "Don't have an account? ",
                             style: GoogleFonts.poppins(
-                              color: Colors.grey.shade600,
+                              color: subtitleColor,
+                              fontSize: 14,
                             ),
                           ),
                           GestureDetector(
@@ -354,13 +456,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             child: Text(
                               "Sign Up",
                               style: GoogleFonts.poppins(
-                                color: brandPurple,
+                                color: const Color(0xFF9983F3),
                                 fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -372,18 +476,58 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  InputDecoration _buildInputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400),
-      filled: true,
-      fillColor: Colors.grey.shade50,
-      contentPadding: const EdgeInsets.all(18),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required Color bgColor,
+    required Color textColor,
+    required bool isDark,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+        ],
       ),
-      prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 20),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.w500,
+          color: textColor,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.poppins(
+            color: isDark ? Colors.white30 : Colors.black38,
+          ),
+          filled: true,
+          fillColor: bgColor,
+          contentPadding: const EdgeInsets.all(20),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide.none,
+          ),
+          prefixIcon: Icon(
+            icon,
+            color: isDark ? Colors.white54 : Colors.black54,
+            size: 22,
+          ),
+          suffixIcon: suffixIcon,
+        ),
+        validator: validator,
+      ),
     );
   }
 }
