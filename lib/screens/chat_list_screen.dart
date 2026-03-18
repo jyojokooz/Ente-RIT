@@ -21,26 +21,53 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
   final TextEditingController _searchController = TextEditingController();
 
-  Future<void> _deleteConversation(String chatRoomId) async {
-    await FirebaseFirestore.instance
-        .collection('chats')
-        .doc(chatRoomId)
-        .delete();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Conversation deleted.'),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+  @override
+  void initState() {
+    super.initState();
+    // Add listener to rebuild the list when user types in the search bar
+    _searchController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  // --- THE FIX: Soft Delete Chat ---
+  // Instead of deleting the whole document, we remove the current user from the
+  // participants array. This instantly hides it from your list but preserves
+  // the chat history for the other person. If they message you again, you get re-added.
+  Future<void> _deleteConversation(String chatRoomId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(chatRoomId)
+          .update({
+            'participants': FieldValue.arrayRemove([_currentUser.uid]),
+          });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat removed.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error removing chat: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -72,22 +99,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             fontSize: 24,
           ),
         ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(color: cardColor, shape: BoxShape.circle),
-            child: IconButton(
-              icon: Icon(Icons.edit_square, color: textColor, size: 20),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("New Message feature coming soon!"),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream:
@@ -99,7 +110,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+              child: CircularProgressIndicator(
+                color: Color(0xFF9983F3),
+              ), // Brand Purple
             );
           }
 
@@ -107,7 +120,30 @@ class _ChatListScreenState extends State<ChatListScreen> {
             return _buildEmptyState(isDark, textColor);
           }
 
-          final conversations = snapshot.data!.docs;
+          // Fetch all conversations
+          var conversations = snapshot.data!.docs;
+          final searchQuery = _searchController.text.trim().toLowerCase();
+
+          // --- NEW: Local Search Filtering ---
+          if (searchQuery.isNotEmpty) {
+            conversations =
+                conversations.where((chatDoc) {
+                  final chatData = chatDoc.data() as Map<String, dynamic>;
+                  final List<dynamic> participants =
+                      chatData['participants'] ?? [];
+                  final otherUserId = participants.firstWhere(
+                    (id) => id != _currentUser.uid,
+                    orElse: () => '',
+                  );
+                  final otherUserName =
+                      chatData['participantNames']?[otherUserId]
+                          ?.toString()
+                          .toLowerCase() ??
+                      '';
+
+                  return otherUserName.contains(searchQuery);
+                }).toList();
+          }
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -117,21 +153,35 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 child: _buildSearchBar(isDark, cardColor, textColor),
               ),
 
-              // Messages List
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final chatDoc = conversations[index];
-                    return _buildChatTile(
-                      chatDoc,
-                      isDark,
-                      cardColor,
-                      textColor,
-                    );
-                  }, childCount: conversations.length),
+              // Filtered Empty State
+              if (conversations.isEmpty && searchQuery.isNotEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'No chats found for "$searchQuery"',
+                      style: GoogleFonts.poppins(
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                // Messages List
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final chatDoc = conversations[index];
+                      return _buildChatTile(
+                        chatDoc,
+                        isDark,
+                        cardColor,
+                        textColor,
+                      );
+                    }, childCount: conversations.length),
+                  ),
                 ),
-              ),
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           );
@@ -148,6 +198,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
         ),
         child: TextField(
           controller: _searchController,
@@ -157,6 +215,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
               Icons.search,
               color: isDark ? Colors.white54 : Colors.grey,
             ),
+            suffixIcon:
+                _searchController.text.isNotEmpty
+                    ? IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        color: isDark ? Colors.white54 : Colors.grey,
+                        size: 20,
+                      ),
+                      onPressed: () => _searchController.clear(),
+                    )
+                    : null,
             hintText: 'Search messages...',
             hintStyle: GoogleFonts.poppins(
               color: isDark ? Colors.white54 : Colors.grey,
@@ -186,15 +255,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final bool isUnread = unreadCount > 0;
 
     // Get Other User Info
-    final List<dynamic> participants = chatData['participants'];
+    final List<dynamic> participants = chatData['participants'] ?? [];
     final otherUserId = participants.firstWhere(
       (id) => id != _currentUser.uid,
       orElse: () => '',
     );
     if (otherUserId.isEmpty) return const SizedBox.shrink();
 
-    final otherUserName = chatData['participantNames'][otherUserId] ?? 'User';
-    final otherUserImage = chatData['participantImages'][otherUserId] ?? '';
+    final otherUserName = chatData['participantNames']?[otherUserId] ?? 'User';
+    final otherUserImage = chatData['participantImages']?[otherUserId] ?? '';
     final lastMessage = chatData['lastMessage'] ?? 'Started a chat';
     final timestamp =
         (chatData['lastMessageTimestamp'] as Timestamp?)?.toDate();
@@ -258,9 +327,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
                                 colors: [
-                                  Color(0xFFFF3E8E),
-                                  Color(0xFFFF9A44),
-                                ], // Pink to Orange
+                                  Color(0xFF9983F3),
+                                  Color(0xFFFF4B72),
+                                ], // Brand Purple to Pink
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -321,7 +390,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 style: GoogleFonts.poppins(
                                   color:
                                       isUnread
-                                          ? const Color(0xFFFF3E8E)
+                                          ? const Color(0xFFFF4B72)
                                           : mutedTextColor,
                                   fontSize: 11,
                                   fontWeight:
@@ -355,7 +424,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 margin: const EdgeInsets.only(left: 8),
                                 padding: const EdgeInsets.all(6),
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFFF3E8E),
+                                  color: Color(0xFFFF4B72),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Text(

@@ -24,13 +24,68 @@ class _SharePostSheetState extends State<SharePostSheet> {
   final TextEditingController _searchController = TextEditingController();
 
   String _searchQuery = "";
-  final Set<String> _selectedUserIds = {}; // Track selected users
+  final Set<String> _selectedUserIds = {};
   bool _isSending = false;
+
+  late Future<List<DocumentSnapshot>> _friendsFuture;
+  Map<String, dynamic> _shareCounts = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _friendsFuture = _fetchFriendsAndSort();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Fetches ONLY the user's connections and sorts them by how many times they've shared with them
+  Future<List<DocumentSnapshot>> _fetchFriendsAndSort() async {
+    try {
+      // 1. Get current user's connections and share counts
+      final meDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_currentUser.uid)
+              .get();
+      final data = meDoc.data() as Map<String, dynamic>? ?? {};
+
+      final List<dynamic> connections = data['connections'] ?? [];
+      _shareCounts = data['shareCounts'] ?? {};
+
+      if (connections.isEmpty) return [];
+
+      // 2. Fetch the user documents for these connections
+      // Firestore 'whereIn' only supports up to 10 items, so we chunk the requests
+      List<DocumentSnapshot> friendDocs = [];
+      for (var i = 0; i < connections.length; i += 10) {
+        int end = (i + 10 < connections.length) ? i + 10 : connections.length;
+        final chunk = connections.sublist(i, end);
+
+        final snap =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .where(FieldPath.documentId, whereIn: chunk)
+                .get();
+
+        friendDocs.addAll(snap.docs);
+      }
+
+      // 3. Sort by share count (highest first)
+      friendDocs.sort((a, b) {
+        final countA = (_shareCounts[a.id] as num?)?.toInt() ?? 0;
+        final countB = (_shareCounts[b.id] as num?)?.toInt() ?? 0;
+        return countB.compareTo(countA); // Descending order
+      });
+
+      return friendDocs;
+    } catch (e) {
+      debugPrint("Error fetching friends for sharing: $e");
+      return [];
+    }
   }
 
   void _toggleSelection(String userId) {
@@ -43,7 +98,7 @@ class _SharePostSheetState extends State<SharePostSheet> {
     });
   }
 
-  Future<void> _sendToSelectedUsers(List<DocumentSnapshot> allUsers) async {
+  Future<void> _sendToSelectedUsers(List<DocumentSnapshot> allFriends) async {
     if (_selectedUserIds.isEmpty) return;
 
     setState(() => _isSending = true);
@@ -53,8 +108,8 @@ class _SharePostSheetState extends State<SharePostSheet> {
       final timestamp = FieldValue.serverTimestamp();
 
       for (var userId in _selectedUserIds) {
-        // Find user data from the snapshot list to avoid extra fetches
-        final userDoc = allUsers.firstWhere((doc) => doc.id == userId);
+        // Find user data
+        final userDoc = allFriends.firstWhere((doc) => doc.id == userId);
         final userData = userDoc.data() as Map<String, dynamic>;
 
         final receiverName = userData['displayName'] ?? 'User';
@@ -71,7 +126,7 @@ class _SharePostSheetState extends State<SharePostSheet> {
             .doc(chatRoomId);
         final newMessageRef = chatDocRef.collection('messages').doc();
 
-        // 3. Update Metadata
+        // 3. Update Chat Metadata
         batch.set(chatDocRef, {
           'participants': [_currentUser.uid, userId],
           'participantNames': {
@@ -95,6 +150,15 @@ class _SharePostSheetState extends State<SharePostSheet> {
           'type': 'post',
           'postId': widget.postId,
         });
+
+        // 5. Update Share Count for the current user
+        batch.set(
+          FirebaseFirestore.instance.collection('users').doc(_currentUser.uid),
+          {
+            'shareCounts': {userId: FieldValue.increment(1)},
+          },
+          SetOptions(merge: true),
+        );
       }
 
       await batch.commit();
@@ -103,8 +167,11 @@ class _SharePostSheetState extends State<SharePostSheet> {
         Navigator.pop(context); // Close sheet
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Sent to ${_selectedUserIds.length} people"),
-            backgroundColor: const Color(0xFF4B00E0), // Blue/Purple
+            content: Text(
+              "Sent to ${_selectedUserIds.length} friend${_selectedUserIds.length > 1 ? 's' : ''}",
+            ),
+            backgroundColor: const Color(0xFFFF3E8E), // Pink branding
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -120,103 +187,191 @@ class _SharePostSheetState extends State<SharePostSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Fixed height to prevent keyboard jumps
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // --- Header ---
-          const SizedBox(height: 16),
-          Text(
-            "share",
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: Colors.black,
-            ),
-          ),
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-          // --- Search Bar ---
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-            child: Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
+    final bgColor = isDark ? const Color(0xFF161618) : Colors.white;
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.grey.shade100;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        snap: true,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
               ),
-              child: TextField(
-                controller: _searchController,
-                style: GoogleFonts.poppins(color: Colors.black),
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  hintText: "search",
-                  hintStyle: GoogleFonts.poppins(color: Colors.grey.shade500),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            ),
+            child: Column(
+              children: [
+                // --- Drag Handle ---
+                const SizedBox(height: 12),
+                Container(
+                  width: 48,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                onChanged:
-                    (val) => setState(() => _searchQuery = val.toLowerCase()),
-              ),
-            ),
-          ),
+                const SizedBox(height: 16),
 
-          // --- User Grid ---
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .limit(50) // Limit for performance
-                      .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                // --- Title ---
+                Text(
+                  "Share with Friends",
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text("No users found"));
-                }
+                // --- Search Bar ---
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      style: GoogleFonts.poppins(
+                        color: textColor,
+                        fontSize: 14,
+                      ),
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: subtitleColor,
+                          size: 20,
+                        ),
+                        hintText: "Search friends...",
+                        hintStyle: GoogleFonts.poppins(
+                          color: subtitleColor,
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged:
+                          (val) =>
+                              setState(() => _searchQuery = val.toLowerCase()),
+                    ),
+                  ),
+                ),
 
-                // Filter users locally based on search
-                final users =
-                    snapshot.data!.docs.where((doc) {
-                      if (doc.id == _currentUser.uid) return false;
-                      final data = doc.data() as Map<String, dynamic>;
-                      final name =
-                          (data['displayName'] ?? '').toString().toLowerCase();
-                      final username =
-                          (data['username'] ?? '').toString().toLowerCase();
-                      return name.contains(_searchQuery) ||
-                          username.contains(_searchQuery);
-                    }).toList();
+                // --- Friend Grid ---
+                Expanded(
+                  child: FutureBuilder<List<DocumentSnapshot>>(
+                    future: _friendsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFFF3E8E),
+                          ),
+                        );
+                      }
 
-                return Column(
-                  children: [
-                    Expanded(
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(16),
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.people_alt_outlined,
+                                size: 50,
+                                color:
+                                    isDark
+                                        ? Colors.white24
+                                        : Colors.grey.shade300,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "No friends to share with.",
+                                style: GoogleFonts.poppins(
+                                  color: subtitleColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                "Mingle with people first!",
+                                style: GoogleFonts.poppins(
+                                  color: subtitleColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final allFriends = snapshot.data!;
+
+                      // Local search filter
+                      final filteredFriends =
+                          allFriends.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final name =
+                                (data['displayName'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                            final username =
+                                (data['username'] ?? '')
+                                    .toString()
+                                    .toLowerCase();
+                            return name.contains(_searchQuery) ||
+                                username.contains(_searchQuery);
+                          }).toList();
+
+                      if (filteredFriends.isEmpty) {
+                        return Center(
+                          child: Text(
+                            "No friends match your search.",
+                            style: GoogleFonts.poppins(color: subtitleColor),
+                          ),
+                        );
+                      }
+
+                      return GridView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(20),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount:
-                                  4, // 4 items per row like screenshot
-                              childAspectRatio: 0.7, // Taller for name text
+                              crossAxisCount: 4,
+                              childAspectRatio: 0.7, // Taller to fit names
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
                             ),
-                        itemCount: users.length,
+                        itemCount: filteredFriends.length,
                         itemBuilder: (context, index) {
-                          final userDoc = users[index];
+                          final userDoc = filteredFriends[index];
                           final userData =
                               userDoc.data() as Map<String, dynamic>;
                           final userId = userDoc.id;
                           final name = userData['displayName'] ?? 'User';
                           final image = userData['profilePhotoUrl'] ?? '';
                           final isSelected = _selectedUserIds.contains(userId);
+
+                          // Check if they are a top friend (e.g. they have a share count > 0 and are in the first row)
+                          final shareCount =
+                              (_shareCounts[userId] as num?)?.toInt() ?? 0;
+                          final isTopFriend =
+                              index < 4 &&
+                              shareCount > 0 &&
+                              _searchQuery.isEmpty;
 
                           return GestureDetector(
                             onTap: () => _toggleSelection(userId),
@@ -231,8 +386,8 @@ class _SharePostSheetState extends State<SharePostSheet> {
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(
                                             20,
-                                          ), // Squarcle shape
-                                          color: Colors.grey.shade200,
+                                          ),
+                                          color: cardColor,
                                           image:
                                               image.isNotEmpty
                                                   ? DecorationImage(
@@ -246,10 +401,10 @@ class _SharePostSheetState extends State<SharePostSheet> {
                                         ),
                                         child:
                                             image.isEmpty
-                                                ? const Center(
+                                                ? Center(
                                                   child: Icon(
                                                     Icons.person,
-                                                    color: Colors.grey,
+                                                    color: subtitleColor,
                                                   ),
                                                 )
                                                 : null,
@@ -266,15 +421,36 @@ class _SharePostSheetState extends State<SharePostSheet> {
                                               0.4,
                                             ),
                                             border: Border.all(
-                                              color: const Color(0xFF4B00E0),
+                                              color: const Color(
+                                                0xFF00C6FB,
+                                              ), // Cyan selection border
                                               width: 3,
-                                            ), // Blue Border
+                                            ),
                                           ),
                                           child: const Center(
                                             child: Icon(
-                                              Icons.check,
-                                              color: Colors.white,
+                                              Icons.check_circle_rounded,
+                                              color: Color(0xFF00C6FB),
                                               size: 30,
+                                            ),
+                                          ),
+                                        ),
+
+                                      // "Top Friend" Badge
+                                      if (isTopFriend && !isSelected)
+                                        Positioned(
+                                          bottom: -4,
+                                          right: -4,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.amber,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.star_rounded,
+                                              color: Colors.white,
+                                              size: 12,
                                             ),
                                           ),
                                         ),
@@ -284,74 +460,101 @@ class _SharePostSheetState extends State<SharePostSheet> {
                                 const SizedBox(height: 6),
                                 // Name
                                 Text(
-                                  name,
+                                  name
+                                      .split(' ')
+                                      .first, // Show first name only for cleanliness
                                   textAlign: TextAlign.center,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.poppins(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
+                                    fontWeight:
+                                        isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                    color:
+                                        isSelected
+                                            ? const Color(0xFF00C6FB)
+                                            : textColor,
                                   ),
                                 ),
                               ],
                             ),
                           );
                         },
-                      ),
-                    ),
+                      );
+                    },
+                  ),
+                ),
 
-                    // --- Send Button (Only shows at bottom) ---
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        border: Border(top: BorderSide(color: Colors.black12)),
-                      ),
-                      child: ElevatedButton(
-                        onPressed:
-                            (_selectedUserIds.isEmpty || _isSending)
-                                ? null
-                                : () =>
-                                    _sendToSelectedUsers(snapshot.data!.docs),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(
-                            0xFF3000F8,
-                          ), // Bright Blue/Purple from screenshot
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child:
-                            _isSending
-                                ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                                : Text(
-                                  "Send${_selectedUserIds.isNotEmpty ? ' (${_selectedUserIds.length})' : ''}",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                // --- Send Button (Bottom Fixed) ---
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark ? Colors.white10 : Colors.black12,
                       ),
                     ),
-                  ],
-                );
-              },
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient:
+                          _selectedUserIds.isNotEmpty && !_isSending
+                              ? const LinearGradient(
+                                colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
+                              ) // Blue Gradient
+                              : null,
+                      color: _selectedUserIds.isEmpty ? cardColor : null,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: ElevatedButton(
+                      onPressed:
+                          (_selectedUserIds.isEmpty || _isSending)
+                              ? null
+                              : () async {
+                                final snapshotList = await _friendsFuture;
+                                _sendToSelectedUsers(snapshotList);
+                              },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        disabledBackgroundColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child:
+                          _isSending
+                              ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : Text(
+                                "Send${_selectedUserIds.isNotEmpty ? ' (${_selectedUserIds.length})' : ''}",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      _selectedUserIds.isEmpty
+                                          ? subtitleColor
+                                          : Colors.white,
+                                ),
+                              ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

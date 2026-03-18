@@ -3,8 +3,6 @@
 // FILE PATH: lib/screens/chat_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously, unnecessary_string_interpolations
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +11,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 
-import 'post_detail_screen.dart';
+// Import our new separated widgets
+import '../widgets/chat/chat_input_bar.dart';
+import '../widgets/chat/chat_bubble.dart';
+
+// Import Profile Screen to navigate on tap
+import 'pages/profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -41,7 +44,6 @@ class _ChatScreenState extends State<ChatScreen> {
   late final CollectionReference _messagesCollection;
 
   bool _showEmojiPicker = false;
-  final Color _brandPurple = const Color(0xFF9983F3);
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .doc(_chatRoomId);
     _messagesCollection = chatDocRef.collection('messages');
 
+    // Mark messages as read
     chatDocRef
         .update({'unreadCounts.${_currentUser.uid}': 0})
         .catchError((e) {});
@@ -74,99 +77,6 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _clearChatHistory() async {
-    // ... (Existing clear chat logic remains the same)
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: Colors.white,
-            title: const Text("Clear Chat?"),
-            content: const Text(
-              "This will permanently delete the message history.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.black),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Clear", style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      final instance = FirebaseFirestore.instance;
-      final batch = instance.batch();
-      final snapshot = await _messagesCollection.get();
-      for (var doc in snapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      final parentRef = instance.collection('chats').doc(_chatRoomId);
-      batch.update(parentRef, {
-        'lastMessage': '',
-        'lastMessageTimestamp': FieldValue.serverTimestamp(),
-      });
-      await batch.commit();
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-    }
-  }
-
-  void _showChatOptions() {
-    // ... (Existing options logic remains the same)
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 20),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.redAccent,
-                ),
-                title: Text(
-                  "Clear Chat",
-                  style: GoogleFonts.poppins(color: Colors.redAccent),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _clearChatHistory();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -180,8 +90,12 @@ class _ChatScreenState extends State<ChatScreen> {
     final newMessageRef = _messagesCollection.doc();
     final timestamp = FieldValue.serverTimestamp();
 
+    // Ensure the receiver is added back to participants if they previously deleted the chat
     batch.set(chatDocRef, {
-      'participants': [_currentUser.uid, widget.receiverId],
+      'participants': FieldValue.arrayUnion([
+        _currentUser.uid,
+        widget.receiverId,
+      ]),
       'participantNames': {
         _currentUser.uid: _currentUser.displayName ?? 'Me',
         widget.receiverId: widget.receiverName,
@@ -203,37 +117,15 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await batch.commit();
-
-    // --- ADDED: Send Notification ---
-    _sendNotification(text);
   }
 
-  // --- NEW Helper to send notification ---
-  Future<void> _sendNotification(String messageText) async {
+  Future<void> _deleteSingleMessage(String messageId) async {
     try {
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.receiverId)
-              .get();
-      // Only send if user exists
-      if (userDoc.exists) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': widget.receiverId, // The person receiving the message
-          'title': 'New Message',
-          'body': '${_currentUser.displayName ?? 'Someone'}: $messageText',
-          'type': 'message', // Specific type for chat
-          'relatedDocId':
-              _currentUser.uid, // When clicked, open chat with sender
-          'triggeringUserId': _currentUser.uid,
-          'triggeringUserName': _currentUser.displayName ?? 'User',
-          'triggeringUserAvatarUrl': _currentUser.photoURL ?? '',
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      }
+      await _messagesCollection.doc(messageId).delete();
     } catch (e) {
-      debugPrint("Error sending notification: $e");
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete message: $e')));
     }
   }
 
@@ -248,102 +140,149 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<bool> _onWillPop() async {
+  // Modern replacement for WillPopScope
+  void _onPopInvoked(bool didPop) {
+    if (didPop) return;
     if (_showEmojiPicker) {
       setState(() => _showEmojiPicker = false);
-      return false;
+    } else {
+      Navigator.of(context).pop();
     }
-    return true;
   }
 
   String _getFormattedDate(DateTime date) {
-    // ... (Existing date logic remains the same)
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final messageDate = DateTime(date.year, date.month, date.day);
-    final time = DateFormat('h:mm a').format(date);
 
-    if (messageDate == today) {
-      return "Today $time";
-    } else if (messageDate == yesterday) {
-      return "Yesterday $time";
-    } else if (now.difference(date).inDays < 7) {
-      return "${DateFormat('EEE').format(date)} $time";
-    } else {
-      return "${DateFormat('MMM d, h:mm a').format(date)}";
-    }
+    if (messageDate == today) return "Today";
+    if (messageDate == yesterday) return "Yesterday";
+    if (now.difference(date).inDays < 7) return DateFormat('EEEE').format(date);
+    return DateFormat('MMM d, yyyy').format(date);
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (Existing build method with UI remains exactly the same)
-    // To save space, I am not re-pasting the UI code here unless requested,
-    // as only the _sendMessage logic needed to change.
-    // The previous implementation of the UI was correct.
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    // Use your Brand Purple here instead of Blue
-    final Color myBubbleColor = _brandPurple;
-    const Color otherBubbleColor = Color(0xFFEFEFEF);
-    const Color inputBgColor = Color(0xFFF3F3F3);
+    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: !_showEmojiPicker,
+      onPopInvokedWithResult: (didPop, result) => _onPopInvoked(didPop),
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: bgColor,
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0.5,
-          shadowColor: Colors.grey.shade100,
+          backgroundColor: bgColor,
+          elevation: 0,
+          scrolledUnderElevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
           titleSpacing: 0,
-          title: Row(
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.grey.shade200,
-                backgroundImage:
-                    widget.receiverImageUrl.isNotEmpty
-                        ? CachedNetworkImageProvider(widget.receiverImageUrl)
-                        : null,
-                child:
-                    widget.receiverImageUrl.isEmpty
-                        ? const Icon(Icons.person, color: Colors.grey, size: 20)
-                        : null,
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.receiverName,
-                    style: GoogleFonts.poppins(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
+          // Wrap the title in GestureDetector to navigate to profile
+          title: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => ProfileScreen(userId: widget.receiverId),
+                ),
+              );
+            },
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor:
+                      isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  backgroundImage:
+                      widget.receiverImageUrl.isNotEmpty
+                          ? CachedNetworkImageProvider(widget.receiverImageUrl)
+                          : null,
+                  child:
+                      widget.receiverImageUrl.isEmpty
+                          ? Icon(Icons.person, color: subtitleColor, size: 20)
+                          : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.receiverName,
+                        style: GoogleFonts.poppins(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      // StreamBuilder to check actual online status
+                      StreamBuilder<DocumentSnapshot>(
+                        stream:
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(widget.receiverId)
+                                .snapshots(),
+                        builder: (context, userSnapshot) {
+                          bool isOnline = false;
+                          String lastSeen = "Offline";
+
+                          if (userSnapshot.hasData &&
+                              userSnapshot.data!.exists) {
+                            final data =
+                                userSnapshot.data!.data()
+                                    as Map<String, dynamic>;
+                            isOnline =
+                                data['isOnline'] ??
+                                false; // Make sure this field updates in your app
+
+                            // Optional: Calculate last seen if not online
+                            final Timestamp? lastLogin = data['lastLogin'];
+                            if (lastLogin != null && !isOnline) {
+                              final diff = DateTime.now().difference(
+                                lastLogin.toDate(),
+                              );
+                              if (diff.inMinutes < 5) {
+                                isOnline =
+                                    true; // Consider online if active in last 5 mins
+                              } else if (diff.inHours < 24) {
+                                lastSeen =
+                                    "Active ${diff.inHours > 0 ? '${diff.inHours}h' : '${diff.inMinutes}m'} ago";
+                              } else {
+                                lastSeen = "Active ${diff.inDays}d ago";
+                              }
+                            }
+                          }
+
+                          return Text(
+                            isOnline ? "Active now" : lastSeen,
+                            style: GoogleFonts.poppins(
+                              color:
+                                  isOnline
+                                      ? const Color(0xFF43E97B)
+                                      : subtitleColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  Text(
-                    "Active now",
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.info_outline_rounded, color: Colors.black),
-              onPressed: _showChatOptions,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         body: Column(
           children: [
@@ -355,27 +294,47 @@ class _ChatScreenState extends State<ChatScreen> {
                         .snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
-                    return Center(
-                      child: CircularProgressIndicator(color: _brandPurple),
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF9983F3),
+                      ),
                     );
                   }
 
                   final messages = snapshot.data!.docs;
 
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.waving_hand_rounded,
+                            size: 60,
+                            color: subtitleColor.withOpacity(0.3),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "Say hi to ${widget.receiverName.split(' ').first}!",
+                            style: GoogleFonts.poppins(color: subtitleColor),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   return ListView.builder(
                     controller: _scrollController,
                     reverse: true,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
+                      horizontal: 16,
                       vertical: 10,
                     ),
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
-                      final msgData =
-                          messages[index].data() as Map<String, dynamic>;
+                      final msgDoc = messages[index];
+                      final msgData = msgDoc.data() as Map<String, dynamic>;
                       final isMe = msgData['senderId'] == _currentUser.uid;
-                      final type =
-                          msgData['type'] ?? 'text'; // Check message type
                       final timestamp =
                           (msgData['timestamp'] as Timestamp?)?.toDate() ??
                           DateTime.now();
@@ -414,29 +373,39 @@ class _ChatScreenState extends State<ChatScreen> {
                       return Column(
                         children: [
                           if (showTimeHeader)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 24),
+                            Container(
+                              margin: const EdgeInsets.symmetric(vertical: 24),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               child: Text(
                                 _getFormattedDate(timestamp),
                                 style: GoogleFonts.poppins(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
+                                  color: subtitleColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
 
-                          if (type == 'post')
-                            _buildSharedPostBubble(msgData['postId'], isMe)
-                          else
-                            _buildMessageBubble(
-                              msgData['text'] ?? '',
-                              isMe,
-                              isFirstInGroup,
-                              isLastInGroup,
-                              myBubbleColor,
-                              otherBubbleColor,
-                            ),
+                          // Call the separated ChatBubble widget
+                          ChatBubble(
+                            messageData: msgData,
+                            messageId: msgDoc.id,
+                            isMe: isMe,
+                            isFirst: isFirstInGroup,
+                            isLast: isLastInGroup,
+                            timestamp: timestamp,
+                            isDark: isDark,
+                            cardColor: cardColor,
+                            textColor: textColor,
+                            onDelete: () => _deleteSingleMessage(msgDoc.id),
+                          ),
                         ],
                       );
                     },
@@ -444,7 +413,20 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
-            _buildInputBar(inputBgColor),
+
+            // Call the separated InputBar widget
+            ChatInputBar(
+              controller: _messageController,
+              focusNode: _focusNode,
+              onSend: _sendMessage,
+              onToggleEmoji: _toggleEmojiPicker,
+              showEmojiPicker: _showEmojiPicker,
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtitleColor: subtitleColor,
+            ),
+
             if (_showEmojiPicker)
               SizedBox(
                 height: 250,
@@ -455,225 +437,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   config: emoji.Config(
                     height: 256,
                     checkPlatformCompatibility: true,
-                    emojiViewConfig: const emoji.EmojiViewConfig(
+                    emojiViewConfig: emoji.EmojiViewConfig(
                       columns: 7,
-                      backgroundColor: Color(0xFFF2F2F2),
+                      backgroundColor:
+                          isDark
+                              ? const Color(0xFF161618)
+                              : const Color(0xFFF2F2F2),
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- HELPER WIDGETS (Post Bubble, Text Bubble, Input Bar) ---
-  // (Copied from previous implementation to ensure file completeness)
-
-  Widget _buildSharedPostBubble(String postId, bool isMe) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PostDetailScreen(postId: postId),
-            ),
-          );
-        },
-        child: Container(
-          width: 220,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FutureBuilder<DocumentSnapshot>(
-                future:
-                    FirebaseFirestore.instance
-                        .collection('posts')
-                        .doc(postId)
-                        .get(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData || !snapshot.data!.exists) {
-                    return Container(
-                      height: 150,
-                      color: Colors.grey[200],
-                      child: const Center(
-                        child: Icon(Icons.error_outline, color: Colors.grey),
-                      ),
-                    );
-                  }
-                  final post = snapshot.data!.data() as Map<String, dynamic>;
-                  final image = post['postMediaUrl'] ?? post['postImageUrl'];
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (image != null)
-                        ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(12),
-                          ),
-                          child: CachedNetworkImage(
-                            imageUrl: image,
-                            height: 150,
-                            width: 220,
-                            fit: BoxFit.cover,
-                            placeholder:
-                                (c, u) => Container(color: Colors.grey[200]),
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundImage: CachedNetworkImageProvider(
-                                post['userImageUrl'] ?? '',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                post['userName'] ?? 'User',
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageBubble(
-    String message,
-    bool isMe,
-    bool isFirst,
-    bool isLast,
-    Color myColor,
-    Color otherColor,
-  ) {
-    const double r = 20.0;
-    const double smallR = 4.0;
-
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: EdgeInsets.only(
-          top: 1,
-          bottom: 1,
-          left: isMe ? 50 : 0,
-          right: isMe ? 0 : 50,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isMe ? myColor : otherColor,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(!isMe && !isFirst ? smallR : r),
-            topRight: Radius.circular(isMe && !isFirst ? smallR : r),
-            bottomLeft: Radius.circular(!isMe && !isLast ? smallR : r),
-            bottomRight: Radius.circular(isMe && !isLast ? smallR : r),
-          ),
-        ),
-        child: Text(
-          message,
-          style: GoogleFonts.poppins(
-            color: isMe ? Colors.white : Colors.black,
-            fontSize: 15,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInputBar(Color bgColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      color: Colors.white,
-      child: SafeArea(
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _brandPurple,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.camera_alt,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  focusNode: _focusNode,
-                  controller: _messageController,
-                  textCapitalization: TextCapitalization.sentences,
-                  minLines: 1,
-                  maxLines: 5,
-                  style: const TextStyle(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Message...',
-                    hintStyle: GoogleFonts.poppins(color: Colors.grey),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _showEmojiPicker
-                            ? Icons.keyboard
-                            : Icons.emoji_emotions_outlined,
-                        color: Colors.grey.shade600,
-                      ),
-                      onPressed: _toggleEmojiPicker,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  "Send",
-                  style: TextStyle(
-                    color: _brandPurple,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

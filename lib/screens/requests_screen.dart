@@ -21,6 +21,9 @@ class RequestsScreen extends StatefulWidget {
 class _RequestsScreenState extends State<RequestsScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser!;
 
+  // We keep track of ghosts here as well to immediately remove them from UI
+  final Set<String> _ghostUsers = {};
+
   Future<void> _acceptRequest(String requestFromId) async {
     final currentUserRef = FirebaseFirestore.instance
         .collection('users')
@@ -33,15 +36,10 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
     batch.update(currentUserRef, {
       'connections': FieldValue.arrayUnion([requestFromId]),
-    });
-    batch.update(otherUserRef, {
-      'connections': FieldValue.arrayUnion([_currentUser.uid]),
-    });
-
-    batch.update(currentUserRef, {
       'receivedRequests': FieldValue.arrayRemove([requestFromId]),
     });
     batch.update(otherUserRef, {
+      'connections': FieldValue.arrayUnion([_currentUser.uid]),
       'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
     });
 
@@ -89,7 +87,6 @@ class _RequestsScreenState extends State<RequestsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Custom colors matching the modern design
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
 
@@ -121,8 +118,11 @@ class _RequestsScreenState extends State<RequestsScreen> {
             );
           }
           final userData = snapshot.data!.data() as Map<String, dynamic>;
-          final List<dynamic> receivedRequests =
-              userData['receivedRequests'] ?? [];
+          final List<dynamic> rawRequests = userData['receivedRequests'] ?? [];
+
+          // Filter out users we've identified as deleted
+          final receivedRequests =
+              rawRequests.where((id) => !_ghostUsers.contains(id)).toList();
 
           if (receivedRequests.isEmpty) {
             return _buildEmptyState(isDark, textColor);
@@ -145,9 +145,28 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   if (!userSnapshot.hasData) {
                     return _buildRequestTilePlaceholder(isDark);
                   }
+
                   if (!userSnapshot.data!.exists) {
+                    // Mark as ghost so it doesn't show up again
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && !_ghostUsers.contains(userId)) {
+                        setState(() {
+                          _ghostUsers.add(userId);
+                        });
+                        // Automatically heal database
+                        FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_currentUser.uid)
+                            .update({
+                              'receivedRequests': FieldValue.arrayRemove([
+                                userId,
+                              ]),
+                            });
+                      }
+                    });
                     return const SizedBox.shrink();
                   }
+
                   final requestUserData =
                       userSnapshot.data!.data() as Map<String, dynamic>;
 
@@ -225,7 +244,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
   }
 }
 
-// --- NEW STYLIZED REQUEST TILE WIDGET ---
+// --- STYLIZED REQUEST TILE WIDGET ---
 class _RequestTile extends StatelessWidget {
   final Map<String, dynamic> userData;
   final VoidCallback onAccept;
@@ -277,10 +296,7 @@ class _RequestTile extends StatelessWidget {
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
-                      colors: [
-                        Color(0xFFB165FF),
-                        Color(0xFFFF4B72),
-                      ], // Purple to Pink
+                      colors: [Color(0xFFB165FF), Color(0xFFFF4B72)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -335,7 +351,6 @@ class _RequestTile extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              // Decline Button
               Expanded(
                 child: ElevatedButton(
                   onPressed: onDecline,
@@ -356,7 +371,6 @@ class _RequestTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Accept Button with Gradient
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
