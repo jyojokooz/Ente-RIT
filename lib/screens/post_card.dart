@@ -14,8 +14,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'full_screen_video_player.dart';
+import 'full_screen_image_viewer.dart';
 import 'share_post_sheet.dart';
-import 'likes_list_screen.dart';
 
 // Reuse GlobalAudioHandler from your existing code...
 class GlobalAudioHandler {
@@ -97,6 +97,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   AnimationController? _likeController;
   late Animation<double> _likeScaleAnimation;
 
+  // Optimistic UI State
+  late bool _isLiked;
+  late int _likesCount;
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +111,24 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _likeController!, curve: Curves.elasticOut),
     );
+
+    _initializeLikeState();
+  }
+
+  void _initializeLikeState() {
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>;
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+    final List<dynamic> rtLikes = postData['likes'] ?? [];
+
+    _isLiked = rtLikes.contains(currentUserId);
+    _likesCount = rtLikes.length;
+  }
+
+  // Update state when snapshot changes externally (e.g. parent stream)
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _initializeLikeState();
   }
 
   @override
@@ -134,9 +156,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   void _triggerLikeButtonPress() {
-    widget.onLikePressed();
-    if (_likeController != null)
+    // 1. Optimistic UI Update (Instantly change UI)
+    setState(() {
+      _isLiked = !_isLiked;
+      _likesCount += _isLiked ? 1 : -1;
+    });
+
+    // 2. Play Animation
+    if (_likeController != null) {
       _likeController!.forward().then((_) => _likeController!.reverse());
+    }
+
+    // 3. Trigger Backend logic in background
+    widget.onLikePressed();
   }
 
   String getOptimizedCloudinaryUrl(String originalUrl) {
@@ -150,18 +182,16 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Matching design colors
-    final cardBgColor = isDark ? const Color(0xFF252528) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
-
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData == null) return const SizedBox.shrink();
 
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardBgColor = isDark ? const Color(0xFF252528) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
     final authorData = {
       'displayName': postData['userName'] ?? 'Unknown',
@@ -182,8 +212,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final String caption = postData['caption'] ?? '';
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
-    final rtLikes = postData['likes'] ?? [];
-    final bool isLiked = rtLikes.contains(currentUserId);
     final int commentsCount = postData['comments'] ?? 0;
 
     return VisibilityDetector(
@@ -298,22 +326,51 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 children: [
                   // Background: Image OR Gradient
                   if (mediaUrls.isNotEmpty)
-                    AspectRatio(
-                      aspectRatio: postType == 'video' ? 1.0 : 4 / 3,
-                      child: CachedNetworkImage(
-                        imageUrl: getOptimizedCloudinaryUrl(
-                          postType == 'video'
-                              ? (originalThumbnailUrl ?? '')
-                              : mediaUrls.first,
-                        ),
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (c, u) => Container(
-                              color:
-                                  isDark
-                                      ? Colors.white10
-                                      : Colors.grey.shade200,
+                    GestureDetector(
+                      onTap: () {
+                        if (postType == 'video') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => FullScreenVideoPlayer(
+                                    videoUrl: mediaUrls.first,
+                                  ),
                             ),
+                          );
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => FullScreenImageViewer(
+                                    imageUrl: mediaUrls.first,
+                                    heroTag: 'post_${widget.postSnapshot.id}',
+                                  ),
+                            ),
+                          );
+                        }
+                      },
+                      child: AspectRatio(
+                        aspectRatio: postType == 'video' ? 1.0 : 4 / 3,
+                        child: Hero(
+                          tag: 'post_${widget.postSnapshot.id}',
+                          child: CachedNetworkImage(
+                            imageUrl: getOptimizedCloudinaryUrl(
+                              postType == 'video'
+                                  ? (originalThumbnailUrl ?? '')
+                                  : mediaUrls.first,
+                            ),
+                            fit: BoxFit.cover,
+                            placeholder:
+                                (c, u) => Container(
+                                  color:
+                                      isDark
+                                          ? Colors.white10
+                                          : Colors.grey.shade200,
+                                ),
+                          ),
+                        ),
                       ),
                     )
                   else
@@ -322,10 +379,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       constraints: const BoxConstraints(minHeight: 180),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            Color(0xFFFF3E8E),
-                            Color(0xFFFF9A44),
-                          ], // Pink to Orange gradient
+                          colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -334,15 +388,17 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
                   // Overlay Gradient for text readability
                   Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.6),
-                          ],
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.6),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -408,7 +464,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           ),
                         ),
 
-                        // Like & Bookmark Row
+                        // Like & Share Row
                         Row(
                           children: [
                             GestureDetector(
@@ -427,11 +483,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                     ScaleTransition(
                                       scale: _likeScaleAnimation,
                                       child: Icon(
-                                        isLiked
+                                        _isLiked
                                             ? Icons.favorite
                                             : Icons.favorite_border,
                                         color:
-                                            isLiked
+                                            _isLiked
                                                 ? Colors.redAccent
                                                 : Colors.white,
                                         size: 18,
@@ -439,7 +495,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
-                                      "${rtLikes.length}",
+                                      "$_likesCount",
                                       style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontSize: 12,
@@ -491,17 +547,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   if (postType == 'video')
                     Positioned.fill(
                       child: Center(
-                        child: GestureDetector(
-                          onTap:
-                              () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (_) => FullScreenVideoPlayer(
-                                        videoUrl: mediaUrls.first,
-                                      ),
-                                ),
-                              ),
+                        child: IgnorePointer(
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(

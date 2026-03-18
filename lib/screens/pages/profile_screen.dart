@@ -3,8 +3,6 @@
 // FILE PATH: lib/screens/pages/profile_screen.dart
 // ===============================
 
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
-
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,23 +13,21 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:cached_network_image/cached_network_image.dart';
 
-import '../admin_panel_screen.dart';
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
-import '../post_detail_screen.dart';
 import '../chat_screen.dart';
-import '../requests_screen.dart';
-import '../driver_tracking_screen.dart';
-import '../cafeteria_dashboard_screen.dart';
-import '../marketplace_sold_history_screen.dart';
 import '../../theme_provider.dart';
+
+import '../../models/connection_status.dart';
+import '../../widgets/profile/profile_header.dart';
+import '../../widgets/profile/profile_info.dart';
+import '../../widgets/profile/profile_quick_access.dart';
+import '../../widgets/profile/profile_posts_grid.dart';
+import '../../widgets/profile/share_profile_sheet.dart'; // <-- NEW IMPORT
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
-
-enum ConnectionStatus { none, sent, received, connected }
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -59,6 +55,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _profilePhotoUrl;
   List<DocumentSnapshot> _userPosts = [];
   bool _isAdmin = false;
+  bool _isPrivate = false;
+
   List<dynamic> _connections = [];
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
 
@@ -72,10 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-    ); // Reduced to 2 tabs for cleaner look
+    _tabController = TabController(length: 2, vsync: this);
     targetUserId = widget.userId ?? _currentUser.uid;
     isCurrentUser = targetUserId == _currentUser.uid;
     _loadAllData();
@@ -86,9 +81,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _tabController.dispose();
     super.dispose();
   }
-
-  // ... (Keep existing _compressImage, _loadAllData, _determineConnectionStatus, _uploadImage, _pickProfileImage, _logout, _viewConnections, _handleConnectionAction exactly the same as previously generated) ...
-  // To save token space, I am including the critical UI parts below which build the actual layout:
 
   Future<File?> _compressImage(File file) async {
     final tempDir = await getTemporaryDirectory();
@@ -150,6 +142,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           _role = data['role'] ?? 'student';
           _profilePhotoUrl = data['profilePhotoUrl'];
           _isAdmin = data['isAdmin'] ?? false;
+          _isPrivate = data['isPrivate'] ?? false;
           _connections = data['connections'] ?? [];
           _determineConnectionStatus(
             currentUserSnapshot.data(),
@@ -178,14 +171,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     final List<dynamic> receivedRequests =
         currentUserData['receivedRequests'] ?? [];
 
-    if (connections.contains(targetUserId))
+    if (connections.contains(targetUserId)) {
       _connectionStatus = ConnectionStatus.connected;
-    else if (sentRequests.contains(targetUserId))
+    } else if (sentRequests.contains(targetUserId)) {
       _connectionStatus = ConnectionStatus.sent;
-    else if (receivedRequests.contains(targetUserId))
+    } else if (receivedRequests.contains(targetUserId)) {
       _connectionStatus = ConnectionStatus.received;
-    else
+    } else {
       _connectionStatus = ConnectionStatus.none;
+    }
     setState(() {});
   }
 
@@ -208,7 +202,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             'profilePhotoUrl': response.secureUrl,
           }, SetOptions(merge: true));
       if (mounted) setState(() => _profilePhotoUrl = response.secureUrl);
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("Upload Error: $e");
+    }
   }
 
   Future<void> _pickProfileImage() async {
@@ -218,6 +214,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) await _uploadImage(File(pickedFile.path));
     } catch (e) {
+      debugPrint("Image Pick Error: $e");
     } finally {
       if (mounted) setState(() => _isPickingImage = false);
     }
@@ -229,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     Navigator.pushNamedAndRemoveUntil(context, '/auth-gate', (route) => false);
   }
 
-  void _viewConnections() {
+  void _viewMingles() {
     if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
       Navigator.push(
         context,
@@ -237,9 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           builder:
               (context) => ConnectionsScreen(
                 title:
-                    isCurrentUser
-                        ? 'Your Connections'
-                        : '$_displayName\'s Connections',
+                    isCurrentUser ? 'Your Mingles' : '$_displayName\'s Mingles',
                 userIds: _connections,
               ),
         ),
@@ -293,12 +288,142 @@ class _ProfileScreenState extends State<ProfileScreen>
     _loadAllData();
   }
 
+  Future<void> _togglePrivacy(bool isPrivate) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser.uid)
+          .update({'isPrivate': isPrivate});
+      setState(() {
+        _isPrivate = isPrivate;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update privacy: $e')));
+      }
+    }
+  }
+
+  // --- NEW: Handle Share Profile Bottom Sheet ---
+  void _showShareProfileSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => ShareProfileSheet(
+            userId: targetUserId,
+            username: _username,
+            displayName: _displayName,
+            profilePhotoUrl: _profilePhotoUrl,
+          ),
+    );
+  }
+
+  void _showSettingsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder:
+          (context) => SafeArea(
+            child: StatefulBuilder(
+              builder: (BuildContext context, StateSetter setModalState) {
+                return AnimatedBuilder(
+                  animation: themeProvider,
+                  builder: (context, child) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.symmetric(vertical: 12),
+                          height: 4,
+                          width: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[400],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        SwitchListTile(
+                          title: Text(
+                            'Dark Mode',
+                            style: GoogleFonts.poppins(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          secondary: Icon(
+                            themeProvider.isDarkMode
+                                ? Icons.dark_mode
+                                : Icons.light_mode,
+                            color: const Color(0xFFFF9A44),
+                          ),
+                          value: themeProvider.isDarkMode,
+                          onChanged:
+                              (value) => themeProvider.toggleTheme(value),
+                          activeColor: const Color(0xFFFF3E8E),
+                        ),
+                        SwitchListTile(
+                          title: Text(
+                            'Private Account',
+                            style: GoogleFonts.poppins(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Only mingles can see your posts.',
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                          secondary: Icon(
+                            _isPrivate ? Icons.lock : Icons.lock_open,
+                            color: const Color(0xFF00C6FB),
+                          ),
+                          value: _isPrivate,
+                          onChanged: (value) {
+                            setModalState(() => _isPrivate = value);
+                            _togglePrivacy(value);
+                          },
+                          activeColor: const Color(0xFFFF3E8E),
+                        ),
+                        Divider(color: Theme.of(context).dividerColor),
+                        ListTile(
+                          leading: const Icon(Icons.logout, color: Colors.red),
+                          title: Text(
+                            'Log Out',
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _logout();
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Custom colors matching the design exactly
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -313,6 +438,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
+    bool canViewPosts =
+        isCurrentUser ||
+        !_isPrivate ||
+        _connectionStatus == ConnectionStatus.connected;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: RefreshIndicator(
@@ -322,651 +452,106 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // 1. Cover Image & Gradient Ring Avatar
             SliverToBoxAdapter(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Cover Image / Background Fade
-                  Container(
-                    height: 240,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          isDark
-                              ? Colors.black.withOpacity(0.8)
-                              : Colors.grey.shade300,
-                          bgColor,
-                        ],
-                      ),
-                    ),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            if (!isCurrentUser)
-                              IconButton(
-                                icon: Icon(
-                                  Icons.arrow_back_ios_new,
-                                  color: textColor,
-                                ),
-                                onPressed: () => Navigator.pop(context),
-                              )
-                            else
-                              const SizedBox(width: 48),
-                            if (isCurrentUser)
-                              IconButton(
-                                icon: Icon(
-                                  Icons.settings_outlined,
-                                  color: textColor,
-                                ),
-                                onPressed:
-                                    () => _showSettingsBottomSheet(context),
-                              )
-                            else
-                              const SizedBox(width: 48),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Overlapping Gradient Avatar
-                  Positioned(
-                    bottom: 0,
-                    child: GestureDetector(
-                      onTap: _pickProfileImage,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0xFFFF3E8E),
-                              Color(0xFFFF9A44),
-                            ], // Pink to Orange
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: CircleAvatar(
-                            radius: 55,
-                            backgroundColor: Colors.grey.shade800,
-                            backgroundImage:
-                                (_profilePhotoUrl != null &&
-                                        _profilePhotoUrl!.isNotEmpty)
-                                    ? CachedNetworkImageProvider(
-                                      _profilePhotoUrl!,
-                                    )
-                                    : const AssetImage(
-                                          'assets/default_avatar.png',
-                                        )
-                                        as ImageProvider,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              child: ProfileHeader(
+                isCurrentUser: isCurrentUser,
+                profilePhotoUrl: _profilePhotoUrl,
+                bgColor: bgColor,
+                textColor: textColor,
+                isDark: isDark,
+                onBack: () => Navigator.pop(context),
+                onSettings: () => _showSettingsBottomSheet(context),
+                onAvatarTap: _pickProfileImage,
               ),
             ),
-
-            // 2. User Info
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
                 child: Column(
                   children: [
-                    Text(
-                      _displayName,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _department.isNotEmpty ? _department : '@$_username',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: mutedTextColor,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Stats
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildStatCol(
-                          _userPosts.length.toString(),
-                          "Posts",
-                          textColor,
-                          mutedTextColor,
-                        ),
-                        Container(
-                          height: 40,
-                          width: 1,
-                          color: isDark ? Colors.white24 : Colors.black12,
-                          margin: const EdgeInsets.symmetric(horizontal: 24),
-                        ),
-                        GestureDetector(
-                          onTap: _viewConnections,
-                          child: _buildStatCol(
-                            _connections.length.toString(),
-                            "Connections",
-                            textColor,
-                            mutedTextColor,
+                    ProfileInfo(
+                      displayName: _displayName,
+                      username: _username,
+                      department: _department,
+                      bio: _bio,
+                      postCount: _userPosts.length,
+                      mingleCount: _connections.length,
+                      isCurrentUser: isCurrentUser,
+                      connectionStatus: _connectionStatus,
+                      textColor: textColor,
+                      mutedTextColor: mutedTextColor,
+                      cardColor: cardColor,
+                      onEditProfile: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const EditProfileScreen(),
                           ),
-                        ),
-                      ],
+                        );
+                        _loadAllData();
+                      },
+                      // --- HOOK UP THE SHARE METHOD HERE ---
+                      onShareProfile: _showShareProfileSheet,
+                      onViewMingles: _viewMingles,
+                      onConnectionAction: _handleConnectionAction,
+                      onMessage:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => ChatScreen(
+                                    receiverId: targetUserId,
+                                    receiverName: _displayName,
+                                    receiverImageUrl: _profilePhotoUrl ?? '',
+                                  ),
+                            ),
+                          ),
                     ),
-                    const SizedBox(height: 24),
-
-                    // Main Actions (Buttons)
-                    _buildMainActionButtons(cardColor, textColor, isDark),
                     const SizedBox(height: 32),
 
-                    // Quick Access / Achievements Block
-                    if (isCurrentUser && (_isAdmin || _role != 'student'))
-                      _buildQuickAccessBlock(
-                        cardColor,
-                        textColor,
-                        mutedTextColor,
+                    if (isCurrentUser && (_isAdmin || _role != 'student')) ...[
+                      ProfileQuickAccess(
+                        role: _role,
+                        isAdmin: _isAdmin,
+                        cardColor: cardColor,
+                        textColor: textColor,
                       ),
+                      const SizedBox(height: 16),
+                    ],
                   ],
                 ),
               ),
             ),
-
-            // 3. Tab Bar
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _SliverAppBarDelegate(
-                TabBar(
-                  controller: _tabController,
-                  labelColor: const Color(0xFFFF3E8E),
-                  unselectedLabelColor: mutedTextColor,
-                  indicatorColor: const Color(0xFFFF3E8E),
-                  indicatorSize: TabBarIndicatorSize.label,
-                  indicatorWeight: 3,
-                  labelStyle: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+            if (canViewPosts)
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _SliverAppBarDelegate(
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: const Color(0xFFFF3E8E),
+                    unselectedLabelColor: mutedTextColor,
+                    indicatorColor: const Color(0xFFFF3E8E),
+                    indicatorSize: TabBarIndicatorSize.label,
+                    indicatorWeight: 3,
+                    labelStyle: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    dividerColor: Colors.transparent,
+                    tabs: const [Tab(text: "Posts"), Tab(text: "Tagged")],
                   ),
-                  dividerColor: Colors.transparent,
-                  tabs: const [Tab(text: "Posts"), Tab(text: "Tagged")],
+                  bgColor,
                 ),
-                bgColor,
               ),
+            ProfilePostsGrid(
+              userPosts: _userPosts,
+              cardColor: cardColor,
+              canViewPosts: canViewPosts,
             ),
-
-            // 4. Content Grid
-            _buildContentGrid(cardColor),
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildStatCol(String val, String label, Color tColor, Color mColor) {
-    return Column(
-      children: [
-        Text(
-          val,
-          style: GoogleFonts.poppins(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: tColor,
-          ),
-        ),
-        Text(label, style: GoogleFonts.poppins(fontSize: 12, color: mColor)),
-      ],
-    );
-  }
-
-  Widget _buildMainActionButtons(
-    Color cardColor,
-    Color textColor,
-    bool isDark,
-  ) {
-    if (isCurrentUser) {
-      return Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-                );
-                _loadAllData();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cardColor,
-                foregroundColor: textColor,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                "Edit Profile",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: ElevatedButton(
-                onPressed: () {}, // Share logic
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: Text(
-                  "Share Profile",
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Logic for other users
-    String primaryLabel = "Connect";
-    VoidCallback? primaryAction = () => _handleConnectionAction('send');
-    bool useGradient = true;
-
-    if (_connectionStatus == ConnectionStatus.connected) {
-      primaryLabel = "Message";
-      primaryAction =
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => ChatScreen(
-                    receiverId: targetUserId,
-                    receiverName: _displayName,
-                    receiverImageUrl: _profilePhotoUrl ?? '',
-                  ),
-            ),
-          );
-    } else if (_connectionStatus == ConnectionStatus.sent) {
-      primaryLabel = "Requested";
-      primaryAction = () => _handleConnectionAction('cancel');
-      useGradient = false;
-    } else if (_connectionStatus == ConnectionStatus.received) {
-      primaryLabel = "Accept";
-      primaryAction = () => _handleConnectionAction('accept');
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient:
-                  useGradient
-                      ? const LinearGradient(
-                        colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
-                      )
-                      : null,
-              color: useGradient ? null : cardColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: ElevatedButton(
-              onPressed: primaryAction,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: useGradient ? Colors.white : textColor,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: Text(
-                primaryLabel,
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (_connectionStatus == ConnectionStatus.connected) ...[
-          const SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () => _handleConnectionAction('remove'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cardColor,
-                foregroundColor: textColor,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                "Disconnect",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildQuickAccessBlock(
-    Color cardColor,
-    Color textColor,
-    Color mutedColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(Icons.emoji_events_rounded, color: textColor),
-              const SizedBox(width: 12),
-              Text(
-                "Achievements & Tools",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: textColor,
-                ),
-              ),
-              const Spacer(),
-              const Text("🔥 🎯", style: TextStyle(fontSize: 16)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                if (_role == 'driver')
-                  _buildCircleButton(
-                    Icons.local_shipping_rounded,
-                    const Color(0xFFFF3E8E),
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DriverTrackingScreen(),
-                      ),
-                    ),
-                  ),
-                if (_role == 'cafeteria_admin')
-                  _buildCircleButton(
-                    Icons.fastfood_rounded,
-                    const Color(0xFFFF9A44),
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CafeteriaDashboardScreen(),
-                      ),
-                    ),
-                  ),
-                if (_isAdmin)
-                  _buildCircleButton(
-                    Icons.security_rounded,
-                    const Color(0xFFB165FF),
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminPanelScreen(),
-                      ),
-                    ),
-                  ),
-                _buildCircleButton(
-                  Icons.person_add_rounded,
-                  Colors.tealAccent.shade400,
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RequestsScreen()),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCircleButton(
-    IconData icon,
-    Color iconColor,
-    VoidCallback onTap,
-  ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 16),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color:
-              isDark
-                  ? const Color(0xFF161618)
-                  : Colors.grey.shade100, // Inner circle color
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.black12,
-            width: 2,
-          ),
-        ),
-        child: Icon(icon, color: iconColor, size: 28),
-      ),
-    );
-  }
-
-  Widget _buildContentGrid(Color cardColor) {
-    if (_userPosts.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Center(
-            child: Column(
-              children: [
-                Icon(
-                  Icons.camera_alt_outlined,
-                  size: 40,
-                  color: Colors.grey.shade500,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "No posts yet",
-                  style: GoogleFonts.poppins(color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.8,
-        ),
-        delegate: SliverChildBuilderDelegate((context, index) {
-          final postSnapshot = _userPosts[index];
-          final data = postSnapshot.data() as Map<String, dynamic>;
-          final mediaUrl =
-              data['postType'] == 'video'
-                  ? data['postThumbnailUrl']
-                  : (data['postMediaUrl'] ?? data['postImageUrl']);
-
-          return GestureDetector(
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PostDetailScreen(postId: postSnapshot.id),
-                  ),
-                ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (mediaUrl != null)
-                      CachedNetworkImage(
-                        imageUrl: mediaUrl,
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (c, u) =>
-                                Container(color: Colors.grey.withOpacity(0.1)),
-                        errorWidget: (c, u, e) => const Icon(Icons.error),
-                      )
-                    else
-                      Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
-                          ),
-                        ),
-                      ),
-
-                    if (data['postType'] == 'video')
-                      const Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Icon(
-                          Icons.play_circle_fill,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }, childCount: _userPosts.length),
-      ),
-    );
-  }
-
-  void _showSettingsBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (context) => SafeArea(
-            child: AnimatedBuilder(
-              animation: themeProvider,
-              builder: (context, child) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      height: 4,
-                      width: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[400],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    SwitchListTile(
-                      title: Text(
-                        'Dark Mode',
-                        style: GoogleFonts.poppins(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      secondary: Icon(
-                        themeProvider.isDarkMode
-                            ? Icons.dark_mode
-                            : Icons.light_mode,
-                        color: const Color(0xFFFF9A44),
-                      ),
-                      value: themeProvider.isDarkMode,
-                      onChanged: (value) => themeProvider.toggleTheme(value),
-                      activeColor: const Color(0xFFFF3E8E),
-                    ),
-                    Divider(color: Theme.of(context).dividerColor),
-                    ListTile(
-                      leading: const Icon(Icons.logout, color: Colors.red),
-                      title: Text(
-                        'Log Out',
-                        style: GoogleFonts.poppins(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _logout();
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                );
-              },
-            ),
-          ),
     );
   }
 }
