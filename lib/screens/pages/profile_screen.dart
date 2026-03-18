@@ -24,7 +24,7 @@ import '../../widgets/profile/profile_header.dart';
 import '../../widgets/profile/profile_info.dart';
 import '../../widgets/profile/profile_quick_access.dart';
 import '../../widgets/profile/profile_posts_grid.dart';
-import '../../widgets/profile/share_profile_sheet.dart'; // <-- NEW IMPORT
+import '../../widgets/profile/share_profile_sheet.dart';
 
 const String cloudinaryCloudName = "dcboqibnx";
 const String cloudinaryUploadPreset = "flutter_profile_uploads";
@@ -148,6 +148,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
           );
+
+          // --- FIX: Trigger self-healing background validation ---
+          _validateAndHealConnections();
         }
         _userPosts = postsSnapshot.docs;
       }
@@ -155,6 +158,50 @@ class _ProfileScreenState extends State<ProfileScreen>
       debugPrint("Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- SELF-HEALING FUNCTION FOR GHOST CONNECTIONS ---
+  Future<void> _validateAndHealConnections() async {
+    if (_connections.isEmpty) return;
+
+    List<dynamic> validConnections = [];
+    bool hasGhostUsers = false;
+
+    // Check if each connection actually exists in the database
+    for (String connId in _connections) {
+      try {
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(connId)
+                .get();
+        if (doc.exists) {
+          validConnections.add(connId);
+        } else {
+          // Document missing! It's a ghost connection (deleted user)
+          hasGhostUsers = true;
+        }
+      } catch (e) {
+        // If network error, keep it safe so we don't accidentally delete real friends
+        validConnections.add(connId);
+      }
+    }
+
+    // If ghost users were found, fix the UI count and heal the database
+    if (hasGhostUsers) {
+      if (mounted) {
+        setState(() {
+          _connections = validConnections;
+        });
+      }
+      // If viewing our own profile, permanently remove the dead link from Firestore
+      if (isCurrentUser) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_currentUser.uid)
+            .update({'connections': validConnections});
+      }
     }
   }
 
@@ -306,7 +353,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // --- NEW: Handle Share Profile Bottom Sheet ---
   void _showShareProfileSheet() {
     showModalBottomSheet(
       context: context,
@@ -490,7 +536,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         );
                         _loadAllData();
                       },
-                      // --- HOOK UP THE SHARE METHOD HERE ---
                       onShareProfile: _showShareProfileSheet,
                       onViewMingles: _viewMingles,
                       onConnectionAction: _handleConnectionAction,

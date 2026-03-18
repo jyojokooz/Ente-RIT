@@ -25,8 +25,38 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final currentUser = FirebaseAuth.instance.currentUser!;
 
+  @override
+  void initState() {
+    super.initState();
+    // 1. Auto-clear the red dot badge when the screen is opened
+    _markAllAsRead();
+  }
+
+  Future<void> _markAllAsRead() async {
+    try {
+      final unreadQuery =
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .where('userId', isEqualTo: currentUser.uid)
+              .where('isRead', isEqualTo: false)
+              .get();
+
+      if (unreadQuery.docs.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (var doc in unreadQuery.docs) {
+          batch.update(doc.reference, {'isRead': true});
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint("Error marking notifications as read: $e");
+    }
+  }
+
   Future<void> _handleNotificationTap(DocumentSnapshot notificationDoc) async {
     final data = notificationDoc.data() as Map<String, dynamic>;
+
+    // Safety check just in case the batch update was slow
     if (data['isRead'] == false) {
       await notificationDoc.reference.update({'isRead': true});
     }
@@ -70,8 +100,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
         }
         break;
-
-      // Messages are ignored here as they are filtered out of the UI
     }
   }
 
@@ -80,7 +108,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Custom colors matching the modern design
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -130,7 +157,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return _buildEmptyState(isDark, textColor);
           }
 
-          // --- FILTER OUT CHAT/MESSAGE NOTIFICATIONS ---
+          // Filter out chat/message notifications from this feed
           final allNotifications = snapshot.data!.docs;
           final notifications =
               allNotifications.where((doc) {
@@ -202,7 +229,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-class _NotificationTile extends StatelessWidget {
+// 3. Converted to a StatefulWidget with KeepAlive to fix scrolling flickers
+class _NotificationTile extends StatefulWidget {
   final DocumentSnapshot notificationDoc;
   final VoidCallback onTap;
   final bool isDark;
@@ -217,19 +245,75 @@ class _NotificationTile extends StatelessWidget {
     required this.textColor,
   });
 
-  Future<DocumentSnapshot?> _getRelatedPost(String type, String? docId) {
-    if (docId != null && (type == 'like' || type == 'comment')) {
-      return FirebaseFirestore.instance.collection('posts').doc(docId).get();
+  @override
+  State<_NotificationTile> createState() => _NotificationTileState();
+}
+
+class _NotificationTileState extends State<_NotificationTile>
+    with AutomaticKeepAliveClientMixin {
+  bool _isLoading = true;
+  bool _isPostDeleted = false;
+  String? _thumbnailUrl;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPostStatus();
+  }
+
+  // 2. Pre-fetch post data. If it doesn't exist, hide the notification!
+  Future<void> _checkPostStatus() async {
+    final data = widget.notificationDoc.data() as Map<String, dynamic>;
+    final type = data['type'];
+    final relatedDocId = data['relatedDocId'];
+
+    if (relatedDocId != null && (type == 'like' || type == 'comment')) {
+      try {
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('posts')
+                .doc(relatedDocId)
+                .get();
+        if (!doc.exists) {
+          if (mounted) {
+            setState(() {
+              _isPostDeleted = true;
+              _isLoading = false;
+            });
+          }
+        } else {
+          final postData = doc.data() as Map<String, dynamic>;
+          if (mounted) {
+            setState(() {
+              _thumbnailUrl =
+                  postData['postThumbnailUrl'] ?? postData['postMediaUrl'];
+              _isLoading = false;
+            });
+          }
+        }
+      } catch (e) {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } else {
+      // It's a connection request or follow, no post needed
+      if (mounted) setState(() => _isLoading = false);
     }
-    return Future.value(null);
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = notificationDoc.data() as Map<String, dynamic>;
+    super.build(context);
+
+    // Hide immediately if loading or if the associated post was deleted
+    if (_isLoading) return const SizedBox.shrink();
+    if (_isPostDeleted) return const SizedBox.shrink();
+
+    final data = widget.notificationDoc.data() as Map<String, dynamic>;
     final String type = data['type'] ?? '';
     final String body = data['body'] ?? '...';
-    final String? relatedDocId = data['relatedDocId'];
     final bool isRead = data['isRead'] ?? false;
 
     final String triggeringUserId = data['triggeringUserId'] ?? '';
@@ -242,30 +326,21 @@ class _NotificationTile extends StatelessWidget {
 
     if (type == 'like') {
       typeIcon = Icons.favorite_rounded;
-      gradientColors = [
-        const Color(0xFFFF3E8E),
-        const Color(0xFFFF9A44),
-      ]; // Pink/Orange
+      gradientColors = [const Color(0xFFFF3E8E), const Color(0xFFFF9A44)];
     } else if (type == 'comment') {
       typeIcon = Icons.chat_bubble_rounded;
-      gradientColors = [
-        const Color(0xFF00C6FB),
-        const Color(0xFF005BEA),
-      ]; // Blue
+      gradientColors = [const Color(0xFF00C6FB), const Color(0xFF005BEA)];
     } else if (type == 'connection_accepted') {
       typeIcon = Icons.person_add_rounded;
-      gradientColors = [
-        const Color(0xFF43E97B),
-        const Color(0xFF38F9D7),
-      ]; // Green
+      gradientColors = [const Color(0xFF43E97B), const Color(0xFF38F9D7)];
     }
 
-    final mutedTextColor = isDark ? Colors.white54 : Colors.black54;
+    final mutedTextColor = widget.isDark ? Colors.white54 : Colors.black54;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: widget.cardColor,
         borderRadius: BorderRadius.circular(24),
         border:
             isRead
@@ -275,7 +350,7 @@ class _NotificationTile extends StatelessWidget {
                   width: 1.5,
                 ),
         boxShadow: [
-          if (!isDark)
+          if (!widget.isDark)
             BoxShadow(
               color: Colors.black.withOpacity(0.03),
               blurRadius: 10,
@@ -286,13 +361,12 @@ class _NotificationTile extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: InkWell(
-          onTap: onTap,
+          onTap: widget.onTap,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // User Avatar with Navigation & Action Icon
                 GestureDetector(
                   onTap: () {
                     if (triggeringUserId.isNotEmpty) {
@@ -312,7 +386,7 @@ class _NotificationTile extends StatelessWidget {
                       CircleAvatar(
                         radius: 26,
                         backgroundColor:
-                            isDark
+                            widget.isDark
                                 ? Colors.grey.shade800
                                 : Colors.grey.shade200,
                         backgroundImage:
@@ -335,7 +409,10 @@ class _NotificationTile extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(colors: gradientColors),
-                              border: Border.all(color: cardColor, width: 2),
+                              border: Border.all(
+                                color: widget.cardColor,
+                                width: 2,
+                              ),
                             ),
                             child: Icon(
                               typeIcon,
@@ -348,8 +425,6 @@ class _NotificationTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-
-                // Notification Text & Time
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,7 +432,7 @@ class _NotificationTile extends StatelessWidget {
                       Text(
                         body,
                         style: GoogleFonts.poppins(
-                          color: textColor,
+                          color: widget.textColor,
                           fontSize: 13,
                           fontWeight:
                               isRead ? FontWeight.normal : FontWeight.w600,
@@ -386,41 +461,23 @@ class _NotificationTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
 
-                // Post Thumbnail (if applicable)
-                if (type == 'like' || type == 'comment')
-                  FutureBuilder<DocumentSnapshot?>(
-                    future: _getRelatedPost(type, relatedDocId),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.done &&
-                          snapshot.hasData &&
-                          snapshot.data!.exists) {
-                        final postData =
-                            snapshot.data!.data() as Map<String, dynamic>;
-                        final thumbnailUrl =
-                            postData['postThumbnailUrl'] ??
-                            postData['postMediaUrl'];
-
-                        if (thumbnailUrl != null) {
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: CachedNetworkImage(
-                              imageUrl: thumbnailUrl,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorWidget:
-                                  (c, u, e) => Container(
-                                    color:
-                                        isDark
-                                            ? Colors.white10
-                                            : Colors.grey.shade200,
-                                  ),
-                            ),
-                          );
-                        }
-                      }
-                      return const SizedBox.shrink();
-                    },
+                // Pre-fetched thumbnail means no FutureBuilder needed here anymore!
+                if (_thumbnailUrl != null && _thumbnailUrl!.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedNetworkImage(
+                      imageUrl: _thumbnailUrl!,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      errorWidget:
+                          (c, u, e) => Container(
+                            color:
+                                widget.isDark
+                                    ? Colors.white10
+                                    : Colors.grey.shade200,
+                          ),
+                    ),
                   ),
               ],
             ),
