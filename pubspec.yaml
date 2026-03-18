@@ -98,6 +98,7 @@ dependencies:
   visibility_detector: ^0.4.0+2
   firebase_messaging: 14.7.10
   sensors_plus: ^7.0.0
+  flutter_native_splash: ^2.4.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -161,3 +162,10 @@ flutter:
     - assets/icon_with_cap.png
     - assets/ente_rit.png
     - assets/default_avatar.png
+
+flutter_native_splash:
+  color: "#000000" # Forces the absolute first native frame to be black
+  color_dark: "#000000"
+  image: assets/icon_with_cap.png
+  android: true
+  ios: true

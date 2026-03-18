@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: auth_gate.dart
 // FILE PATH: lib/auth/auth_gate.dart
 // ===============================
 
@@ -20,7 +19,8 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      // Let the Scaffold background color adapt automatically
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, authSnapshot) {
@@ -32,7 +32,6 @@ class AuthGate extends StatelessWidget {
           if (authSnapshot.hasData) {
             final user = authSnapshot.data!;
 
-            // FIX: Changed from FutureBuilder to StreamBuilder
             // This listens continuously. When the signup function finishes writing
             // the user data to Firestore, this will auto-update and let the user in.
             return StreamBuilder<DocumentSnapshot>(
@@ -77,19 +76,25 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// --- VISUAL FIX: Fake Home Screen ---
+// --- OPTIMIZED VISUAL FIX: Fake Home Screen ---
+// This now perfectly adapts to Dark/Light mode to prevent the white flash.
 class _HomeSkeletonLoader extends StatelessWidget {
   const _HomeSkeletonLoader();
 
   @override
   Widget build(BuildContext context) {
+    // Dynamically fetch the current theme colors
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final textColor = isDark ? Colors.white : Colors.black;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           children: [
             Container(
-              color: Colors.white,
+              color: bgColor,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -99,21 +104,17 @@ class _HomeSkeletonLoader extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: textColor,
                       letterSpacing: -0.5,
                     ),
                   ),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.favorite_border,
-                        color: Colors.black,
-                        size: 28,
-                      ),
+                      Icon(Icons.favorite_border, color: textColor, size: 28),
                       const SizedBox(width: 8),
-                      const Icon(
+                      Icon(
                         Icons.chat_bubble_outline,
-                        color: Colors.black,
+                        color: textColor,
                         size: 26,
                       ),
                     ],

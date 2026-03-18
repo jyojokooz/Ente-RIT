@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: main.dart
 // FILE PATH: lib/main.dart
 // ===============================
 
@@ -11,6 +10,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Added for ultrafast theme loading
 
 // --- THEME PROVIDER ---
 import 'package:my_project/theme_provider.dart';
@@ -36,8 +36,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // OPTIMIZATION: Load Env, Firebase, and SharedPreferences concurrently!
+  // This drastically reduces boot time and fixes the "white flash" issue.
+  final futures = await Future.wait([
+    dotenv.load(fileName: ".env"),
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    SharedPreferences.getInstance(),
+  ]);
+
+  // Extract the SharedPreferences instance from our concurrent load
+  final prefs = futures[2] as SharedPreferences;
+
+  // Check if dark mode is saved (defaults to false/light mode if never set)
+  final isDark = prefs.getBool('isDarkMode') ?? false;
+
+  // Initialize the global provider synchronously BEFORE the app runs
+  themeProvider = ThemeProvider(isDark ? ThemeMode.dark : ThemeMode.light);
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -57,6 +72,7 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Kampus Konnect',
 
+          // Pulls the mode instantly, no async delay causing white flashes
           themeMode: themeProvider.themeMode,
 
           // --- LIGHT THEME ---
@@ -97,14 +113,11 @@ class MyApp extends StatelessWidget {
             textTheme: GoogleFonts.poppinsTextTheme(
               ThemeData.dark().textTheme,
             ).apply(bodyColor: Colors.white, displayColor: Colors.white),
-            appBarTheme: AppBarTheme(
+            appBarTheme: const AppBarTheme(
               backgroundColor: Colors.black,
               elevation: 0,
-              iconTheme: const IconThemeData(color: Colors.white),
-              titleTextStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-              ),
+              iconTheme: IconThemeData(color: Colors.white),
+              titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
             ),
             bottomAppBarTheme: BottomAppBarThemeData(
               color: Colors.grey.shade900,
