@@ -391,7 +391,7 @@ class _AiChatHistoryScreenState extends State<AiChatHistoryScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Tap 'New Chat' to start talking to Llama 3!",
+            "Tap 'New Chat' to start talking to Connect Ai!",
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(color: subtitleColor, fontSize: 14),
           ),
