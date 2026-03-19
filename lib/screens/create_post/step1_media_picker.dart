@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
-import 'package:path_provider/path_provider.dart'; // <-- ADDED THIS IMPORT
+import 'package:path_provider/path_provider.dart';
 import '../create_post_screen.dart';
 
 class Step1MediaPicker extends StatefulWidget {
@@ -37,7 +37,13 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
   bool _hasPermission = false;
   bool _isProcessingNext = false;
 
-  // The Pink-Violet Brand Gradient
+  // --- PAGINATION STATE ---
+  final ScrollController _scrollController = ScrollController();
+  int _currentPage = 0;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  final int _pageSize = 60; // Load 60 items at a time for instant UI response
+
   final LinearGradient _brandGradient = const LinearGradient(
     colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
     begin: Alignment.topLeft,
@@ -48,6 +54,20 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
   void initState() {
     super.initState();
     _fetchAlbums();
+
+    // Listen to scroll events to load more images
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200) {
+        _loadMoreMedia();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchAlbums() async {
@@ -88,11 +108,16 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
   }
 
   Future<void> _loadMediaForAlbum(AssetPathEntity album) async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _currentPage = 0;
+      _mediaList.clear();
+      _hasMore = true;
+    });
 
     List<AssetEntity> media = await album.getAssetListPaged(
-      page: 0,
-      size: 2000,
+      page: _currentPage,
+      size: _pageSize,
     );
 
     setState(() {
@@ -102,7 +127,26 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
       } else {
         _selectedMedia = null;
       }
+      _hasMore = media.length == _pageSize;
       _isLoading = false;
+    });
+  }
+
+  Future<void> _loadMoreMedia() async {
+    if (_isLoadingMore || !_hasMore || _selectedAlbum == null) return;
+
+    setState(() => _isLoadingMore = true);
+    _currentPage++;
+
+    List<AssetEntity> moreMedia = await _selectedAlbum!.getAssetListPaged(
+      page: _currentPage,
+      size: _pageSize,
+    );
+
+    setState(() {
+      _mediaList.addAll(moreMedia);
+      _hasMore = moreMedia.length == _pageSize;
+      _isLoadingMore = false;
     });
   }
 
@@ -128,12 +172,10 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
 
     if (_selectedMedia!.type == AssetType.video) {
       try {
-        // --- FIX: Get the app's temporary directory to avoid EPERM crashes ---
         final tempDir = await getTemporaryDirectory();
-
         final thumbPath = await VideoThumbnail.thumbnailFile(
           video: file.path,
-          thumbnailPath: tempDir.path, // Force save to safe app directory
+          thumbnailPath: tempDir.path,
           imageFormat: ImageFormat.JPEG,
           quality: 75,
         );
@@ -186,7 +228,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                     color: Colors.white,
                   ),
                 ),
-                // Gradient Next Button
                 GestureDetector(
                   onTap:
                       _isProcessingNext || _selectedMedia == null
@@ -398,6 +439,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                         ),
                       )
                       : GridView.builder(
+                        controller: _scrollController,
                         physics: const BouncingScrollPhysics(),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
@@ -405,8 +447,21 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                               crossAxisSpacing: 2,
                               mainAxisSpacing: 2,
                             ),
-                        itemCount: _mediaList.length,
+                        itemCount: _mediaList.length + (_hasMore ? 1 : 0),
                         itemBuilder: (context, index) {
+                          if (index == _mediaList.length) {
+                            return const Center(
+                              child: SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            );
+                          }
+
                           final asset = _mediaList[index];
                           final isSelected = _selectedMedia?.id == asset.id;
 
@@ -415,6 +470,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
+                                // Fast loading low-res thumbnail for the grid
                                 FutureBuilder<Uint8List?>(
                                   future: asset.thumbnailDataWithSize(
                                     const ThumbnailSize(200, 200),

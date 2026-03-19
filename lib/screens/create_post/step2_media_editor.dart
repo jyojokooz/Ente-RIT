@@ -40,6 +40,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
     end: Alignment.bottomRight,
   );
 
+  // Expanded Filter List
   final List<Map<String, dynamic>> _filters = [
     {
       'name': 'Normal',
@@ -120,6 +121,110 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
       'effect': 'e_sepia',
     },
     {
+      'name': 'Warm',
+      'matrix': <double>[
+        1.2,
+        0,
+        0,
+        0,
+        10,
+        0,
+        1.1,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0.9,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+      'effect': 'e_art:peacock',
+    },
+    {
+      'name': 'Cool',
+      'matrix': <double>[
+        0.9,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        10,
+        0,
+        0,
+        1.2,
+        0,
+        20,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+      'effect': 'e_art:frost',
+    },
+    {
+      'name': 'Vintage',
+      'matrix': <double>[
+        0.9,
+        0.5,
+        0.1,
+        0,
+        0,
+        0.3,
+        0.8,
+        0.1,
+        0,
+        0,
+        0.2,
+        0.3,
+        0.5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+      'effect': 'e_art:incognito',
+    },
+    {
+      'name': 'Fade',
+      'matrix': <double>[
+        0.8,
+        0,
+        0,
+        0,
+        40,
+        0,
+        0.8,
+        0,
+        0,
+        40,
+        0,
+        0,
+        0.8,
+        0,
+        40,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+      'effect': 'e_brightness:20',
+    },
+    {
       'name': 'Invert',
       'matrix': <double>[
         -1,
@@ -146,6 +251,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
       'effect': 'e_negate',
     },
   ];
+
   int _selectedFilterIndex = 0;
 
   @override
@@ -160,24 +266,45 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
     try {
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: _currentFiles[_currentIndex].path,
-        // FIX: Enforce Square Aspect ratio so it acts as "Zoom & Adjust"
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         uiSettings: [
           AndroidUiSettings(
-            toolbarTitle: 'Zoom & Adjust',
+            toolbarTitle: 'Zoom & Crop',
             toolbarColor: Colors.black,
             toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true, // Prevents user from making it a rectangle
-            hideBottomControls:
-                true, // Hides aspect ratio options to force Insta-style adjust
+            // Brand pink highlight for the active crop tool
             activeControlsWidgetColor: const Color(0xFFFF4B72),
             backgroundColor: Colors.black,
+            // Darkens the area outside the crop box for that premium Instagram feel
+            dimmedLayerColor: Colors.black.withOpacity(0.8),
+            cropFrameColor: Colors.white,
+            cropGridColor: Colors.white54,
+            initAspectRatio: CropAspectRatioPreset.square, // Default to 1:1
+            lockAspectRatio:
+                false, // CRITICAL: Allows freeform two-finger pinch-to-zoom and pan
+            hideBottomControls:
+                false, // CRITICAL: Shows the aspect ratio icons (small rectangles)
+            aspectRatioPresets: [
+              CropAspectRatioPreset.square, // 1:1 (Instagram Square)
+              CropAspectRatioPreset.original, // Freeform / Original
+              CropAspectRatioPreset.ratio5x4, // 5:4 / 4:5 (Instagram Portrait)
+              CropAspectRatioPreset.ratio4x3, // Standard Portrait/Landscape
+              CropAspectRatioPreset.ratio16x9, // Widescreen
+              CropAspectRatioPreset.ratio7x5, // Classic Photo
+            ],
           ),
           IOSUiSettings(
-            title: 'Zoom & Adjust',
-            aspectRatioLockEnabled: true,
-            resetAspectRatioEnabled: false,
+            title: 'Zoom & Crop',
+            aspectRatioLockEnabled: false, // Allows pinch-to-zoom
+            resetAspectRatioEnabled: true,
+            aspectRatioPickerButtonHidden:
+                false, // CRITICAL: Shows the aspect ratio icons on iOS
+            aspectRatioPresets: [
+              CropAspectRatioPreset.square, // 1:1
+              CropAspectRatioPreset.original, // Freeform
+              CropAspectRatioPreset.ratio5x4, // 4:5 Portrait
+              CropAspectRatioPreset.ratio4x3, // 4:3
+              CropAspectRatioPreset.ratio16x9, // 16:9
+            ],
           ),
         ],
       );
@@ -317,8 +444,8 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
                     ),
                     child: Row(
                       children: [
-                        _buildBottomTab(0, "Filter"),
-                        _buildBottomTab(1, "Adjust"),
+                        _buildBottomTab(0, "Filters"),
+                        _buildBottomTab(1, "Crop & Resize"),
                       ],
                     ),
                   ),
@@ -333,6 +460,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
   Widget _buildFilterSelector() {
     return ListView.builder(
       scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       itemCount: _filters.length,
       itemBuilder: (context, index) {
@@ -352,7 +480,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
                               ? Border.all(
                                 color: const Color(0xFFFF4B72),
                                 width: 2.5,
-                              ) // Brand Pink Border
+                              )
                               : Border.all(
                                 color: Colors.transparent,
                                 width: 2.5,
@@ -403,11 +531,11 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
-                ), // Gradient Circle
+                ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.zoom_out_map_rounded,
+                Icons.crop_rotate_rounded,
                 color: Colors.white,
                 size: 30,
               ),
@@ -415,7 +543,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Zoom & Adjust",
+            "Crop & Rotate",
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 12,
