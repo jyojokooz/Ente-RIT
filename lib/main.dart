@@ -1,4 +1,9 @@
 // ===============================
+// FILE NAME: main.dart
+// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\main.dart
+// ===============================
+
+// ===============================
 // FILE PATH: lib/main.dart
 // ===============================
 
@@ -12,19 +17,18 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Added for ultrafast theme loading
 
-// --- THEME PROVIDER ---
-import 'package:my_project/theme_provider.dart';
-
-// --- Screen Imports ---
-import 'package:my_project/auth/auth_gate.dart';
-import 'package:my_project/screens/main_screen.dart';
-import 'package:my_project/screens/splash_screen.dart';
-import 'package:my_project/auth/forgot_password_screen.dart';
-import 'package:my_project/screens/create_post_screen.dart';
-import 'package:my_project/screens/search_screen.dart';
-import 'package:my_project/screens/chat_list_screen.dart';
-import 'package:my_project/screens/requests_screen.dart';
-import 'package:my_project/screens/create_username_screen.dart';
+// --- FIXED IMPORTS: Using relative paths ---
+import 'theme_provider.dart';
+import 'auth/auth_gate.dart';
+import 'screens/main_screen.dart';
+import 'screens/splash_screen.dart';
+import 'auth/forgot_password_screen.dart';
+import 'screens/create_post_screen.dart';
+import 'screens/search_screen.dart';
+import 'screens/chat_list_screen.dart';
+import 'screens/requests_screen.dart';
+import 'screens/create_username_screen.dart';
+// --- END OF FIX ---
 
 import 'firebase_options.dart';
 

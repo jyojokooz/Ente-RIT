@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: main_screen.dart
-// FILE PATH: lib/screens/main_screen.dart
+// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\screens\main_screen.dart
 // ===============================
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,9 +9,12 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-import 'pages/pages.dart';
-import 'create_post_screen.dart';
-import '../widgets/notification_badge.dart';
+// --- FIXED IMPORTS ---
+// Using absolute package paths is more robust and solves the errors.
+import 'package:my_project/screens/pages/pages.dart';
+import 'package:my_project/screens/create_post_screen.dart';
+import 'package:my_project/widgets/notification_badge.dart';
+// --- END OF FIX ---
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -24,22 +27,36 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   DateTime? _lastPressedAt;
   late final List<Widget> _pages;
+  late final PageController _pageController; // Added PageController for swiping
 
   @override
   void initState() {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
+
+    // Initialize the PageController with the starting index
+    _pageController = PageController(initialPage: _currentIndex);
+
+    // Wrapped pages in KeepAlivePage to prevent them from reloading when swiped away
     _pages = [
-      const HomeScreen(),
-      const ExploreScreen(),
-      const ClassifyScreen(),
+      const KeepAlivePage(child: HomeScreen()),
+      const KeepAlivePage(child: ExploreScreen()),
+      const KeepAlivePage(child: ClassifyScreen()),
       if (currentUser != null)
-        ProfileScreen(userId: currentUser.uid)
+        KeepAlivePage(child: ProfileScreen(userId: currentUser.uid))
       else
-        const Center(child: Text("Error: User not found.")),
+        const KeepAlivePage(
+          child: Center(child: Text("Error: User not found.")),
+        ),
     ];
 
     _setupPushNotifications();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose(); // Dispose the controller to prevent memory leaks
+    super.dispose();
   }
 
   Future<void> _setupPushNotifications() async {
@@ -75,9 +92,21 @@ class _MainScreenState extends State<MainScreen> {
       );
       return;
     }
+
     int pageIndex = index > 2 ? index - 1 : index;
+
+    // Animate to the page when a bottom nav item is tapped
+    _pageController.animateToPage(
+      pageIndex,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  // Called when the user swipes left/right
+  void _onPageChanged(int index) {
     setState(() {
-      _currentIndex = pageIndex;
+      _currentIndex = index;
     });
   }
 
@@ -108,7 +137,15 @@ class _MainScreenState extends State<MainScreen> {
       },
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
-        body: IndexedStack(index: _currentIndex, children: _pages),
+
+        // Replaced IndexedStack with PageView for swipe gestures
+        body: PageView(
+          controller: _pageController,
+          onPageChanged: _onPageChanged,
+          physics:
+              const BouncingScrollPhysics(), // Gives a nice iOS-style bounce
+          children: _pages,
+        ),
 
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         floatingActionButton: GestureDetector(
@@ -194,5 +231,27 @@ class _MainScreenState extends State<MainScreen> {
         child: SizedBox(height: double.infinity, child: Center(child: icon)),
       ),
     );
+  }
+}
+
+// --- Helper Widget to maintain state across swipes ---
+// This prevents pages from reloading/losing scroll position when swiping away
+class KeepAlivePage extends StatefulWidget {
+  final Widget child;
+  const KeepAlivePage({super.key, required this.child});
+
+  @override
+  State<KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<KeepAlivePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Crucial step for AutomaticKeepAliveClientMixin
+    return widget.child;
   }
 }
