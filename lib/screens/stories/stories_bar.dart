@@ -1,17 +1,15 @@
 // ===============================
 // FILE NAME: stories_bar.dart
-// FILE PATH: lib/widgets/stories_bar.dart
+// FILE PATH: lib/screens/stories/stories_bar.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/stories_service.dart';
-import '../screens/story_view_screen.dart';
+
+import 'stories_connector.dart';
 
 class StoriesBar extends StatefulWidget {
   const StoriesBar({super.key});
@@ -20,78 +18,15 @@ class StoriesBar extends StatefulWidget {
   State<StoriesBar> createState() => _StoriesBarState();
 }
 
-class _StoriesBarState extends State<StoriesBar>
-    with SingleTickerProviderStateMixin {
+class _StoriesBarState extends State<StoriesBar> {
   final StoriesService _service = StoriesService();
   final currentUser = FirebaseAuth.instance.currentUser;
 
-  bool _isUploading = false;
-  bool _isPickerActive = false;
-
-  AnimationController? _rotationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 1),
-      vsync: this,
+  void _addStory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const StoryCreatorScreen()),
     );
-  }
-
-  @override
-  void dispose() {
-    _rotationController?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _addStory() async {
-    if (_isPickerActive || _isUploading) return;
-
-    setState(() => _isPickerActive = true);
-
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
-      if (image == null) return;
-
-      setState(() => _isUploading = true);
-      _rotationController?.repeat();
-
-      await _service.uploadStory(image);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Story added!"),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } on PlatformException catch (e) {
-      if (e.code == 'already_active') {
-        debugPrint("Gallery is already open.");
-      } else {
-        debugPrint("Error: $e");
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed: $e")));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isPickerActive = false;
-          _isUploading = false;
-        });
-        _rotationController?.stop();
-        _rotationController?.reset();
-      }
-    }
   }
 
   @override
@@ -113,7 +48,6 @@ class _StoriesBarState extends State<StoriesBar>
           }
 
           final myStories = groupedStories[currentUser?.uid] ?? [];
-
           final otherUsersStories =
               groupedStories.values
                   .where((list) => list.first.userId != currentUser?.uid)
@@ -121,6 +55,7 @@ class _StoriesBarState extends State<StoriesBar>
 
           return ListView.builder(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.only(left: 16),
             itemCount: 1 + otherUsersStories.length,
             itemBuilder: (context, index) {
@@ -136,14 +71,13 @@ class _StoriesBarState extends State<StoriesBar>
     );
   }
 
-  // --- THE "ME" BUTTON ---
   Widget _buildMeButton(List<Story> myStories) {
     final bool hasStory = myStories.isNotEmpty;
 
     const gradient = LinearGradient(
       colors: [Color(0xFF833AB4), Color(0xFFFF2D55), Color(0xFFFFC107)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
+      begin: Alignment.topRight,
+      end: Alignment.bottomLeft,
     );
 
     return Padding(
@@ -153,40 +87,21 @@ class _StoriesBarState extends State<StoriesBar>
           Stack(
             alignment: Alignment.center,
             children: [
-              if (_isUploading && _rotationController != null)
-                RotationTransition(
-                  turns: _rotationController!,
-                  child: Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
-                      gradient: gradient,
-                    ),
-                  ),
-                )
-              else if (hasStory)
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: gradient,
-                  ),
-                )
-              else
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: hasStory ? gradient : null,
+                  border:
+                      hasStory
+                          ? null
+                          : Border.all(color: Colors.grey.shade300, width: 1.5),
                 ),
-
+              ),
               GestureDetector(
                 onTap: () {
-                  if (hasStory && !_isUploading && !_isPickerActive) {
+                  if (hasStory) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -197,17 +112,19 @@ class _StoriesBarState extends State<StoriesBar>
                     _addStory();
                   }
                 },
+                // --- NEW: LONG PRESS TO ADD MULTIPLE STORIES ---
+                onLongPress: _addStory,
                 child: Container(
-                  width: 62,
-                  height: 62,
-                  decoration: BoxDecoration(
+                  width: 66,
+                  height: 66,
+                  decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(19),
+                    shape: BoxShape.circle,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(2.0),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(17),
+                      borderRadius: BorderRadius.circular(33),
                       child: StreamBuilder<DocumentSnapshot>(
                         stream:
                             FirebaseFirestore.instance
@@ -216,24 +133,19 @@ class _StoriesBarState extends State<StoriesBar>
                                 .snapshots(),
                         builder: (context, snapshot) {
                           ImageProvider? imageProvider;
-
                           if (snapshot.hasData && snapshot.data!.exists) {
                             final data =
                                 snapshot.data!.data() as Map<String, dynamic>;
                             final photoUrl = data['profilePhotoUrl'];
-
                             if (photoUrl != null && photoUrl.isNotEmpty) {
                               imageProvider = CachedNetworkImageProvider(
                                 photoUrl,
                               );
                             }
                           }
-
-                          // Default Avatar Fallback
                           imageProvider ??= const AssetImage(
                             'assets/default_avatar.png',
                           );
-
                           return Image(image: imageProvider, fit: BoxFit.cover);
                         },
                       ),
@@ -241,34 +153,31 @@ class _StoriesBarState extends State<StoriesBar>
                   ),
                 ),
               ),
-
-              if (!_isUploading)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: _addStory,
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3000F8),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 16,
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _addStory,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C6FB),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        width: 2.5,
                       ),
                     ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 16),
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            _isUploading ? "Posting..." : "Your Story",
+            "Your Story",
             style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -280,13 +189,11 @@ class _StoriesBarState extends State<StoriesBar>
     );
   }
 
-  // --- FRIEND STORY BUBBLE ---
   Widget _buildStoryBubble(BuildContext context, List<Story> stories) {
     final story = stories.last;
     final myUid = currentUser?.uid;
     final bool allSeen = stories.every((s) => s.viewers.contains(myUid));
 
-    // Determine correct image provider for friend
     ImageProvider imageProvider;
     if (story.userImage.isNotEmpty) {
       imageProvider = CachedNetworkImageProvider(story.userImage);
@@ -306,11 +213,10 @@ class _StoriesBarState extends State<StoriesBar>
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(2.5),
-              width: 68,
-              height: 68,
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                shape: BoxShape.circle,
                 gradient:
                     allSeen
                         ? null
@@ -320,22 +226,23 @@ class _StoriesBarState extends State<StoriesBar>
                             Color(0xFFFF2D55),
                             Color(0xFFFFC107),
                           ],
-                          begin: Alignment.bottomLeft,
-                          end: Alignment.topRight,
+                          begin: Alignment.topRight,
+                          end: Alignment.bottomLeft,
                         ),
                 color: allSeen ? Colors.grey.shade300 : null,
-                border:
-                    allSeen ? Border.all(color: Colors.grey.shade300) : null,
               ),
               child: Container(
-                padding: const EdgeInsets.all(2.5),
-                decoration: BoxDecoration(
+                margin: const EdgeInsets.all(2.5),
+                decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  shape: BoxShape.circle,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(17),
-                  child: Image(image: imageProvider, fit: BoxFit.cover),
+                child: Padding(
+                  padding: const EdgeInsets.all(2.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(33),
+                    child: Image(image: imageProvider, fit: BoxFit.cover),
+                  ),
                 ),
               ),
             ),

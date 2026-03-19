@@ -7,9 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../widgets/stories_bar.dart';
-
-// Import our new home components
+import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
 import '../../widgets/home/home_create_post_bar.dart';
 import '../../widgets/home/home_tabs.dart';
@@ -27,6 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String _displayName = 'User';
   String _profilePic = '';
   int _selectedTab = 0; // 0: Recent, 1: Trending
+
+  // Edge swipe detection variables
+  double _startX = 0.0;
+  bool _isSwiping = false;
 
   @override
   void initState() {
@@ -49,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshPosts() async {
-    setState(() {}); // Triggers StreamBuilder rebuild in HomePostFeed
+    setState(() {});
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
@@ -58,62 +60,94 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Custom colors matching the design
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: RefreshIndicator(
-        onRefresh: _refreshPosts,
-        color: const Color(0xFFFF3E8E),
-        backgroundColor: cardColor,
-        child: SafeArea(
-          child: CustomScrollView(
-            cacheExtent: 1000,
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              // 1. TOP APP BAR & GREETING
-              SliverToBoxAdapter(
-                child: HomeHeader(
-                  displayName: _displayName,
-                  isDark: isDark,
-                  textColor: textColor,
-                ),
+      // FIX: Use Listener instead of GestureDetector to prevent blocking PageView swipes!
+      body: Listener(
+        onPointerDown: (event) {
+          _startX = event.position.dx;
+          _isSwiping = true;
+        },
+        onPointerUp: (event) {
+          if (!_isSwiping) return;
+          final dx = event.position.dx - _startX;
+
+          // Trigger ONLY if swiped right by > 100px AND started from the far left edge (< 40px)
+          if (dx > 100 && _startX < 40) {
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder:
+                    (context, animation, secondaryAnimation) =>
+                        const StoryCreatorScreen(),
+                transitionsBuilder: (
+                  context,
+                  animation,
+                  secondaryAnimation,
+                  child,
+                ) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(-1.0, 0.0),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                    child: child,
+                  );
+                },
               ),
-
-              // 2. FAKE INPUT BOX
-              SliverToBoxAdapter(
-                child: HomeCreatePostBar(
-                  profilePic: _profilePic,
-                  isDark: isDark,
-                  cardColor: cardColor,
+            );
+          }
+          _isSwiping = false;
+        },
+        child: RefreshIndicator(
+          onRefresh: _refreshPosts,
+          color: const Color(0xFFFF3E8E),
+          backgroundColor: cardColor,
+          child: SafeArea(
+            child: CustomScrollView(
+              cacheExtent: 1000,
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: HomeHeader(
+                    displayName: _displayName,
+                    isDark: isDark,
+                    textColor: textColor,
+                  ),
                 ),
-              ),
-
-              // 3. STORIES BAR
-              const SliverToBoxAdapter(child: StoriesBar()),
-
-              // 4. SEGMENTED TABS
-              SliverToBoxAdapter(
-                child: HomeTabs(
-                  selectedTab: _selectedTab,
-                  onTabChanged: (index) {
-                    setState(() {
-                      _selectedTab = index;
-                    });
-                  },
-                  isDark: isDark,
-                  cardColor: cardColor,
+                SliverToBoxAdapter(
+                  child: HomeCreatePostBar(
+                    profilePic: _profilePic,
+                    isDark: isDark,
+                    cardColor: cardColor,
+                  ),
                 ),
-              ),
-
-              // 5. POST FEED
-              HomePostFeed(selectedTab: _selectedTab, textColor: textColor),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
+                const SliverToBoxAdapter(child: StoriesBar()),
+                SliverToBoxAdapter(
+                  child: HomeTabs(
+                    selectedTab: _selectedTab,
+                    onTabChanged: (index) {
+                      setState(() {
+                        _selectedTab = index;
+                      });
+                    },
+                    isDark: isDark,
+                    cardColor: cardColor,
+                  ),
+                ),
+                HomePostFeed(selectedTab: _selectedTab, textColor: textColor),
+                const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              ],
+            ),
           ),
         ),
       ),
