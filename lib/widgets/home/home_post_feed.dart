@@ -169,83 +169,137 @@ class _HomePostFeedState extends State<HomePostFeed> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
+    // 1. Stream the CURRENT USER to get their latest connections
+    return StreamBuilder<DocumentSnapshot>(
       stream:
           FirebaseFirestore.instance
-              .collection('posts')
-              .orderBy('timestamp', descending: true)
+              .collection('users')
+              .doc(user.uid)
               .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return SliverFillRemaining(
-            child: Center(
-              child: Text(
-                "Error loading posts",
-                style: TextStyle(color: widget.textColor),
-              ),
-            ),
-          );
-        }
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => const PostCardPlaceholder(),
-              childCount: 3,
-            ),
-          );
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Text(
-                'No posts yet.',
-                style: GoogleFonts.poppins(color: Colors.grey, fontSize: 16),
-              ),
-            ),
-          );
+      builder: (context, userSnap) {
+        if (!userSnap.hasData) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
-        // --- FIX IMPLEMENTED HERE ---
-        // Explicitly typed as List<DocumentSnapshot> to prevent assignment errors
-        List<DocumentSnapshot> posts = snapshot.data!.docs;
+        final myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
+        final List<dynamic> myConnections = myData['connections'] ?? [];
 
-        // Apply "Trending" sorting if the Trending tab is selected
-        if (widget.selectedTab == 1) {
-          // Re-assign the list as a modifiable copy so we can sort it
-          posts = List<DocumentSnapshot>.from(posts);
-          posts.sort((a, b) {
-            final aData = a.data() as Map<String, dynamic>;
-            final bData = b.data() as Map<String, dynamic>;
-            final aLikes = (aData['likes'] as List?)?.length ?? 0;
-            final bLikes = (bData['likes'] as List?)?.length ?? 0;
-            return bLikes.compareTo(aLikes);
-          });
-        }
-        // --- END OF FIX ---
-
-        return SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final postSnapshot = posts[index];
-            final postData = postSnapshot.data() as Map<String, dynamic>;
-
-            return PostCard(
-              key: ValueKey(postSnapshot.id),
-              postSnapshot: postSnapshot,
-              onCommentPressed: () => _onCommentTapped(postSnapshot.id),
-              onDeletePressed: () => _deletePost(postSnapshot.id),
-              onProfileTapped: () => _onProfileTapped(postData['userId'] ?? ''),
-              onLikePressed:
-                  () => _toggleLike(
-                    postSnapshot.id,
-                    postData['likes'] ?? [],
-                    postData['userId'] ?? '',
+        // 2. Stream the POSTS
+        return StreamBuilder<QuerySnapshot>(
+          stream:
+              FirebaseFirestore.instance
+                  .collection('posts')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return SliverFillRemaining(
+                child: Center(
+                  child: Text(
+                    "Error loading posts",
+                    style: TextStyle(color: widget.textColor),
                   ),
-              onEditPressed:
-                  () => _editPost(postSnapshot.id, postData['caption'] ?? ''),
+                ),
+              );
+            }
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => const PostCardPlaceholder(),
+                  childCount: 3,
+                ),
+              );
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    'No posts yet.',
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // --- STRICT PRIVACY FILTER LOGIC ---
+            List<DocumentSnapshot> visiblePosts =
+                snapshot.data!.docs.where((postDoc) {
+                  final data = postDoc.data() as Map<String, dynamic>;
+                  final authorId = data['userId'];
+
+                  // If the post lacks the 'isAuthorPrivate' field, it assumes false (public)
+                  final isPrivate = data['isAuthorPrivate'] ?? false;
+
+                  // 1. Always show my own posts
+                  if (authorId == user.uid) return true;
+
+                  // 2. If we are mingles (connections), always show their posts (even if private)
+                  if (myConnections.contains(authorId)) return true;
+
+                  // 3. If we are NOT mingles:
+                  // Hide if the account is private
+                  if (isPrivate) return false;
+
+                  // Show only if the account is public
+                  return true;
+                }).toList();
+
+            if (visiblePosts.isEmpty) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    'No visible posts available.',
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // Apply "Trending" sorting if the Trending tab is selected
+            if (widget.selectedTab == 1) {
+              visiblePosts.sort((a, b) {
+                final aData = a.data() as Map<String, dynamic>;
+                final bData = b.data() as Map<String, dynamic>;
+                final aLikes = (aData['likes'] as List?)?.length ?? 0;
+                final bLikes = (bData['likes'] as List?)?.length ?? 0;
+                return bLikes.compareTo(aLikes);
+              });
+            }
+
+            return SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final postSnapshot = visiblePosts[index];
+                final postData = postSnapshot.data() as Map<String, dynamic>;
+
+                return PostCard(
+                  key: ValueKey(postSnapshot.id),
+                  postSnapshot: postSnapshot,
+                  onCommentPressed: () => _onCommentTapped(postSnapshot.id),
+                  onDeletePressed: () => _deletePost(postSnapshot.id),
+                  onProfileTapped:
+                      () => _onProfileTapped(postData['userId'] ?? ''),
+                  onLikePressed:
+                      () => _toggleLike(
+                        postSnapshot.id,
+                        postData['likes'] ?? [],
+                        postData['userId'] ?? '',
+                      ),
+                  onEditPressed:
+                      () =>
+                          _editPost(postSnapshot.id, postData['caption'] ?? ''),
+                );
+              }, childCount: visiblePosts.length),
             );
-          }, childCount: posts.length),
+          },
         );
       },
     );

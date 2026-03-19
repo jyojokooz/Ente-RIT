@@ -149,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             targetUserSnapshot.id,
           );
 
-          // --- FIX: Trigger self-healing background validation ---
+          // Trigger self-healing background validation
           _validateAndHealConnections();
         }
         _userPosts = postsSnapshot.docs;
@@ -161,14 +161,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // --- SELF-HEALING FUNCTION FOR GHOST CONNECTIONS ---
+  // Self-healing function for ghost connections
   Future<void> _validateAndHealConnections() async {
     if (_connections.isEmpty) return;
 
     List<dynamic> validConnections = [];
     bool hasGhostUsers = false;
 
-    // Check if each connection actually exists in the database
     for (String connId in _connections) {
       try {
         final doc =
@@ -179,23 +178,20 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (doc.exists) {
           validConnections.add(connId);
         } else {
-          // Document missing! It's a ghost connection (deleted user)
           hasGhostUsers = true;
         }
       } catch (e) {
-        // If network error, keep it safe so we don't accidentally delete real friends
+        // If network error, keep it safe
         validConnections.add(connId);
       }
     }
 
-    // If ghost users were found, fix the UI count and heal the database
     if (hasGhostUsers) {
       if (mounted) {
         setState(() {
           _connections = validConnections;
         });
       }
-      // If viewing our own profile, permanently remove the dead link from Firestore
       if (isCurrentUser) {
         await FirebaseFirestore.instance
             .collection('users')
@@ -335,12 +331,28 @@ class _ProfileScreenState extends State<ProfileScreen>
     _loadAllData();
   }
 
+  // --- UPDATED TOGGLE PRIVACY METHOD ---
   Future<void> _togglePrivacy(bool isPrivate) async {
     try {
+      // 1. Update user profile
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUser.uid)
           .update({'isPrivate': isPrivate});
+
+      // 2. Update all posts by this user to reflect new privacy status
+      final postsQuery =
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .where('userId', isEqualTo: _currentUser.uid)
+              .get();
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (var doc in postsQuery.docs) {
+        batch.update(doc.reference, {'isAuthorPrivate': isPrivate});
+      }
+      await batch.commit();
+
       setState(() {
         _isPrivate = isPrivate;
       });

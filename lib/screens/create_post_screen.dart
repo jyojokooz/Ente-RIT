@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: create_post_screen.dart
+// FILE PATH: lib/screens/create_post_screen.dart
+// ===============================
+
 import 'dart:io';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -97,8 +102,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       // 1. Upload Video
       if (_postType == PostType.video && _mediaFiles.isNotEmpty) {
         final compressedVideo = await _compressVideo(_mediaFiles.first);
-        if (compressedVideo == null)
+        if (compressedVideo == null) {
           throw Exception("Video compression failed");
+        }
 
         if (_thumbnailFile != null) {
           setState(() => _uploadStatus = 'Uploading thumbnail...');
@@ -179,6 +185,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'taggedUsers': _taggedUsers,
         'commentsDisabled': _disableComments,
         if (_selectedMusic != null) 'music': _selectedMusic,
+        // 👇 NEW: Save the author's current privacy status to the post
+        'isAuthorPrivate': userData['isPrivate'] ?? false,
       };
 
       await FirebaseFirestore.instance.collection('posts').add(postData);

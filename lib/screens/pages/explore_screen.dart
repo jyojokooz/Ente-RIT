@@ -4,6 +4,7 @@
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <-- ADDED FOR PRIVACY FILTER
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -154,18 +155,15 @@ class ExploreScreen extends StatelessWidget {
             ),
           ),
 
-          // --- 2. TRENDING POSTS GRID ---
-          StreamBuilder<QuerySnapshot>(
-            // We fetch recent posts (e.g., last 30) and sort them locally by like count
-            // because Firestore doesn't natively support ordering by array length.
+          // --- 2. TRENDING POSTS GRID WITH PRIVACY FILTER ---
+          StreamBuilder<DocumentSnapshot>(
             stream:
                 FirebaseFirestore.instance
-                    .collection('posts')
-                    .orderBy('timestamp', descending: true)
-                    .limit(30)
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser!.uid)
                     .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+            builder: (context, userSnap) {
+              if (!userSnap.hasData) {
                 return const SliverFillRemaining(
                   child: Center(
                     child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
@@ -173,162 +171,229 @@ class ExploreScreen extends StatelessWidget {
                 );
               }
 
-              if (snapshot.hasError) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Text(
-                      "Error loading trending posts",
-                      style: TextStyle(color: subtitleColor),
-                    ),
-                  ),
-                );
-              }
+              final myData =
+                  userSnap.data!.data() as Map<String, dynamic>? ?? {};
+              final List<dynamic> myConnections = myData['connections'] ?? [];
 
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.grid_view_rounded,
-                          size: 50,
-                          color: isDark ? Colors.white24 : Colors.black12,
+              return StreamBuilder<QuerySnapshot>(
+                // Fetch recent posts and limit slightly higher since some will be filtered out
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .orderBy('timestamp', descending: true)
+                        .limit(50)
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SliverFillRemaining(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF3E8E),
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No trending posts yet.',
-                          style: GoogleFonts.poppins(color: subtitleColor),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              // Sort posts by the number of likes (descending)
-              final docs = snapshot.data!.docs.toList();
-              docs.sort((a, b) {
-                final aData = a.data() as Map<String, dynamic>;
-                final bData = b.data() as Map<String, dynamic>;
-
-                final aLikes = (aData['likes'] as List<dynamic>? ?? []).length;
-                final bLikes = (bData['likes'] as List<dynamic>? ?? []).length;
-
-                return bLikes.compareTo(aLikes); // Descending order
-              });
-
-              return SliverPadding(
-                padding: const EdgeInsets.only(bottom: 80),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                    childAspectRatio: 1.0,
-                  ),
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final postDoc = docs[index];
-                    final data = postDoc.data() as Map<String, dynamic>;
-                    final likesCount =
-                        (data['likes'] as List<dynamic>? ?? []).length;
-
-                    // Extract image or video thumbnail
-                    final mediaUrl =
-                        data['postType'] == 'video'
-                            ? data['postThumbnailUrl']
-                            : (data['postMediaUrl'] ?? data['postImageUrl']);
-
-                    // If a post has no image/video, just skip or show placeholder
-                    if (mediaUrl == null || mediaUrl.isEmpty) {
-                      return Container(color: cardColor);
-                    }
-
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    PostDetailScreen(postId: postDoc.id),
-                          ),
-                        );
-                      },
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          CachedNetworkImage(
-                            imageUrl: mediaUrl,
-                            fit: BoxFit.cover,
-                            placeholder:
-                                (c, u) => Container(
-                                  color:
-                                      isDark
-                                          ? Colors.white10
-                                          : Colors.grey.shade200,
-                                ),
-                            errorWidget:
-                                (c, u, e) => Container(
-                                  color: cardColor,
-                                  child: const Icon(
-                                    Icons.error,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                          ),
-
-                          // Video Icon overlay
-                          if (data['postType'] == 'video')
-                            const Positioned(
-                              top: 6,
-                              right: 6,
-                              child: Icon(
-                                Icons.play_circle_fill,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-
-                          // Like Count overlay
-                          Positioned(
-                            bottom: 6,
-                            left: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.favorite,
-                                    color: Colors.white,
-                                    size: 12,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    likesCount.toString(),
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     );
-                  }, childCount: docs.length),
-                ),
+                  }
+
+                  if (snapshot.hasError) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          "Error loading trending posts",
+                          style: TextStyle(color: subtitleColor),
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.grid_view_rounded,
+                              size: 50,
+                              color: isDark ? Colors.white24 : Colors.black12,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No trending posts yet.',
+                              style: GoogleFonts.poppins(color: subtitleColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  // --- FILTER OUT PRIVATE STRANGER POSTS ---
+                  final visibleDocs =
+                      snapshot.data!.docs.where((postDoc) {
+                        final data = postDoc.data() as Map<String, dynamic>;
+                        final authorId = data['userId'];
+                        final isPrivate = data['isAuthorPrivate'] ?? false;
+
+                        // Always see your own posts
+                        if (authorId == FirebaseAuth.instance.currentUser!.uid)
+                          return true;
+                        // Always see public posts
+                        if (!isPrivate) return true;
+                        // See private posts ONLY if connected
+                        return myConnections.contains(authorId);
+                      }).toList();
+
+                  // Sort remaining visible posts by the number of likes (descending)
+                  visibleDocs.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+
+                    final aLikes =
+                        (aData['likes'] as List<dynamic>? ?? []).length;
+                    final bLikes =
+                        (bData['likes'] as List<dynamic>? ?? []).length;
+
+                    return bLikes.compareTo(aLikes); // Descending order
+                  });
+
+                  // If filtering removed everything, show empty state
+                  if (visibleDocs.isEmpty) {
+                    return SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.grid_view_rounded,
+                              size: 50,
+                              color: isDark ? Colors.white24 : Colors.black12,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No trending posts available.',
+                              style: GoogleFonts.poppins(color: subtitleColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return SliverPadding(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 2,
+                            mainAxisSpacing: 2,
+                            childAspectRatio: 1.0,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final postDoc = visibleDocs[index];
+                        final data = postDoc.data() as Map<String, dynamic>;
+                        final likesCount =
+                            (data['likes'] as List<dynamic>? ?? []).length;
+
+                        // Extract image or video thumbnail
+                        final mediaUrl =
+                            data['postType'] == 'video'
+                                ? data['postThumbnailUrl']
+                                : (data['postMediaUrl'] ??
+                                    data['postImageUrl']);
+
+                        // If a post has no image/video, just skip or show placeholder
+                        if (mediaUrl == null || mediaUrl.isEmpty) {
+                          return Container(color: cardColor);
+                        }
+
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) =>
+                                        PostDetailScreen(postId: postDoc.id),
+                              ),
+                            );
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CachedNetworkImage(
+                                imageUrl: mediaUrl,
+                                fit: BoxFit.cover,
+                                placeholder:
+                                    (c, u) => Container(
+                                      color:
+                                          isDark
+                                              ? Colors.white10
+                                              : Colors.grey.shade200,
+                                    ),
+                                errorWidget:
+                                    (c, u, e) => Container(
+                                      color: cardColor,
+                                      child: const Icon(
+                                        Icons.error,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                              ),
+
+                              // Video Icon overlay
+                              if (data['postType'] == 'video')
+                                const Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: Icon(
+                                    Icons.play_circle_fill,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+
+                              // Like Count overlay
+                              Positioned(
+                                bottom: 6,
+                                left: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.favorite,
+                                        color: Colors.white,
+                                        size: 12,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        likesCount.toString(),
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }, childCount: visibleDocs.length),
+                    ),
+                  );
+                },
               );
             },
           ),
