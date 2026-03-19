@@ -99,6 +99,8 @@ dependencies:
   firebase_messaging: 14.7.10
   sensors_plus: ^7.0.0
   flutter_native_splash: ^2.4.7
+  image_cropper: ^11.0.0
+  photo_manager: ^3.9.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
