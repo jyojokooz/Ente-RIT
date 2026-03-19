@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: classify_screen.dart
-// FILE PATH: lib/screens/pages/classify_screen.dart
-// ===============================
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,7 +36,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Custom colors matching the "About Life" design
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.white54 : Colors.black54;
@@ -149,14 +143,14 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                         horizontal: 20,
                         vertical: 10,
                       ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio:
-                                1.05, // Slightly taller for breathing room
-                          ),
+                      // --- UPDATED GRID DELEGATE ---
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4, // 4 items per row
+                        crossAxisSpacing: 12, // Reduced spacing
+                        mainAxisSpacing: 12, // Reduced spacing
+                        childAspectRatio:
+                            0.8, // Adjusted to 0.8 for slightly taller cards preventing overflow
+                      ),
                       itemCount: visibleDocs.length,
                       itemBuilder: (context, index) {
                         final id = visibleDocs[index].id;
@@ -197,7 +191,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
   }
 }
 
-// --- CUSTOM MODERN CARD WIDGET ---
+// --- CUSTOM MODERN CARD WIDGET (UPDATED FOR SMALLER SIZE) ---
 class _ModernFeatureCard extends StatefulWidget {
   final String label;
   final IconData icon;
@@ -258,9 +252,7 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
         child: Container(
           decoration: BoxDecoration(
             color: cardColor,
-            borderRadius: BorderRadius.circular(
-              30,
-            ), // Heavy rounding matching the reference
+            borderRadius: BorderRadius.circular(24), // Reduced rounding
             boxShadow: [
               if (!widget.isDark)
                 BoxShadow(
@@ -276,8 +268,8 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
             children: [
               // Icon Container with vibrant tinted background
               Container(
-                height: 56,
-                width: 56,
+                height: 48, // Reduced height
+                width: 48, // Reduced width
                 decoration: BoxDecoration(
                   color: widget.color.withOpacity(0.15), // Tinted background
                   shape: BoxShape.circle,
@@ -285,23 +277,27 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
                 child: Icon(
                   widget.icon,
                   color: widget.color, // Vibrant icon color
-                  size: 28,
+                  size: 24, // Reduced icon size
                 ),
               ),
-              const SizedBox(height: 16),
-              // Label
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Text(
-                  widget.label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                    height: 1.2,
+              const SizedBox(height: 8), // Reduced spacing
+              // Label wrapped in flexible to prevent any strict strict boundaries from overflowing
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4.0,
+                  ), // Reduced padding
+                  child: Text(
+                    widget.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11, // Reduced font size
+                      fontWeight: FontWeight.w500, // Slightly less bold
+                      color: textColor,
+                      height: 1.2,
+                    ),
                   ),
                 ),
               ),
