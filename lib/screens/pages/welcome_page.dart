@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: welcome_page.dart
-// FILE PATH: lib/screens/pages/welcome_page.dart
-// ===============================
-
 // ignore_for_file: prefer_const_constructors_in_immutables
 
 import 'package:flutter/material.dart';
@@ -116,11 +111,12 @@ class _WelcomePageState extends State<WelcomePage>
 
   @override
   Widget build(BuildContext context) {
-    const Color brandPurple = Color(0xFF9983F3);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bgColor = isDark ? Colors.black : const Color(0xFF9983F3);
     final Size screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: brandPurple,
+      backgroundColor: bgColor,
       body: Stack(
         alignment: Alignment.center,
         children: [
@@ -215,19 +211,33 @@ class _WelcomePageState extends State<WelcomePage>
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // FIX: Reduced width from 250 to 220
-                        Image.asset(
-                          'assets/ente_rit.png',
-                          width: 220,
-                          errorBuilder:
-                              (c, e, s) => Text(
-                                "Ente RIT",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 50,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                        // --- BRAND GRADIENT TEXT (Replaced Image) ---
+                        ShaderMask(
+                          blendMode: BlendMode.srcIn,
+                          shaderCallback:
+                              (bounds) => const LinearGradient(
+                                colors: [
+                                  Color(0xFF9983F3),
+                                  Color(0xFFFF4B72),
+                                ], // Violet to Pink
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ).createShader(
+                                Rect.fromLTWH(
+                                  0,
+                                  0,
+                                  bounds.width,
+                                  bounds.height,
                                 ),
                               ),
+                          child: Text(
+                            "Ente RIT",
+                            style: GoogleFonts.satisfy(
+                              fontSize: 65,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
 
                         FadeTransition(

@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../screens/requests_screen.dart';
 
-class ConnectionRequestsHeader extends StatefulWidget {
+class ConnectionRequestsHeader extends StatelessWidget {
   final User currentUser;
   final bool isDark;
   final Color cardColor;
@@ -24,87 +24,21 @@ class ConnectionRequestsHeader extends StatefulWidget {
   });
 
   @override
-  State<ConnectionRequestsHeader> createState() =>
-      _ConnectionRequestsHeaderState();
-}
-
-class _ConnectionRequestsHeaderState extends State<ConnectionRequestsHeader> {
-  List<dynamic> _validRequests = [];
-  bool _isCheckingGhosts = false;
-
-  // This function checks if the requests are actually valid (the users still exist)
-  Future<void> _validateAndHealRequests(List<dynamic> rawRequests) async {
-    if (rawRequests.isEmpty) {
-      if (mounted) setState(() => _validRequests = []);
-      return;
-    }
-
-    if (_isCheckingGhosts) return; // Prevent spamming
-    _isCheckingGhosts = true;
-
-    List<dynamic> validatedList = [];
-    bool hasGhostUsers = false;
-
-    for (String reqId in rawRequests) {
-      try {
-        final doc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(reqId)
-                .get();
-        if (doc.exists) {
-          validatedList.add(reqId);
-        } else {
-          hasGhostUsers = true;
-        }
-      } catch (e) {
-        // Assume valid on network error to be safe
-        validatedList.add(reqId);
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _validRequests = validatedList;
-        _isCheckingGhosts = false;
-      });
-    }
-
-    // Auto-heal the database if ghost users were found
-    if (hasGhostUsers) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.currentUser.uid)
-          .update({'receivedRequests': validatedList});
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream:
           FirebaseFirestore.instance
               .collection('users')
-              .doc(widget.currentUser.uid)
+              .doc(currentUser.uid)
               .snapshots(),
       builder: (context, userSnapshot) {
+        // We only care about received requests here now
         if (!userSnapshot.hasData) return const SizedBox.shrink();
 
         final userData =
             userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-        final List<dynamic> rawRequests = userData['receivedRequests'] ?? [];
-
-        // Trigger the ghost check without blocking the UI
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (rawRequests.length != _validRequests.length &&
-              !_isCheckingGhosts) {
-            _validateAndHealRequests(rawRequests);
-          }
-        });
-
-        // Use the validated list if we have checked, otherwise fallback to raw initially
-        final displayRequests =
-            _isCheckingGhosts ? _validRequests : rawRequests;
+        final List<dynamic> receivedRequests =
+            userData['receivedRequests'] ?? [];
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -114,38 +48,36 @@ class _ConnectionRequestsHeaderState extends State<ConnectionRequestsHeader> {
               Text(
                 "Connection Requests",
                 style: GoogleFonts.poppins(
-                  color: widget.textColor,
+                  color: textColor,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 12),
 
-              if (displayRequests.isEmpty)
+              if (receivedRequests.isEmpty)
                 // Empty State for Requests
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: widget.cardColor,
+                    color: cardColor,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color:
-                          widget.isDark ? Colors.white10 : Colors.grey.shade200,
+                      color: isDark ? Colors.white10 : Colors.grey.shade200,
                     ),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.person_add_disabled_rounded,
-                        color: widget.isDark ? Colors.white30 : Colors.black38,
+                        color: isDark ? Colors.white30 : Colors.black38,
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        "No requests came.",
+                        "No pending requests",
                         style: GoogleFonts.poppins(
-                          color:
-                              widget.isDark ? Colors.white54 : Colors.black54,
+                          color: isDark ? Colors.white54 : Colors.black54,
                           fontSize: 14,
                         ),
                       ),
@@ -166,10 +98,10 @@ class _ConnectionRequestsHeaderState extends State<ConnectionRequestsHeader> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: widget.cardColor,
+                      color: cardColor,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
-                        if (!widget.isDark)
+                        if (!isDark)
                           BoxShadow(
                             color: Colors.black.withOpacity(0.03),
                             blurRadius: 10,
@@ -202,11 +134,11 @@ class _ConnectionRequestsHeaderState extends State<ConnectionRequestsHeader> {
                                 style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 15,
-                                  color: widget.textColor,
+                                  color: textColor,
                                 ),
                               ),
                               Text(
-                                "You have ${displayRequests.length} new request${displayRequests.length > 1 ? 's' : ''}",
+                                "You have ${receivedRequests.length} new request${receivedRequests.length > 1 ? 's' : ''}",
                                 style: GoogleFonts.poppins(
                                   color: const Color(0xFFFF3E8E),
                                   fontSize: 12,
@@ -225,20 +157,6 @@ class _ConnectionRequestsHeaderState extends State<ConnectionRequestsHeader> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 16),
-              Divider(
-                color: widget.isDark ? Colors.white10 : Colors.black12,
-                height: 1,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                "Recent Activity",
-                style: GoogleFonts.poppins(
-                  color: widget.textColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ],
           ),
         );

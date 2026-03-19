@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: splash_screen.dart
-// FILE PATH: lib/screens/splash_screen.dart
-// ===============================
-
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
@@ -51,12 +46,12 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 80),
     )..repeat();
 
-    // --- ANIMATION DEFINITIONS (Copied from WelcomePage) ---
+    // --- ANIMATION DEFINITIONS ---
 
     // Icon slides to the top-right-ish area
     _iconSlide = Tween<Offset>(
       begin: const Offset(0.5, -2.0),
-      end: const Offset(0.5, -0.6), // Matches Welcome Page Position
+      end: const Offset(0.5, -0.6),
     ).animate(
       CurvedAnimation(
         parent: _mainController,
@@ -99,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // Fade out purple background to white at the end
+    // Fade out background to scaffold background at the end
     _screenFadeOut = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _mainController,
@@ -140,24 +135,25 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    const Color brandPurple = Color(0xFF9983F3);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bgColor = isDark ? Colors.black : const Color(0xFF9983F3);
     final Size screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Purple Background & Content (Fades out at end)
+          // Dynamic Background & Content (Fades out at end)
           FadeTransition(
             opacity: _screenFadeOut,
             child: Container(
-              color: brandPurple,
+              color: bgColor,
               width: double.infinity,
               height: double.infinity,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // --- SPARKLES (Exact coordinates from WelcomePage) ---
+                  // --- SPARKLES ---
                   Sparkle(
                     animation: _loopingController,
                     top: screenSize.height * 0.1,
@@ -252,19 +248,33 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
-                                // Main Text Image
-                                Image.asset(
-                                  'assets/ente_rit.png',
-                                  width: 220, // Exact width
-                                  errorBuilder:
-                                      (c, e, s) => Text(
-                                        "Ente RIT",
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 50,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
+                                // --- BRAND GRADIENT TEXT (Replaced Image) ---
+                                ShaderMask(
+                                  blendMode: BlendMode.srcIn,
+                                  shaderCallback:
+                                      (bounds) => const LinearGradient(
+                                        colors: [
+                                          Color(0xFF9983F3),
+                                          Color(0xFFFF4B72),
+                                        ], // Violet to Pink
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ).createShader(
+                                        Rect.fromLTWH(
+                                          0,
+                                          0,
+                                          bounds.width,
+                                          bounds.height,
                                         ),
                                       ),
+                                  child: Text(
+                                    "Ente RIT",
+                                    style: GoogleFonts.satisfy(
+                                      fontSize: 65,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
 
                                 // Droplets and Lines
@@ -354,7 +364,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-// --- PAINTERS (Copied directly from WelcomePage) ---
+// --- PAINTERS ---
 
 class Sparkle extends StatelessWidget {
   final Animation<double> animation;

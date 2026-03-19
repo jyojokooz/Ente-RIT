@@ -9,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'post_detail_screen.dart';
 import 'pages/profile_screen.dart';
@@ -28,35 +29,60 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final currentUser = FirebaseAuth.instance.currentUser!;
-  // State for suggestions is now managed here for refresh
   late Future<List<DocumentSnapshot>> _suggestedUsersFuture;
 
   @override
   void initState() {
     super.initState();
     _markAllAsRead();
-    // Initialize the future for suggestions
     _suggestedUsersFuture = _fetchSuggestedUsers();
   }
 
-  // --- NEW: REFRESH FUNCTION ---
   Future<void> _handleRefresh() async {
-    // Re-fetch data for all dynamic parts of the screen
     final newSuggestedUsersFuture = _fetchSuggestedUsers();
-
-    // Using setState will cause the FutureBuilder for suggestions to rebuild
-    // with the new future. The StreamBuilders will automatically get new data.
     setState(() {
       _suggestedUsersFuture = newSuggestedUsersFuture;
     });
-
-    // We can also re-mark as read, just in case a notification came in
-    // while the user was on the screen.
     await _markAllAsRead();
   }
 
+  Future<void> _cancelSentRequest(String targetUserId) async {
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      final meRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid);
+      final themRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(targetUserId);
+
+      batch.update(meRef, {
+        'sentRequests': FieldValue.arrayRemove([targetUserId]),
+      });
+      batch.update(themRef, {
+        'receivedRequests': FieldValue.arrayRemove([currentUser.uid]),
+      });
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Request cancelled."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to cancel request: $e")));
+      }
+    }
+  }
+
   Future<void> _markAllAsRead() async {
-    // Give a slight delay to avoid conflicts on initial load
     await Future.delayed(const Duration(milliseconds: 500));
     try {
       final unreadQuery =
@@ -78,10 +104,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  // This function now just fetches the data, it doesn't set state directly
   Future<List<DocumentSnapshot>> _fetchSuggestedUsers() async {
     try {
-      // Fetch a different set of users on refresh for a dynamic feel
       final snap =
           await FirebaseFirestore.instance.collection('users').limit(15).get();
       return snap.docs.where((doc) => doc.id != currentUser.uid).toList();
@@ -90,6 +114,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  // --- THIS FUNCTION IS NOW USED AGAIN ---
   Future<void> _handleNotificationTap(DocumentSnapshot notificationDoc) async {
     final data = notificationDoc.data() as Map<String, dynamic>;
 
@@ -168,138 +193,293 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ),
       ),
-      // Wrap the entire body in a RefreshIndicator
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
         color: const Color(0xFFFF3E8E),
         backgroundColor: cardColor,
-        child: StreamBuilder<QuerySnapshot>(
-          stream:
-              FirebaseFirestore.instance
-                  .collection('notifications')
-                  .where('userId', isEqualTo: currentUser.uid)
-                  .orderBy('timestamp', descending: true)
-                  .limit(20)
-                  .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
-              );
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  "Something went wrong",
-                  style: TextStyle(color: textColor),
-                ),
-              );
-            }
-
-            List<DocumentSnapshot> notifications = [];
-            if (snapshot.hasData) {
-              notifications =
-                  snapshot.data!.docs
-                      .where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        return data['type'] != 'message';
-                      })
-                      .take(10)
-                      .toList();
-            }
-
-            return CustomScrollView(
-              // Add physics to ensure the refresh indicator always works
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            // 1. CONNECTION REQUESTS HEADER (Received)
+            SliverToBoxAdapter(
+              child: ConnectionRequestsHeader(
+                currentUser: currentUser,
+                isDark: isDark,
+                cardColor: cardColor,
+                textColor: textColor,
               ),
-              slivers: [
-                // 1. CONNECTION REQUESTS HEADER
-                SliverToBoxAdapter(
-                  child: ConnectionRequestsHeader(
-                    currentUser: currentUser,
-                    isDark: isDark,
-                    cardColor: cardColor,
-                    textColor: textColor,
-                  ),
-                ),
+            ),
 
-                // 2. NOTIFICATIONS LIST OR EMPTY STATE
-                if (notifications.isEmpty)
-                  SliverToBoxAdapter(
-                    child: EmptyActivityState(
-                      isDark: isDark,
-                      textColor: textColor,
-                    ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final notification = notifications[index];
-                        return NotificationTile(
-                          key: ValueKey(notification.id),
-                          notificationDoc: notification,
-                          onTap: () => _handleNotificationTap(notification),
-                          isDark: isDark,
-                          cardColor: cardColor,
-                          textColor: textColor,
-                        );
-                      }, childCount: notifications.length),
-                    ),
-                  ),
+            // 2. SENT REQUESTS SECTION (New)
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(currentUser.uid)
+                      .snapshots(),
+              builder: (context, userSnapshot) {
+                if (!userSnapshot.hasData)
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
 
-                // 3. USER SUGGESTIONS HEADER
-                SliverToBoxAdapter(
+                final userData =
+                    userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+                final List<dynamic> sentRequests =
+                    userData['sentRequests'] ?? [];
+
+                if (sentRequests.isEmpty)
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+                return SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Divider(
-                          color: isDark ? Colors.white10 : Colors.black12,
-                          height: 1,
-                        ),
-                        const SizedBox(height: 24),
                         Text(
-                          "Suggested for you",
+                          "Sent Requests",
                           style: GoogleFonts.poppins(
                             color: textColor,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "People you may know on campus",
-                          style: GoogleFonts.poppins(
-                            color: isDark ? Colors.white54 : Colors.black54,
-                            fontSize: 13,
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 70,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: sentRequests.length,
+                            itemBuilder: (context, index) {
+                              return _buildSentRequestBubble(
+                                sentRequests[index],
+                                isDark,
+                                textColor,
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                );
+              },
+            ),
 
-                // 4. USER SUGGESTIONS HORIZONTAL LIST
-                SliverToBoxAdapter(
-                  child: SuggestedUsersList(
-                    suggestedUsersFuture: _suggestedUsersFuture,
-                    isDark: isDark,
-                    cardColor: cardColor,
-                    textColor: textColor,
+            // 3. RECENT ACTIVITY HEADER
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Divider(
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      height: 1,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      "Recent Activity",
+                      style: GoogleFonts.poppins(
+                        color: textColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 4. NOTIFICATIONS LIST
+            StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('notifications')
+                      .where('userId', isEqualTo: currentUser.uid)
+                      .orderBy('timestamp', descending: true)
+                      .limit(10)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const SliverToBoxAdapter(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFF3E8E),
+                      ),
+                    ),
+                  );
+                }
+                List<DocumentSnapshot> notifications = [];
+                if (snapshot.hasData) {
+                  notifications =
+                      snapshot.data!.docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        return data['type'] != 'message';
+                      }).toList();
+                }
+
+                if (notifications.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: EmptyActivityState(
+                      isDark: isDark,
+                      textColor: textColor,
+                    ),
+                  );
+                }
+
+                return SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final notification = notifications[index];
+                      // --- THIS IS THE FIX: Pass all required arguments to NotificationTile ---
+                      return NotificationTile(
+                        key: ValueKey(notification.id),
+                        notificationDoc: notification,
+                        onTap: () => _handleNotificationTap(notification),
+                        isDark: isDark,
+                        cardColor: cardColor,
+                        textColor: textColor,
+                      );
+                      // --- END OF FIX ---
+                    }, childCount: notifications.length),
                   ),
-                ),
+                );
+              },
+            ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 40)),
-              ],
-            );
-          },
+            // 5. USER SUGGESTIONS HEADER
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Divider(
+                      color: isDark ? Colors.white10 : Colors.black12,
+                      height: 1,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      "Suggested for you",
+                      style: GoogleFonts.poppins(
+                        color: textColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "People you may know on campus",
+                      style: GoogleFonts.poppins(
+                        color: isDark ? Colors.white54 : Colors.black54,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 6. USER SUGGESTIONS HORIZONTAL LIST
+            SliverToBoxAdapter(
+              child: SuggestedUsersList(
+                suggestedUsersFuture: _suggestedUsersFuture,
+                isDark: isDark,
+                cardColor: cardColor,
+                textColor: textColor,
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSentRequestBubble(String userId, bool isDark, Color textColor) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final userData = snapshot.data!.data() as Map<String, dynamic>;
+        final photoUrl = userData['profilePhotoUrl'] ?? '';
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 12.0),
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfileScreen(userId: userId),
+                          ),
+                        ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor:
+                          isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      backgroundImage:
+                          photoUrl.isNotEmpty
+                              ? CachedNetworkImageProvider(photoUrl)
+                              : null,
+                      child: photoUrl.isEmpty ? const Icon(Icons.person) : null,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: -5,
+                    right: -5,
+                    child: GestureDetector(
+                      onTap: () => _cancelSentRequest(userId),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color:
+                              isDark
+                                  ? const Color(0xFF161618)
+                                  : const Color(0xFFF8F9FE),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.cancel,
+                          color: Colors.redAccent.shade100,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  userData['displayName']?.split(' ').first ?? 'User',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: textColor.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
