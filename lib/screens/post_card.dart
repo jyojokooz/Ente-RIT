@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: post_card.dart
 // FILE PATH: lib/screens/post_card.dart
 // ===============================
 
@@ -147,26 +146,23 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // Stops music if the user scrolls the post off-screen
   void _onVisibilityChanged(VisibilityInfo info) {
-    if (info.visibleFraction == 0 && _isPlayingMusic) {
+    if (info.visibleFraction < 0.5 && _isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
       if (mounted) setState(() => _isPlayingMusic = false);
     }
   }
 
   void _triggerLikeButtonPress() {
-    // 1. Optimistic UI Update
     setState(() {
       _isLiked = !_isLiked;
       _likesCount += _isLiked ? 1 : -1;
     });
 
-    // 2. Play Animation
     if (_likeController != null) {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
-
-    // 3. Trigger Backend logic
     widget.onLikePressed();
   }
 
@@ -186,7 +182,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     if (postData == null) return const SizedBox.shrink();
 
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final cardBgColor = isDark ? const Color(0xFF252528) : Colors.white;
@@ -213,6 +208,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final bool isAuthor = postData['userId'] == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
     final int commentsCount = postData['comments'] ?? 0;
+
+    // Extract music data
+    final Map<String, dynamic>? musicData = postData['music'];
 
     return VisibilityDetector(
       key: Key('post-vis-${widget.postSnapshot.id}'),
@@ -324,7 +322,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(24),
               child: Stack(
                 children: [
-                  // Background: Image OR Gradient
+                  // Background Image/Video
                   if (mediaUrls.isNotEmpty)
                     GestureDetector(
                       onTap: () {
@@ -335,10 +333,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                               builder:
                                   (_) => FullScreenVideoPlayer(
                                     videoUrl: mediaUrls.first,
-                                    postId:
-                                        widget
-                                            .postSnapshot
-                                            .id, // <-- ADDED POST ID HERE
+                                    postId: widget.postSnapshot.id,
                                   ),
                             ),
                           );
@@ -350,10 +345,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   (_) => FullScreenImageViewer(
                                     imageUrl: mediaUrls.first,
                                     heroTag: 'post_${widget.postSnapshot.id}',
-                                    postId:
-                                        widget
-                                            .postSnapshot
-                                            .id, // <-- ADDED POST ID HERE
+                                    postId: widget.postSnapshot.id,
                                   ),
                             ),
                           );
@@ -411,6 +403,69 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
+
+                  // --- MUSIC PILL OVERLAY (Only if image and music data exists) ---
+                  if (postType == 'image' &&
+                      musicData != null &&
+                      musicData['previewUrl'] != null)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: GestureDetector(
+                        onTap: () {
+                          GlobalAudioHandler.playOrPause(
+                            widget.postSnapshot.id,
+                            musicData['previewUrl'],
+                            (isPlaying) {
+                              if (mounted)
+                                setState(() => _isPlayingMusic = isPlaying);
+                            },
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          constraints: const BoxConstraints(
+                            maxWidth: 160,
+                          ), // Prevents overflowing
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isPlayingMusic
+                                    ? Icons.graphic_eq
+                                    : Icons.music_note_rounded,
+                                color:
+                                    _isPlayingMusic
+                                        ? const Color(0xFF00C6FB)
+                                        : Colors.white,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  musicData['trackName'] ?? 'Music',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // Caption Text
                   Positioned(

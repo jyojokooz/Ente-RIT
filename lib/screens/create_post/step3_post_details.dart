@@ -1,7 +1,10 @@
+// ===============================
+// FILE PATH: lib/screens/create_post/step3_post_details.dart
+// ===============================
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// FIX: Added ../ to properly locate the main screen in the parent folder
 import '../create_post_screen.dart';
 import 'music_search_sheet.dart';
 
@@ -156,7 +159,6 @@ class Step3PostDetails extends StatelessWidget {
                       onUpdateSettings(val);
                       Navigator.pop(ctx);
                     },
-                    // FIX: Replaced deprecated activeColor with activeThumbColor & activeTrackColor
                     activeThumbColor: Colors.blueAccent,
                     activeTrackColor: Colors.blueAccent.withAlpha(100),
                     inactiveThumbColor: Colors.grey,
@@ -276,39 +278,40 @@ class Step3PostDetails extends StatelessWidget {
                         location.isNotEmpty ? Colors.blueAccent : Colors.white,
                   ),
 
-                  // MUSIC TILE
-                  _buildDetailTile(
-                    Icons.music_note_outlined,
-                    selectedMusic != null
-                        ? "${selectedMusic!['trackName']}"
-                        : "Add music",
-                    () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: Colors.grey.shade900,
-                        isScrollControlled: true,
-                        builder:
-                            (ctx) => MusicSearchSheet(
-                              onMusicSelected: onUpdateMusic,
-                            ),
-                      );
-                    },
-                    titleColor:
-                        selectedMusic != null
-                            ? Colors.blueAccent
-                            : Colors.white,
-                    trailing:
-                        selectedMusic != null
-                            ? GestureDetector(
-                              onTap: () => onUpdateMusic(null),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white54,
-                                size: 20,
+                  // MUSIC TILE (ONLY SHOWN FOR IMAGES)
+                  if (postType == PostType.image)
+                    _buildDetailTile(
+                      Icons.music_note_outlined,
+                      selectedMusic != null
+                          ? "${selectedMusic!['trackName']}"
+                          : "Add music",
+                      () {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: Colors.grey.shade900,
+                          isScrollControlled: true,
+                          builder:
+                              (ctx) => MusicSearchSheet(
+                                onMusicSelected: onUpdateMusic,
                               ),
-                            )
-                            : null,
-                  ),
+                        );
+                      },
+                      titleColor:
+                          selectedMusic != null
+                              ? Colors.blueAccent
+                              : Colors.white,
+                      trailing:
+                          selectedMusic != null
+                              ? GestureDetector(
+                                onTap: () => onUpdateMusic(null),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: Colors.white54,
+                                  size: 20,
+                                ),
+                              )
+                              : null,
+                    ),
 
                   Divider(color: Colors.grey.shade900, thickness: 1),
 

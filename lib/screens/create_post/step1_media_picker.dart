@@ -1,3 +1,7 @@
+// ===============================
+// FILE PATH: lib/screens/create_post/step1_media_picker.dart
+// ===============================
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -5,7 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
-import '../create_post_screen.dart'; // Adjust path to the PostType enum
+import 'package:path_provider/path_provider.dart'; // <-- ADDED THIS IMPORT
+import '../create_post_screen.dart';
 
 class Step1MediaPicker extends StatefulWidget {
   final Function(List<File> files, PostType type, File? thumbnail)
@@ -32,20 +37,25 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
   bool _hasPermission = false;
   bool _isProcessingNext = false;
 
+  // The Pink-Violet Brand Gradient
+  final LinearGradient _brandGradient = const LinearGradient(
+    colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   @override
   void initState() {
     super.initState();
     _fetchAlbums();
   }
 
-  // --- FETCH ALBUMS DIRECTLY FROM DEVICE ---
   Future<void> _fetchAlbums() async {
     final PermissionState ps = await PhotoManager.requestPermissionExtend();
 
     if (ps.isAuth || ps.hasAccess) {
       setState(() => _hasPermission = true);
 
-      // Removed constraints to ensure ALL videos (even short ones) are fetched
       final FilterOptionGroup filterOptionGroup = FilterOptionGroup(
         imageOption: const FilterOption(
           sizeConstraint: SizeConstraint(ignoreSize: true),
@@ -56,14 +66,14 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
       );
 
       List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
-        type: RequestType.common, // Common fetches BOTH Images and Videos
+        type: RequestType.common,
         filterOption: filterOptionGroup,
       );
 
       if (albums.isNotEmpty) {
         setState(() {
           _albums = albums;
-          _selectedAlbum = albums.first; // Usually "Recent"
+          _selectedAlbum = albums.first;
         });
         _loadMediaForAlbum(_selectedAlbum!);
       } else {
@@ -77,17 +87,18 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     }
   }
 
-  // --- LOAD MEDIA FOR SELECTED ALBUM ---
   Future<void> _loadMediaForAlbum(AssetPathEntity album) async {
     setState(() => _isLoading = true);
 
-    // Fetch up to 100 items from this specific album
-    List<AssetEntity> media = await album.getAssetListPaged(page: 0, size: 100);
+    List<AssetEntity> media = await album.getAssetListPaged(
+      page: 0,
+      size: 2000,
+    );
 
     setState(() {
       _mediaList = media;
       if (media.isNotEmpty) {
-        _selectedMedia = media[0]; // Preview the first item
+        _selectedMedia = media[0];
       } else {
         _selectedMedia = null;
       }
@@ -95,7 +106,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     });
   }
 
-  // --- HANDLE LIVE CAMERA CAPTURE ---
   Future<void> _openCamera() async {
     final pickedFile = await ImagePicker().pickImage(
       source: ImageSource.camera,
@@ -105,12 +115,10 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     }
   }
 
-  // --- HANDLE NEXT BUTTON (Process Selected Media) ---
   Future<void> _handleNext() async {
     if (_selectedMedia == null || _isProcessingNext) return;
 
     setState(() => _isProcessingNext = true);
-
     final File? file = await _selectedMedia!.file;
 
     if (file == null) {
@@ -119,23 +127,35 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     }
 
     if (_selectedMedia!.type == AssetType.video) {
-      // Generate a thumbnail for the video
-      final thumbPath = await VideoThumbnail.thumbnailFile(
-        video: file.path,
-        imageFormat: ImageFormat.JPEG,
-        quality: 75,
-      );
-      widget.onMediaPicked(
-        [file],
-        PostType.video,
-        thumbPath != null ? File(thumbPath) : null,
-      );
+      try {
+        // --- FIX: Get the app's temporary directory to avoid EPERM crashes ---
+        final tempDir = await getTemporaryDirectory();
+
+        final thumbPath = await VideoThumbnail.thumbnailFile(
+          video: file.path,
+          thumbnailPath: tempDir.path, // Force save to safe app directory
+          imageFormat: ImageFormat.JPEG,
+          quality: 75,
+        );
+
+        widget.onMediaPicked(
+          [file],
+          PostType.video,
+          thumbPath != null ? File(thumbPath) : null,
+        );
+      } catch (e) {
+        setState(() => _isProcessingNext = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed to process video: $e")),
+          );
+        }
+      }
     } else {
       widget.onMediaPicked([file], PostType.image, null);
     }
   }
 
-  // Helper to format video duration (e.g., 01:23)
   String _formatDuration(int seconds) {
     final duration = Duration(seconds: seconds);
     final minutes = duration.inMinutes.toString().padLeft(2, '0');
@@ -150,7 +170,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
         children: [
           // --- 1. APP BAR ---
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -166,29 +186,47 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                     color: Colors.white,
                   ),
                 ),
-                TextButton(
-                  onPressed:
+                // Gradient Next Button
+                GestureDetector(
+                  onTap:
                       _isProcessingNext || _selectedMedia == null
                           ? null
                           : _handleNext,
-                  child:
-                      _isProcessingNext
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.blueAccent,
-                              strokeWidth: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient:
+                          _isProcessingNext || _selectedMedia == null
+                              ? null
+                              : _brandGradient,
+                      color:
+                          _isProcessingNext || _selectedMedia == null
+                              ? Colors.white24
+                              : null,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child:
+                        _isProcessingNext
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                            : Text(
+                              "Next",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          )
-                          : Text(
-                            "Next",
-                            style: GoogleFonts.poppins(
-                              color: Colors.blueAccent,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                  ),
                 ),
               ],
             ),
@@ -215,17 +253,11 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Please enable gallery permissions\nin your device settings.",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(color: Colors.white54),
-                    ),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: PhotoManager.openSetting,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
+                        backgroundColor: const Color(0xFF9983F3),
                       ),
                       child: const Text(
                         "Open Settings",
@@ -240,7 +272,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
           else ...[
             // Top Preview Area
             Container(
-              height: MediaQuery.of(context).size.width, // Square aspect ratio
+              height: MediaQuery.of(context).size.width,
               width: double.infinity,
               color: Colors.black,
               child:
@@ -249,7 +281,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                         child:
                             _isLoading
                                 ? const CircularProgressIndicator(
-                                  color: Colors.white,
+                                  color: Color(0xFF9983F3),
                                 )
                                 : const Text(
                                   "No media found",
@@ -259,11 +291,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                       : Stack(
                         fit: StackFit.expand,
                         children: [
-                          // Load High-Res preview of selected image/video
                           FutureBuilder<Uint8List?>(
-                            key: ValueKey(
-                              _selectedMedia!.id,
-                            ), // Prevents flicker
+                            key: ValueKey(_selectedMedia!.id),
                             future: _selectedMedia!.thumbnailDataWithSize(
                               const ThumbnailSize(800, 800),
                             ),
@@ -279,7 +308,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                               return Container(color: Colors.grey.shade900);
                             },
                           ),
-                          // Video Play Icon Overlay
                           if (_selectedMedia!.type == AssetType.video)
                             const Center(
                               child: Icon(
@@ -292,7 +320,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                       ),
             ),
 
-            // Album Selector & Camera Button
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: Colors.black,
@@ -300,50 +327,58 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                 children: [
                   // --- ALBUM DROPDOWN ---
                   if (_albums.isNotEmpty)
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<AssetPathEntity>(
-                        value: _selectedAlbum,
-                        dropdownColor: Colors.grey.shade900,
-                        icon: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.white,
-                        ),
-                        items:
-                            _albums.map((album) {
-                              return DropdownMenuItem(
-                                value: album,
-                                child: Text(
-                                  album.name == "Recent"
-                                      ? "Gallery"
-                                      : album.name,
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<AssetPathEntity>(
+                          isExpanded: true,
+                          value: _selectedAlbum,
+                          dropdownColor: Colors.grey.shade900,
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                          ),
+                          items:
+                              _albums.map((album) {
+                                return DropdownMenuItem(
+                                  value: album,
+                                  child: Text(
+                                    album.name == "Recent"
+                                        ? "Gallery"
+                                        : album.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                        onChanged: (album) {
-                          if (album != null && album != _selectedAlbum) {
-                            setState(() => _selectedAlbum = album);
-                            _loadMediaForAlbum(album);
-                          }
-                        },
+                                );
+                              }).toList(),
+                          onChanged: (album) {
+                            if (album != null && album != _selectedAlbum) {
+                              setState(() => _selectedAlbum = album);
+                              _loadMediaForAlbum(album);
+                            }
+                          },
+                        ),
                       ),
                     ),
 
-                  const Spacer(),
+                  const SizedBox(width: 16),
+
                   GestureDetector(
                     onTap: _openCamera,
                     child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900,
+                      padding: const EdgeInsets.all(10),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
-                        Icons.camera_alt_outlined,
+                        Icons.camera_alt_rounded,
                         color: Colors.white,
                         size: 20,
                       ),
@@ -358,7 +393,9 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
               child:
                   _isLoading
                       ? const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF9983F3),
+                        ),
                       )
                       : GridView.builder(
                         physics: const BouncingScrollPhysics(),
@@ -378,7 +415,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                // Low-Res Thumbnail for grid performance
                                 FutureBuilder<Uint8List?>(
                                   future: asset.thumbnailDataWithSize(
                                     const ThumbnailSize(200, 200),
@@ -396,7 +432,6 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                                   },
                                 ),
 
-                                // Video duration overlay
                                 if (asset.type == AssetType.video)
                                   Positioned(
                                     bottom: 4,
@@ -419,16 +454,13 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
                                     ),
                                   ),
 
-                                // Selection Overlay (Fixing withOpacity deprecation using withAlpha)
                                 if (isSelected)
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withAlpha(
-                                        76,
-                                      ), // ~0.3 opacity
+                                      color: Colors.black.withAlpha(100),
                                       border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
+                                        color: const Color(0xFFFF4B72),
+                                        width: 3,
                                       ),
                                     ),
                                   ),

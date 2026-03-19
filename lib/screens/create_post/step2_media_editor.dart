@@ -1,3 +1,7 @@
+// ===============================
+// FILE PATH: lib/screens/create_post/step2_media_editor.dart
+// ===============================
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -28,6 +32,13 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
   late List<File> _currentFiles;
   final int _currentIndex = 0;
   int _selectedTab = 0;
+
+  // The Pink-Violet Brand Gradient
+  final LinearGradient _brandGradient = const LinearGradient(
+    colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   final List<Map<String, dynamic>> _filters = [
     {
@@ -149,16 +160,25 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
     try {
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: _currentFiles[_currentIndex].path,
+        // FIX: Enforce Square Aspect ratio so it acts as "Zoom & Adjust"
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
         uiSettings: [
           AndroidUiSettings(
-            toolbarTitle: 'Crop & Adjust',
+            toolbarTitle: 'Zoom & Adjust',
             toolbarColor: Colors.black,
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: false,
+            lockAspectRatio: true, // Prevents user from making it a rectangle
+            hideBottomControls:
+                true, // Hides aspect ratio options to force Insta-style adjust
             activeControlsWidgetColor: const Color(0xFFFF4B72),
+            backgroundColor: Colors.black,
           ),
-          IOSUiSettings(title: 'Crop & Adjust'),
+          IOSUiSettings(
+            title: 'Zoom & Adjust',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
         ],
       );
 
@@ -169,13 +189,9 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Crop failed: Make sure UCropActivity is in AndroidManifest. Error: $e",
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Adjustment failed: $e")));
       }
     }
   }
@@ -185,13 +201,16 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
     return SafeArea(
       child: Column(
         children: [
-          // --- FIXED: App Bar Overflow ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, size: 24),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 24,
+                    color: Colors.white,
+                  ),
                   onPressed: widget.onBack,
                 ),
                 Expanded(
@@ -201,21 +220,32 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-                TextButton(
-                  onPressed:
+                GestureDetector(
+                  onTap:
                       () => widget.onNext(
                         _currentFiles,
                         _filters[_selectedFilterIndex]['effect'],
                       ),
-                  child: Text(
-                    "Next",
-                    style: GoogleFonts.poppins(
-                      color: const Color(0xFF9983F3),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: _brandGradient,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "Next",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -288,7 +318,7 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
                     child: Row(
                       children: [
                         _buildBottomTab(0, "Filter"),
-                        _buildBottomTab(1, "Edit"),
+                        _buildBottomTab(1, "Adjust"),
                       ],
                     ),
                   ),
@@ -317,13 +347,16 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color:
-                            isSelected
-                                ? const Color(0xFF9983F3)
-                                : Colors.transparent,
-                        width: 2.5,
-                      ),
+                      border:
+                          isSelected
+                              ? Border.all(
+                                color: const Color(0xFFFF4B72),
+                                width: 2.5,
+                              ) // Brand Pink Border
+                              : Border.all(
+                                color: Colors.transparent,
+                                width: 2.5,
+                              ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ClipRRect(
@@ -367,12 +400,14 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
             onTap: _cropCurrentImage,
             child: Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(25),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
+                ), // Gradient Circle
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.crop_rotate_rounded,
+                Icons.zoom_out_map_rounded,
                 color: Colors.white,
                 size: 30,
               ),
@@ -380,8 +415,12 @@ class _Step2MediaEditorState extends State<Step2MediaEditor> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Crop & Rotate",
-            style: GoogleFonts.poppins(color: Colors.white, fontSize: 12),
+            "Zoom & Adjust",
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
