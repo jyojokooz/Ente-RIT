@@ -5,9 +5,9 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:google_fonts/google_fonts.dart';
-// FIX 1: Added 'as vt' to resolve the ImageFormat name collision
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 import 'package:path_provider/path_provider.dart';
 
@@ -23,7 +23,7 @@ class StoryCreatorScreen extends StatefulWidget {
 }
 
 class _StoryCreatorScreenState extends State<StoryCreatorScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   CameraController? _cameraController;
   List<CameraDescription>? _cameras;
   int _selectedCameraIndex = 0;
@@ -31,12 +31,13 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   bool _isRecording = false;
   FlashMode _flashMode = FlashMode.off;
 
-  // Live Filters matching your editor
+  late PageController _filterPageController;
   int _selectedFilterIndex = 0;
+
+  // Professional Color Matrices
   final List<Map<String, dynamic>> _filters = [
     {
       'name': 'Normal',
-      'color': Colors.transparent,
       'matrix': <double>[
         1,
         0,
@@ -61,24 +62,23 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'B&W',
-      'color': Colors.grey,
+      'name': 'Clarendon', // Bright cool tone, boosted shadows
       'matrix': <double>[
-        0.2126,
-        0.7152,
-        0.0722,
+        1.2,
         0,
         0,
-        0.2126,
-        0.7152,
-        0.0722,
+        0,
+        10,
+        0,
+        1.2,
         0,
         0,
-        0.2126,
-        0.7152,
-        0.0722,
+        20,
         0,
         0,
+        1.3,
+        0,
+        30,
         0,
         0,
         0,
@@ -87,48 +87,46 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Sepia',
-      'color': Colors.orangeAccent,
+      'name': 'Juno', // Warm vibrant
       'matrix': <double>[
-        0.393,
-        0.769,
-        0.189,
-        0,
-        0,
-        0.349,
-        0.686,
-        0.168,
-        0,
-        0,
-        0.272,
-        0.534,
-        0.131,
+        1.2,
         0,
         0,
         0,
+        20,
         0,
-        0,
-        1,
-        0,
-      ],
-    },
-    {
-      'name': 'Cool',
-      'color': Colors.blueAccent,
-      'matrix': <double>[
-        0.9,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1.0,
+        1.1,
         0,
         0,
         10,
         0,
         0,
-        1.2,
+        0.9,
+        0,
+        -10,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+    },
+    {
+      'name': 'Lark', // Soft bright, desaturated reds
+      'matrix': <double>[
+        0.9,
+        0,
+        0,
+        0,
+        10,
+        0,
+        1.1,
+        0,
+        0,
+        20,
+        0,
+        0,
+        1.1,
         0,
         20,
         0,
@@ -139,24 +137,73 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Fade',
-      'color': Colors.brown,
+      'name': 'Gingham', // Faded vintage
       'matrix': <double>[
-        0.8,
+        1.1,
         0,
         0,
         0,
-        40,
+        30,
         0,
-        0.8,
-        0,
-        0,
-        40,
+        1.0,
         0,
         0,
-        0.8,
+        20,
         0,
-        40,
+        0,
+        0.9,
+        0,
+        10,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+    },
+    {
+      'name': 'Moon', // B&W High Contrast
+      'matrix': <double>[
+        0.33,
+        0.59,
+        0.11,
+        0,
+        0,
+        0.33,
+        0.59,
+        0.11,
+        0,
+        0,
+        0.33,
+        0.59,
+        0.11,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ],
+    },
+    {
+      'name': 'Cinematic', // Teal & Orange Look
+      'matrix': <double>[
+        1.2,
+        0.1,
+        0,
+        0,
+        20,
+        0,
+        1.0,
+        0.1,
+        0,
+        0,
+        0,
+        0.1,
+        1.2,
+        0,
+        -20,
         0,
         0,
         0,
@@ -170,6 +217,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _filterPageController = PageController(viewportFraction: 0.22);
     _initCamera();
   }
 
@@ -189,6 +237,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       cameraDescription,
       ResolutionPreset.high,
       enableAudio: true,
+      imageFormatGroup: ImageFormatGroup.jpeg,
     );
 
     try {
@@ -206,32 +255,28 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
+    _filterPageController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // FIX 2: Added curly braces for all if statements
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
-
     if (state == AppLifecycleState.inactive) {
       _cameraController?.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      if (_cameras != null) {
-        _setCamera(_cameras![_selectedCameraIndex]);
-      }
+      if (_cameras != null) _setCamera(_cameras![_selectedCameraIndex]);
     }
   }
 
   void _switchCamera() {
-    if (_cameras == null || _cameras!.length < 2) {
-      return;
-    }
+    if (_cameras == null || _cameras!.length < 2) return;
     setState(() => _isCameraInitialized = false);
     _selectedCameraIndex = _selectedCameraIndex == 0 ? 1 : 0;
     _setCamera(_cameras![_selectedCameraIndex]);
+    HapticFeedback.lightImpact();
   }
 
   void _toggleFlash() {
@@ -240,13 +285,12 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
           _flashMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
       _cameraController?.setFlashMode(_flashMode);
     });
+    HapticFeedback.lightImpact();
   }
 
-  // --- CAPTURE LOGIC ---
   Future<void> _takePicture() async {
-    if (!_isCameraInitialized || _isRecording) {
-      return;
-    }
+    if (!_isCameraInitialized || _isRecording) return;
+    HapticFeedback.mediumImpact();
     try {
       final XFile image = await _cameraController!.takePicture();
       _navigateToEditor([File(image.path)], PostType.image, null);
@@ -256,9 +300,8 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   }
 
   Future<void> _startVideoRecording() async {
-    if (!_isCameraInitialized || _isRecording) {
-      return;
-    }
+    if (!_isCameraInitialized || _isRecording) return;
+    HapticFeedback.heavyImpact();
     try {
       await _cameraController!.startVideoRecording();
       setState(() => _isRecording = true);
@@ -268,23 +311,18 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   }
 
   Future<void> _stopVideoRecording() async {
-    if (!_isCameraInitialized || !_isRecording) {
-      return;
-    }
+    if (!_isCameraInitialized || !_isRecording) return;
+    HapticFeedback.mediumImpact();
     try {
       final XFile video = await _cameraController!.stopVideoRecording();
       setState(() => _isRecording = false);
-
       final tempDir = await getTemporaryDirectory();
-
-      // FIX 1: Using the vt prefix for the video_thumbnail plugin
       final thumbPath = await vt.VideoThumbnail.thumbnailFile(
         video: video.path,
         thumbnailPath: tempDir.path,
-        imageFormat: vt.ImageFormat.JPEG, // Used the prefix here
+        imageFormat: vt.ImageFormat.JPEG,
         quality: 75,
       );
-
       _navigateToEditor(
         [File(video.path)],
         PostType.video,
@@ -295,7 +333,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
     }
   }
 
-  // --- NAVIGATION ---
   void _navigateToEditor(List<File> files, PostType type, File? thumbnail) {
     Navigator.pushReplacement(
       context,
@@ -303,6 +340,10 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
         builder:
             (_) => StoryEditorView(
               files: files,
+              postType: type,
+              thumbnailFile: thumbnail,
+              filterMatrix:
+                  _filters[_selectedFilterIndex]['matrix'], // Pass active filter
               onBack: () => Navigator.pop(context),
               onUploadComplete: () => Navigator.pop(context),
             ),
@@ -311,6 +352,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   }
 
   void _openGallery() {
+    HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -350,27 +392,62 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       backgroundColor: Colors.black,
       body: GestureDetector(
         onVerticalDragEnd: (details) {
-          if (details.primaryVelocity! < -500) {
-            _openGallery();
-          }
+          if (details.primaryVelocity! < -500)
+            _openGallery(); // Swipe up for gallery
         },
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1. LIVE CAMERA PREVIEW WITH LIVE COLOR FILTERS
+            // --- 1. LIVE CAMERA & FILTERS ---
             if (_isCameraInitialized)
-              ColorFiltered(
-                colorFilter: ColorFilter.matrix(
-                  _filters[_selectedFilterIndex]['matrix'],
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(30),
                 ),
-                child: Center(child: CameraPreview(_cameraController!)),
+                child: ColorFiltered(
+                  colorFilter: ColorFilter.matrix(
+                    _filters[_selectedFilterIndex]['matrix'],
+                  ),
+                  child: Transform.scale(
+                    scale: 1.0,
+                    child: Center(child: CameraPreview(_cameraController!)),
+                  ),
+                ),
               )
             else
               const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
 
-            // 2. TOP CONTROLS
+            // --- 2. CINEMATIC OVERLAYS ---
+            // Subtle Vignette
+            IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                    radius: 1.2,
+                  ),
+                ),
+              ),
+            ),
+            // Light Leak (Slight warm glow from top right)
+            IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [
+                      const Color(0xFFFF9A44).withOpacity(0.15),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // --- 3. TOP CONTROLS ---
             Positioned(
               top: 50,
               left: 20,
@@ -418,152 +495,169 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
               ),
             ),
 
-            // 3. SWIPE UP HINT
+            // --- 4. BOTTOM CONTROLS ---
             Positioned(
-              bottom: 180,
+              bottom: 0,
               left: 0,
               right: 0,
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    color: Colors.white70,
-                    size: 30,
-                    shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+              child: Container(
+                padding: const EdgeInsets.only(top: 60, bottom: 40),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
                   ),
-                  Text(
-                    "Swipe up for Gallery",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      shadows: [
-                        const Shadow(blurRadius: 2, color: Colors.black),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // 4. LIVE FILTER WHEEL & BOTTOM CONTROLS
-            Positioned(
-              bottom: 40,
-              left: 0,
-              right: 0,
-              child: Column(
-                children: [
-                  // Filter Carousel (Snapchat style)
-                  SizedBox(
-                    height: 80,
-                    child: PageView.builder(
-                      controller: PageController(
-                        viewportFraction: 0.2,
-                        initialPage: _selectedFilterIndex,
-                      ),
-                      onPageChanged:
-                          (index) =>
-                              setState(() => _selectedFilterIndex = index),
-                      itemCount: _filters.length,
-                      itemBuilder: (context, index) {
-                        final isSelected = _selectedFilterIndex == index;
-                        return Center(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: isSelected ? 65 : 45,
-                            height: isSelected ? 65 : 45,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: isSelected ? 3 : 1,
-                              ),
-                              color: _filters[index]['color'].withOpacity(0.5),
-                            ),
-                            child:
-                                isSelected
-                                    ? null
-                                    : Center(
-                                      child: Text(
-                                        _filters[index]['name'],
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 9,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Capture Row
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Gallery Button
-                        GestureDetector(
-                          onTap: _openGallery,
-                          child: Container(
-                            width: 45,
-                            height: 45,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.photo_library_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-
-                        // Capture Button (Tap for Photo, Hold for Video)
-                        GestureDetector(
-                          onTap: _takePicture,
-                          onLongPress: _startVideoRecording,
-                          onLongPressUp: _stopVideoRecording,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: _isRecording ? 90 : 80,
-                            height: _isRecording ? 90 : 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 5),
-                              color:
-                                  _isRecording
-                                      ? Colors.red
-                                      : Colors.transparent,
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: _isRecording ? 30 : 65,
-                                height: _isRecording ? 30 : 65,
-                                decoration: BoxDecoration(
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // FILTER SELECTOR
+                    SizedBox(
+                      height: 80,
+                      child: PageView.builder(
+                        controller: _filterPageController,
+                        onPageChanged: (index) {
+                          HapticFeedback.selectionClick();
+                          setState(() => _selectedFilterIndex = index);
+                        },
+                        itemCount: _filters.length,
+                        itemBuilder: (context, index) {
+                          final isSelected = _selectedFilterIndex == index;
+                          return Center(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeOutCubic,
+                              width: isSelected ? 75 : 55,
+                              height: isSelected ? 75 : 55,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
                                   color:
-                                      _isRecording
+                                      isSelected
                                           ? Colors.white
-                                          : Colors.white70,
-                                  borderRadius: BorderRadius.circular(
-                                    _isRecording ? 8 : 40,
+                                          : Colors.white54,
+                                  width: isSelected ? 4 : 2,
+                                ),
+                                boxShadow:
+                                    isSelected
+                                        ? [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.3,
+                                            ),
+                                            blurRadius: 10,
+                                          ),
+                                        ]
+                                        : [],
+                              ),
+                              child: ClipOval(
+                                child: ColorFiltered(
+                                  colorFilter: ColorFilter.matrix(
+                                    _filters[index]['matrix'],
+                                  ),
+                                  child: Image.network(
+                                    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&q=80', // Generic model placeholder
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // ACTIVE FILTER NAME
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: 1.0,
+                      child: Text(
+                        _filters[_selectedFilterIndex]['name'],
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                          shadows: [
+                            const Shadow(blurRadius: 4, color: Colors.black),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // CAPTURE ROW
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Gallery Button
+                          GestureDetector(
+                            onTap: _openGallery,
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Colors.white70,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                color: Colors.black45,
+                              ),
+                              child: const Icon(
+                                Icons.photo_library_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                          // Capture Button
+                          GestureDetector(
+                            onTap: _takePicture,
+                            onLongPress: _startVideoRecording,
+                            onLongPressUp: _stopVideoRecording,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: _isRecording ? 100 : 85,
+                              height: _isRecording ? 100 : 85,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 5,
+                                ),
+                                color:
+                                    _isRecording
+                                        ? Colors.redAccent.withOpacity(0.5)
+                                        : Colors.transparent,
+                              ),
+                              child: Center(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: _isRecording ? 35 : 70,
+                                  height: _isRecording ? 35 : 70,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _isRecording
+                                            ? Colors.red
+                                            : Colors.white,
+                                    borderRadius: BorderRadius.circular(
+                                      _isRecording ? 10 : 40,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-
-                        // Empty space to balance the row
-                        const SizedBox(width: 45),
-                      ],
+                          const SizedBox(width: 48), // Balancer
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

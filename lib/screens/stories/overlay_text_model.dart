@@ -5,15 +5,21 @@
 
 import 'package:flutter/material.dart';
 
-class OverlayText {
-  String text;
+enum OverlayType { text, sticker }
+
+class OverlayItem {
+  final String id;
+  final OverlayType type;
+  String content; // Stores text or the emoji/sticker string
   Offset offset;
   double scale;
   double rotation;
   Color color;
 
-  OverlayText({
-    required this.text,
+  OverlayItem({
+    required this.id,
+    required this.type,
+    required this.content,
     required this.offset,
     this.scale = 1.0,
     this.rotation = 0.0,
