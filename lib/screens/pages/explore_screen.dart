@@ -12,6 +12,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../search_screen.dart';
 import '../requests_screen.dart';
 import '../post_detail_screen.dart';
+import '../find_friends_screen.dart'; // <--- ADD THIS
 
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
@@ -108,10 +109,10 @@ class ExploreScreen extends StatelessWidget {
                     cardColor: cardColor,
                     isDark: isDark,
                     onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text("User suggestions coming soon!"),
-                          backgroundColor: textColor,
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FindFriendsScreen(),
                         ),
                       );
                     },
