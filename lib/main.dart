@@ -74,7 +74,7 @@ class MyApp extends StatelessWidget {
       builder: (context, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'Kampus Konnect',
+          title: 'Ente RIT',
 
           // Pulls the mode instantly, no async delay causing white flashes
           themeMode: themeProvider.themeMode,

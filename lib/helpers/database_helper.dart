@@ -10,7 +10,7 @@ class DatabaseHelper {
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB(
-      'kampus_konnect_v2.db',
+      'ente_rit.db',
     ); // Use a new DB name to force recreation
     return _database!;
   }
