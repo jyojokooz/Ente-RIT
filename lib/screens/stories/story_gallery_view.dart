@@ -111,7 +111,11 @@ class _StoryGalleryViewState extends State<StoryGalleryView> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.only(
+        top: 20,
+      ), // Give it a little breathing room at top
       child: Column(
         children: [
           // --- App Bar ---
