@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Edge swipe detection variables
   double _startX = 0.0;
+  double _startY = 0.0;
   bool _isSwiping = false;
 
   @override
@@ -66,18 +67,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      // FIX: Use Listener instead of GestureDetector to prevent blocking PageView swipes!
       body: Listener(
         onPointerDown: (event) {
           _startX = event.position.dx;
+          _startY = event.position.dy;
           _isSwiping = true;
         },
         onPointerUp: (event) {
           if (!_isSwiping) return;
-          final dx = event.position.dx - _startX;
 
-          // Trigger ONLY if swiped right by > 100px AND started from the far left edge (< 40px)
-          if (dx > 100 && _startX < 40) {
+          final dx = event.position.dx - _startX;
+          final dy = (event.position.dy - _startY).abs();
+
+          // --- HIGHLY FORGIVING SWIPE LOGIC ---
+          // 1. dx > 40 : Only requires a short 40-pixel swipe to the right.
+          // 2. dy < 60 : Ensures it was mostly a horizontal swipe (not scrolling up/down).
+          // 3. _startX < 100 : Allows the swipe to start anywhere in the left 100 pixels (very generous thumb area).
+          if (dx > 40 && dy < 60 && _startX < 100) {
             Navigator.push(
               context,
               PageRouteBuilder(
