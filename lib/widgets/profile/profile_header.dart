@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: profile_header.dart
 // FILE PATH: lib/widgets/profile/profile_header.dart
 // ===============================
 
@@ -8,23 +7,27 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 class ProfileHeader extends StatelessWidget {
   final bool isCurrentUser;
+  final bool isAdmin;
   final String? profilePhotoUrl;
   final Color bgColor;
   final Color textColor;
   final bool isDark;
   final VoidCallback onBack;
   final VoidCallback onSettings;
-  final VoidCallback onAvatarTap;
+  final VoidCallback onAdminTap;
+  final VoidCallback onAvatarTap; // Now used for viewing stories!
 
   const ProfileHeader({
     super.key,
     required this.isCurrentUser,
+    required this.isAdmin,
     this.profilePhotoUrl,
     required this.bgColor,
     required this.textColor,
     required this.isDark,
     required this.onBack,
     required this.onSettings,
+    required this.onAdminTap,
     required this.onAvatarTap,
   });
 
@@ -54,13 +57,26 @@ class ProfileHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // TOP LEFT: Back Button OR Admin Panel Button
                   if (!isCurrentUser)
                     IconButton(
                       icon: Icon(Icons.arrow_back_ios_new, color: textColor),
                       onPressed: onBack,
                     )
+                  else if (isAdmin)
+                    IconButton(
+                      icon: Icon(
+                        Icons.admin_panel_settings_rounded,
+                        color: textColor,
+                        size: 28,
+                      ),
+                      tooltip: "Admin Panel",
+                      onPressed: onAdminTap,
+                    )
                   else
                     const SizedBox(width: 48),
+
+                  // TOP RIGHT: Settings Button
                   if (isCurrentUser)
                     IconButton(
                       icon: Icon(Icons.settings_outlined, color: textColor),
@@ -78,7 +94,7 @@ class ProfileHeader extends StatelessWidget {
         Positioned(
           bottom: 0,
           child: GestureDetector(
-            onTap: onAvatarTap,
+            onTap: onAvatarTap, // Opens story
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: const BoxDecoration(

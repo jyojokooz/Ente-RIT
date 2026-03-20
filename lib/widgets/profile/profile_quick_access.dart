@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: profile_quick_access.dart
 // FILE PATH: lib/widgets/profile/profile_quick_access.dart
 // ===============================
 
@@ -8,8 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../screens/driver_tracking_screen.dart';
 import '../../screens/cafeteria_dashboard_screen.dart';
-import '../../screens/admin_panel_screen.dart';
-import '../../screens/requests_screen.dart';
 
 class ProfileQuickAccess extends StatelessWidget {
   final String role;
@@ -29,6 +26,11 @@ class ProfileQuickAccess extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Only render the box if the user actually has a specialized role
+    if (role != 'driver' && role != 'cafeteria_admin') {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -42,7 +44,7 @@ class ProfileQuickAccess extends StatelessWidget {
               Icon(Icons.emoji_events_rounded, color: textColor),
               const SizedBox(width: 12),
               Text(
-                "Achievements & Tools",
+                "Work Tools",
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
@@ -50,7 +52,7 @@ class ProfileQuickAccess extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              const Text("🔥 🎯", style: TextStyle(fontSize: 16)),
+              const Text("💼", style: TextStyle(fontSize: 16)),
             ],
           ),
           const SizedBox(height: 20),
@@ -84,29 +86,6 @@ class ProfileQuickAccess extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (isAdmin)
-                  _buildCircleButton(
-                    context,
-                    Icons.security_rounded,
-                    const Color(0xFFB165FF),
-                    isDark,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminPanelScreen(),
-                      ),
-                    ),
-                  ),
-                _buildCircleButton(
-                  context,
-                  Icons.person_add_rounded,
-                  Colors.tealAccent.shade400,
-                  isDark,
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RequestsScreen()),
-                  ),
-                ),
               ],
             ),
           ),

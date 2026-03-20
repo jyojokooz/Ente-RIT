@@ -1,33 +1,27 @@
 // ===============================
-// FILE NAME: profile_screen.dart
 // FILE PATH: lib/screens/pages/profile_screen.dart
 // ===============================
 
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
 import '../chat_screen.dart';
+import '../admin_panel_screen.dart';
 import '../../theme_provider.dart';
 
+import '../stories/stories_connector.dart';
 import '../../models/connection_status.dart';
+
 import '../../widgets/profile/profile_header.dart';
 import '../../widgets/profile/profile_info.dart';
 import '../../widgets/profile/profile_quick_access.dart';
 import '../../widgets/profile/profile_posts_grid.dart';
 import '../../widgets/profile/share_profile_sheet.dart';
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
+import '../../widgets/profile/sliver_app_bar_delegate.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -42,11 +36,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   final _currentUser = FirebaseAuth.instance.currentUser!;
   late final String targetUserId;
   late final bool isCurrentUser;
-  final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = true;
-  bool _isPickingImage = false;
-
   String _displayName = 'User';
   String _username = 'username';
   String _bio = '';
@@ -61,11 +52,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
 
   late TabController _tabController;
-  final cloudinary = CloudinaryPublic(
-    cloudinaryCloudName,
-    cloudinaryUploadPreset,
-    cache: false,
-  );
+  final ScrollController _scrollController =
+      ScrollController(); // Used for scrolling to posts
 
   @override
   void initState() {
@@ -79,23 +67,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
-  }
-
-  Future<File?> _compressImage(File file) async {
-    final tempDir = await getTemporaryDirectory();
-    final targetPath = p.join(
-      tempDir.path,
-      '${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
-    final XFile? result = await FlutterImageCompress.compressAndGetFile(
-      file.absolute.path,
-      targetPath,
-      minWidth: 1080,
-      minHeight: 1080,
-      quality: 85,
-    );
-    return result == null ? null : File(result.path);
   }
 
   Future<void> _loadAllData() async {
@@ -144,12 +117,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           _isAdmin = data['isAdmin'] ?? false;
           _isPrivate = data['isPrivate'] ?? false;
           _connections = data['connections'] ?? [];
+
           _determineConnectionStatus(
             currentUserSnapshot.data(),
             targetUserSnapshot.id,
           );
-
-          // Trigger self-healing background validation
           _validateAndHealConnections();
         }
         _userPosts = postsSnapshot.docs;
@@ -161,10 +133,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  // Self-healing function for ghost connections
   Future<void> _validateAndHealConnections() async {
     if (_connections.isEmpty) return;
-
     List<dynamic> validConnections = [];
     bool hasGhostUsers = false;
 
@@ -175,23 +145,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                 .collection('users')
                 .doc(connId)
                 .get();
-        if (doc.exists) {
+        if (doc.exists)
           validConnections.add(connId);
-        } else {
+        else
           hasGhostUsers = true;
-        }
       } catch (e) {
-        // If network error, keep it safe
         validConnections.add(connId);
       }
     }
 
     if (hasGhostUsers) {
-      if (mounted) {
-        setState(() {
-          _connections = validConnections;
-        });
-      }
+      if (mounted) setState(() => _connections = validConnections);
       if (isCurrentUser) {
         await FirebaseFirestore.instance
             .collection('users')
@@ -214,211 +178,61 @@ class _ProfileScreenState extends State<ProfileScreen>
     final List<dynamic> receivedRequests =
         currentUserData['receivedRequests'] ?? [];
 
-    if (connections.contains(targetUserId)) {
+    if (connections.contains(targetUserId))
       _connectionStatus = ConnectionStatus.connected;
-    } else if (sentRequests.contains(targetUserId)) {
+    else if (sentRequests.contains(targetUserId))
       _connectionStatus = ConnectionStatus.sent;
-    } else if (receivedRequests.contains(targetUserId)) {
+    else if (receivedRequests.contains(targetUserId))
       _connectionStatus = ConnectionStatus.received;
-    } else {
+    else
       _connectionStatus = ConnectionStatus.none;
-    }
     setState(() {});
   }
 
-  Future<void> _uploadImage(File imageFile) async {
-    if (!isCurrentUser) return;
-    final File? compressedImage = await _compressImage(imageFile);
-    if (compressedImage == null) return;
-    try {
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          compressedImage.path,
-          folder: 'users/${_currentUser.uid}',
-          resourceType: CloudinaryResourceType.Image,
-        ),
-      );
-
-      // Update in users collection
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser.uid)
-          .set({
-            'profilePhotoUrl': response.secureUrl,
-          }, SetOptions(merge: true));
-
-      // --- ADDED FIX: Cascade update to all posts, comments, etc ---
-      await _updateDenormalizedData(null, response.secureUrl);
-
-      if (mounted) setState(() => _profilePhotoUrl = response.secureUrl);
-    } catch (e) {
-      debugPrint("Upload Error: $e");
-    }
+  // --- NEW: Scroll To Posts Logic ---
+  void _scrollToPosts() {
+    _scrollController.animateTo(
+      MediaQuery.of(context).size.height * 0.45,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOutCubic,
+    );
   }
 
-  // --- NEW BATCH UPDATER FUNCTION ---
-  // Automatically syncs profile picture/name across all documents when changed
-  Future<void> _updateDenormalizedData(
-    String? newName,
-    String? newPhotoUrl,
-  ) async {
-    if (newName == null && newPhotoUrl == null) return;
-
-    final uid = _currentUser.uid;
-    final firestore = FirebaseFirestore.instance;
-    WriteBatch batch = firestore.batch();
-    int operationCount = 0;
-
-    Future<void> commitBatchIfLimitReached() async {
-      if (operationCount >= 450) {
-        await batch.commit();
-        batch = firestore.batch();
-        operationCount = 0;
-      }
-    }
-
+  // --- NEW: View Story on Avatar Tap Logic ---
+  Future<void> _viewStory() async {
     try {
-      // 1. Update Posts
-      final postsSnap =
-          await firestore
-              .collection('posts')
-              .where('userId', isEqualTo: uid)
-              .get();
-      for (var doc in postsSnap.docs) {
-        Map<String, dynamic> updates = {};
-        if (newName != null) updates['userName'] = newName;
-        if (newPhotoUrl != null) updates['userImageUrl'] = newPhotoUrl;
-        if (updates.isNotEmpty) {
-          batch.update(doc.reference, updates);
-          operationCount++;
-          await commitBatchIfLimitReached();
-        }
-      }
+      final yesterday = DateTime.now().subtract(const Duration(hours: 24));
+      final timestamp = Timestamp.fromDate(yesterday);
 
-      // 2. Update Comments (Collection Group)
-      try {
-        final commentsSnap =
-            await firestore
-                .collectionGroup('comments')
-                .where('userId', isEqualTo: uid)
-                .get();
-        for (var doc in commentsSnap.docs) {
-          Map<String, dynamic> updates = {};
-          if (newName != null) updates['userName'] = newName;
-          if (newPhotoUrl != null) updates['userImageUrl'] = newPhotoUrl;
-          if (updates.isNotEmpty) {
-            batch.update(doc.reference, updates);
-            operationCount++;
-            await commitBatchIfLimitReached();
-          }
-        }
-      } catch (e) {
-        debugPrint("Comments update skipped (missing index?): $e");
-      }
-
-      // 3. Update Marketplace Products
-      final productsSnap =
-          await firestore
-              .collection('products')
-              .where('sellerId', isEqualTo: uid)
-              .get();
-      for (var doc in productsSnap.docs) {
-        Map<String, dynamic> updates = {};
-        if (newName != null) updates['sellerName'] = newName;
-        if (newPhotoUrl != null) updates['sellerPhotoUrl'] = newPhotoUrl;
-        if (updates.isNotEmpty) {
-          batch.update(doc.reference, updates);
-          operationCount++;
-          await commitBatchIfLimitReached();
-        }
-      }
-
-      // 4. Update Stories
-      final storiesSnap =
-          await firestore
+      final snap =
+          await FirebaseFirestore.instance
               .collection('stories')
-              .where('userId', isEqualTo: uid)
+              .where('userId', isEqualTo: targetUserId)
+              .where('timestamp', isGreaterThan: timestamp)
+              .orderBy('timestamp', descending: false)
               .get();
-      for (var doc in storiesSnap.docs) {
-        Map<String, dynamic> updates = {};
-        if (newName != null) updates['userName'] = newName;
-        if (newPhotoUrl != null) updates['userImage'] = newPhotoUrl;
-        if (updates.isNotEmpty) {
-          batch.update(doc.reference, updates);
-          operationCount++;
-          await commitBatchIfLimitReached();
+
+      if (snap.docs.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No recent stories'),
+              duration: Duration(milliseconds: 1500),
+            ),
+          );
         }
+        return;
       }
 
-      // 5. Update Lost and Found
-      if (newName != null) {
-        final lfSnap =
-            await firestore
-                .collection('lost_and_found')
-                .where('userId', isEqualTo: uid)
-                .get();
-        for (var doc in lfSnap.docs) {
-          batch.update(doc.reference, {'userName': newName});
-          operationCount++;
-          await commitBatchIfLimitReached();
-        }
-      }
-
-      // 6. Update Active Chats
-      final chatsSnap =
-          await firestore
-              .collection('chats')
-              .where('participants', arrayContains: uid)
-              .get();
-      for (var doc in chatsSnap.docs) {
-        Map<String, dynamic> updates = {};
-        if (newName != null) updates['participantNames.$uid'] = newName;
-        if (newPhotoUrl != null)
-          updates['participantImages.$uid'] = newPhotoUrl;
-        if (updates.isNotEmpty) {
-          batch.update(doc.reference, updates);
-          operationCount++;
-          await commitBatchIfLimitReached();
-        }
-      }
-
-      // 7. Update Sent Notifications
-      final notifSnap =
-          await firestore
-              .collection('notifications')
-              .where('triggeringUserId', isEqualTo: uid)
-              .get();
-      for (var doc in notifSnap.docs) {
-        Map<String, dynamic> updates = {};
-        if (newName != null) updates['triggeringUserName'] = newName;
-        if (newPhotoUrl != null)
-          updates['triggeringUserAvatarUrl'] = newPhotoUrl;
-        if (updates.isNotEmpty) {
-          batch.update(doc.reference, updates);
-          operationCount++;
-          await commitBatchIfLimitReached();
-        }
-      }
-
-      // Final commit
-      if (operationCount > 0) {
-        await batch.commit();
+      final stories = snap.docs.map((d) => Story.fromSnapshot(d)).toList();
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => StoryViewScreen(stories: stories)),
+        );
       }
     } catch (e) {
-      debugPrint("Error updating denormalized data: $e");
-    }
-  }
-
-  Future<void> _pickProfileImage() async {
-    if (!isCurrentUser || _isPickingImage) return;
-    setState(() => _isPickingImage = true);
-    try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) await _uploadImage(File(pickedFile.path));
-    } catch (e) {
-      debugPrint("Image Pick Error: $e");
-    } finally {
-      if (mounted) setState(() => _isPickingImage = false);
+      debugPrint("Failed to fetch story: $e");
     }
   }
 
@@ -492,34 +306,26 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _togglePrivacy(bool isPrivate) async {
     try {
-      // 1. Update user profile
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUser.uid)
           .update({'isPrivate': isPrivate});
-
-      // 2. Update all posts by this user to reflect new privacy status
       final postsQuery =
           await FirebaseFirestore.instance
               .collection('posts')
               .where('userId', isEqualTo: _currentUser.uid)
               .get();
-
       final batch = FirebaseFirestore.instance.batch();
       for (var doc in postsQuery.docs) {
         batch.update(doc.reference, {'isAuthorPrivate': isPrivate});
       }
       await batch.commit();
-
-      setState(() {
-        _isPrivate = isPrivate;
-      });
+      setState(() => _isPrivate = isPrivate);
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to update privacy: $e')));
-      }
     }
   }
 
@@ -666,18 +472,27 @@ class _ProfileScreenState extends State<ProfileScreen>
         color: const Color(0xFFFF3E8E),
         backgroundColor: cardColor,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
               child: ProfileHeader(
                 isCurrentUser: isCurrentUser,
+                isAdmin: _isAdmin, // Connects to the admin shield icon
                 profilePhotoUrl: _profilePhotoUrl,
                 bgColor: bgColor,
                 textColor: textColor,
                 isDark: isDark,
                 onBack: () => Navigator.pop(context),
                 onSettings: () => _showSettingsBottomSheet(context),
-                onAvatarTap: _pickProfileImage,
+                onAdminTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminPanelScreen(),
+                      ),
+                    ),
+                onAvatarTap: _viewStory, // Tapping picture now opens stories
               ),
             ),
             SliverToBoxAdapter(
@@ -708,6 +523,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                       },
                       onShareProfile: _showShareProfileSheet,
                       onViewMingles: _viewMingles,
+                      onPostCountTap:
+                          _scrollToPosts, // Will scroll screen to grid
                       onConnectionAction: _handleConnectionAction,
                       onMessage:
                           () => Navigator.push(
@@ -724,7 +541,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     const SizedBox(height: 32),
 
-                    if (isCurrentUser && (_isAdmin || _role != 'student')) ...[
+                    // Renders specialized quick actions only if the user is a driver or cafeteria admin
+                    if (isCurrentUser) ...[
                       ProfileQuickAccess(
                         role: _role,
                         isAdmin: _isAdmin,
@@ -740,9 +558,14 @@ class _ProfileScreenState extends State<ProfileScreen>
             if (canViewPosts)
               SliverPersistentHeader(
                 pinned: true,
-                delegate: _SliverAppBarDelegate(
+                delegate: SliverAppBarDelegate(
                   TabBar(
                     controller: _tabController,
+                    splashFactory:
+                        NoSplash.splashFactory, // REMOVES ORANGE SPLASH FIX
+                    overlayColor: WidgetStateProperty.all(
+                      Colors.transparent,
+                    ), // REMOVES HOVER COLOR FIX
                     labelColor: const Color(0xFFFF3E8E),
                     unselectedLabelColor: mutedTextColor,
                     indicatorColor: const Color(0xFFFF3E8E),
@@ -769,25 +592,4 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-}
-
-class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar _tabBar;
-  final Color _bgColor;
-  _SliverAppBarDelegate(this._tabBar, this._bgColor);
-  @override
-  double get minExtent => _tabBar.preferredSize.height;
-  @override
-  double get maxExtent => _tabBar.preferredSize.height;
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(color: _bgColor, child: _tabBar);
-  }
-
-  @override
-  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }

@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: profile_info.dart
 // FILE PATH: lib/widgets/profile/profile_info.dart
 // ===============================
 
@@ -24,6 +23,7 @@ class ProfileInfo extends StatelessWidget {
   final VoidCallback onEditProfile;
   final VoidCallback onShareProfile;
   final VoidCallback onViewMingles;
+  final VoidCallback onPostCountTap; // <-- NEW
   final Function(String) onConnectionAction;
   final VoidCallback onMessage;
 
@@ -43,6 +43,7 @@ class ProfileInfo extends StatelessWidget {
     required this.onEditProfile,
     required this.onShareProfile,
     required this.onViewMingles,
+    required this.onPostCountTap, // <-- NEW
     required this.onConnectionAction,
     required this.onMessage,
   });
@@ -66,7 +67,6 @@ class ProfileInfo extends StatelessWidget {
           style: GoogleFonts.poppins(fontSize: 14, color: mutedTextColor),
         ),
 
-        // --- FIX: BIO IS NOW RENDERED HERE ---
         if (bio.isNotEmpty) ...[
           const SizedBox(height: 12),
           Padding(
@@ -82,18 +82,20 @@ class ProfileInfo extends StatelessWidget {
           ),
         ],
 
-        // --- END OF BIO FIX ---
         const SizedBox(height: 24),
 
         // Stats Row
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildStatCol(
-              postCount.toString(),
-              "Posts",
-              textColor,
-              mutedTextColor,
+            GestureDetector(
+              onTap: onPostCountTap, // <-- Tap to scroll down to posts
+              child: _buildStatCol(
+                postCount.toString(),
+                "Posts",
+                textColor,
+                mutedTextColor,
+              ),
             ),
             Container(
               height: 40,
@@ -114,25 +116,27 @@ class ProfileInfo extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Action Buttons
         _buildActionButtons(),
       ],
     );
   }
 
   Widget _buildStatCol(String val, String label, Color tColor, Color mColor) {
-    return Column(
-      children: [
-        Text(
-          val,
-          style: GoogleFonts.poppins(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: tColor,
+    return Container(
+      color: Colors.transparent, // Ensures the whole block is tappable
+      child: Column(
+        children: [
+          Text(
+            val,
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: tColor,
+            ),
           ),
-        ),
-        Text(label, style: GoogleFonts.poppins(fontSize: 12, color: mColor)),
-      ],
+          Text(label, style: GoogleFonts.poppins(fontSize: 12, color: mColor)),
+        ],
+      ),
     );
   }
 
@@ -192,7 +196,6 @@ class ProfileInfo extends StatelessWidget {
       );
     }
 
-    // Logic for interacting with other users
     String primaryLabel = "Mingle";
     VoidCallback? primaryAction = () => onConnectionAction('send');
     bool useGradient = true;
