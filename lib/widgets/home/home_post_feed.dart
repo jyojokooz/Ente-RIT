@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: home_post_feed.dart
-// FILE PATH: lib/widgets/home/home_post_feed.dart
-// ===============================
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,14 +10,10 @@ import '../../screens/edit_post_screen.dart';
 import '../../screens/pages/profile_screen.dart';
 
 class HomePostFeed extends StatefulWidget {
-  final int selectedTab;
+  // Removed selectedTab parameter
   final Color textColor;
 
-  const HomePostFeed({
-    super.key,
-    required this.selectedTab,
-    required this.textColor,
-  });
+  const HomePostFeed({super.key, required this.textColor});
 
   @override
   State<HomePostFeed> createState() => _HomePostFeedState();
@@ -169,7 +160,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Stream the CURRENT USER to get their latest connections
     return StreamBuilder<DocumentSnapshot>(
       stream:
           FirebaseFirestore.instance
@@ -184,8 +174,8 @@ class _HomePostFeedState extends State<HomePostFeed> {
         final myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
         final List<dynamic> myConnections = myData['connections'] ?? [];
 
-        // 2. Stream the POSTS
         return StreamBuilder<QuerySnapshot>(
+          // Firestore already handles sorting the recent posts for us!
           stream:
               FirebaseFirestore.instance
                   .collection('posts')
@@ -226,26 +216,15 @@ class _HomePostFeedState extends State<HomePostFeed> {
               );
             }
 
-            // --- STRICT PRIVACY FILTER LOGIC ---
             List<DocumentSnapshot> visiblePosts =
                 snapshot.data!.docs.where((postDoc) {
                   final data = postDoc.data() as Map<String, dynamic>;
                   final authorId = data['userId'];
-
-                  // If the post lacks the 'isAuthorPrivate' field, it assumes false (public)
                   final isPrivate = data['isAuthorPrivate'] ?? false;
 
-                  // 1. Always show my own posts
                   if (authorId == user.uid) return true;
-
-                  // 2. If we are mingles (connections), always show their posts (even if private)
                   if (myConnections.contains(authorId)) return true;
-
-                  // 3. If we are NOT mingles:
-                  // Hide if the account is private
                   if (isPrivate) return false;
-
-                  // Show only if the account is public
                   return true;
                 }).toList();
 
@@ -264,16 +243,7 @@ class _HomePostFeedState extends State<HomePostFeed> {
               );
             }
 
-            // Apply "Trending" sorting if the Trending tab is selected
-            if (widget.selectedTab == 1) {
-              visiblePosts.sort((a, b) {
-                final aData = a.data() as Map<String, dynamic>;
-                final bData = b.data() as Map<String, dynamic>;
-                final aLikes = (aData['likes'] as List?)?.length ?? 0;
-                final bLikes = (bData['likes'] as List?)?.length ?? 0;
-                return bLikes.compareTo(aLikes);
-              });
-            }
+            // Notice we removed the Trending Sort Logic entirely.
 
             return SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {

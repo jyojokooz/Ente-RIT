@@ -21,6 +21,7 @@ import 'admin/admin_manage_buses_screen.dart';
 import 'admin/admin_view_cafeteria_orders_screen.dart';
 // NEW IMPORT
 import 'admin/admin_manage_features_screen.dart';
+import 'admin/admin_manage_home_banners_screen.dart'; // <--- ADD THIS IMPORT
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -160,7 +161,16 @@ class AdminPanelScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // NEW BUTTON ADDED HERE
+          // NEW BANNER MANAGEMENT BUTTON
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Home Banners',
+            icon: Icons.view_carousel_rounded,
+            color: Colors.pinkAccent,
+            screen:
+                const AdminManageHomeBannersScreen(), // <-- Route to our new screen
+          ),
+          const SizedBox(height: 12),
           _buildManagementCard(
             context: context,
             label: 'Manage App Features',

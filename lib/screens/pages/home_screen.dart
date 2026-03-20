@@ -1,16 +1,11 @@
-// ===============================
-// FILE NAME: home_screen.dart
-// FILE PATH: lib/screens/pages/home_screen.dart
-// ===============================
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
-import '../../widgets/home/home_create_post_bar.dart';
-import '../../widgets/home/home_tabs.dart';
+import '../../widgets/home/home_banner_carousel.dart'; // <--- IMPORT NEW BANNER
+import '../../widgets/home/home_upcoming_event_banner.dart';
 import '../../widgets/home/home_post_feed.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,8 +18,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   String _displayName = 'User';
-  String _profilePic = '';
-  int _selectedTab = 0; // 0: Recent, 1: Trending
 
   // Edge swipe detection variables
   double _startX = 0.0;
@@ -46,7 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (doc.exists && mounted) {
       setState(() {
         _displayName = doc.data()?['displayName'] ?? 'User';
-        _profilePic = doc.data()?['profilePhotoUrl'] ?? '';
       });
     }
   }
@@ -79,10 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final dx = event.position.dx - _startX;
           final dy = (event.position.dy - _startY).abs();
 
-          // --- HIGHLY FORGIVING SWIPE LOGIC ---
-          // 1. dx > 40 : Only requires a short 40-pixel swipe to the right.
-          // 2. dy < 60 : Ensures it was mostly a horizontal swipe (not scrolling up/down).
-          // 3. _startX < 100 : Allows the swipe to start anywhere in the left 100 pixels (very generous thumb area).
+          // Swipe logic for stories
           if (dx > 40 && dy < 60 && _startX < 100) {
             Navigator.push(
               context,
@@ -130,27 +119,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     textColor: textColor,
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: HomeCreatePostBar(
-                    profilePic: _profilePic,
-                    isDark: isDark,
-                    cardColor: cardColor,
-                  ),
-                ),
+
+                // --- NEW SLIDING AD BANNER ---
+                SliverToBoxAdapter(child: HomeBannerCarousel(isDark: isDark)),
+
+                // Stories Bar
                 const SliverToBoxAdapter(child: StoriesBar()),
+
+                // Upcoming Event Banner
                 SliverToBoxAdapter(
-                  child: HomeTabs(
-                    selectedTab: _selectedTab,
-                    onTabChanged: (index) {
-                      setState(() {
-                        _selectedTab = index;
-                      });
-                    },
+                  child: HomeUpcomingEventBanner(
                     isDark: isDark,
                     cardColor: cardColor,
                   ),
                 ),
-                HomePostFeed(selectedTab: _selectedTab, textColor: textColor),
+
+                // Post Feed
+                HomePostFeed(textColor: textColor),
                 const SliverToBoxAdapter(child: SizedBox(height: 80)),
               ],
             ),

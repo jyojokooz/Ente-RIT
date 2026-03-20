@@ -1,19 +1,12 @@
-// ===============================
-// FILE NAME: stories_bar.dart
-// FILE PATH: lib/screens/stories/stories_bar.dart
-// ===============================
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
 import 'stories_connector.dart';
 
 class StoriesBar extends StatefulWidget {
   const StoriesBar({super.key});
-
   @override
   State<StoriesBar> createState() => _StoriesBarState();
 }
@@ -32,13 +25,12 @@ class _StoriesBarState extends State<StoriesBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 110,
+      height: 115,
       margin: const EdgeInsets.only(top: 10),
       child: StreamBuilder<List<Story>>(
         stream: _service.getActiveStories(),
         builder: (context, snapshot) {
           final stories = snapshot.data ?? [];
-
           final Map<String, List<Story>> groupedStories = {};
           for (var story in stories) {
             if (!groupedStories.containsKey(story.userId)) {
@@ -46,7 +38,6 @@ class _StoriesBarState extends State<StoriesBar> {
             }
             groupedStories[story.userId]!.add(story);
           }
-
           final myStories = groupedStories[currentUser?.uid] ?? [];
           final otherUsersStories =
               groupedStories.values
@@ -73,7 +64,6 @@ class _StoriesBarState extends State<StoriesBar> {
 
   Widget _buildMeButton(List<Story> myStories) {
     final bool hasStory = myStories.isNotEmpty;
-
     const gradient = LinearGradient(
       colors: [Color(0xFF833AB4), Color(0xFFFF2D55), Color(0xFFFFC107)],
       begin: Alignment.topRight,
@@ -81,17 +71,19 @@ class _StoriesBarState extends State<StoriesBar> {
     );
 
     return Padding(
-      padding: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.only(right: 14),
       child: Column(
         children: [
           Stack(
             alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
+              // Outer Ring
               Container(
-                width: 72,
-                height: 72,
+                width: 76,
+                height: 76,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(26), // SQUIRCLE SHAPE
                   gradient: hasStory ? gradient : null,
                   border:
                       hasStory
@@ -99,6 +91,7 @@ class _StoriesBarState extends State<StoriesBar> {
                           : Border.all(color: Colors.grey.shade300, width: 1.5),
                 ),
               ),
+              // Inner Image Container
               GestureDetector(
                 onTap: () {
                   if (hasStory) {
@@ -112,19 +105,18 @@ class _StoriesBarState extends State<StoriesBar> {
                     _addStory();
                   }
                 },
-                // --- NEW: LONG PRESS TO ADD MULTIPLE STORIES ---
                 onLongPress: _addStory,
                 child: Container(
-                  width: 66,
-                  height: 66,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(2.0),
+                    padding: const EdgeInsets.all(2.5),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(33),
+                      borderRadius: BorderRadius.circular(21),
                       child: StreamBuilder<DocumentSnapshot>(
                         stream:
                             FirebaseFirestore.instance
@@ -153,16 +145,19 @@ class _StoriesBarState extends State<StoriesBar> {
                   ),
                 ),
               ),
+              // Plus Badge
               Positioned(
-                bottom: 0,
-                right: 0,
+                bottom: -2,
+                right: -2,
                 child: GestureDetector(
                   onTap: _addStory,
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 26,
+                    height: 26,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00C6FB),
+                      color: const Color(
+                        0xFF4A34F6,
+                      ), // Purple/Blue color from image
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Theme.of(context).scaffoldBackgroundColor,
@@ -175,7 +170,7 @@ class _StoriesBarState extends State<StoriesBar> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             "Your Story",
             style: GoogleFonts.poppins(
@@ -209,14 +204,15 @@ class _StoriesBarState extends State<StoriesBar> {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.only(right: 14),
         child: Column(
           children: [
+            // Outer Ring
             Container(
-              width: 72,
-              height: 72,
+              width: 76,
+              height: 76,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(26), // SQUIRCLE SHAPE
                 gradient:
                     allSeen
                         ? null
@@ -232,21 +228,21 @@ class _StoriesBarState extends State<StoriesBar> {
                 color: allSeen ? Colors.grey.shade300 : null,
               ),
               child: Container(
-                margin: const EdgeInsets.all(2.5),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+                margin: const EdgeInsets.all(3.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: BorderRadius.circular(24),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(2.0),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(33),
+                    borderRadius: BorderRadius.circular(21),
                     child: Image(image: imageProvider, fit: BoxFit.cover),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               story.userName.split(' ')[0],
               style: GoogleFonts.poppins(
