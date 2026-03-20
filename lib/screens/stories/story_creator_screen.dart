@@ -37,6 +37,31 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   // Professional Color Matrices
   final List<Map<String, dynamic>> _filters = [
     {
+      'name': 'Auto Glow',
+      'matrix': <double>[
+        1.05,
+        0.02,
+        0.0,
+        0.0,
+        12.0,
+        0.02,
+        1.05,
+        0.0,
+        0.0,
+        10.0,
+        0.0,
+        0.0,
+        1.05,
+        0.0,
+        8.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+      ],
+    },
+    {
       'name': 'Normal',
       'matrix': <double>[
         1,
@@ -62,7 +87,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Clarendon', // Bright cool tone, boosted shadows
+      'name': 'Clarendon',
       'matrix': <double>[
         1.2,
         0,
@@ -87,7 +112,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Juno', // Warm vibrant
+      'name': 'Juno',
       'matrix': <double>[
         1.2,
         0,
@@ -112,7 +137,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Lark', // Soft bright, desaturated reds
+      'name': 'Lark',
       'matrix': <double>[
         0.9,
         0,
@@ -137,7 +162,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Gingham', // Faded vintage
+      'name': 'Gingham',
       'matrix': <double>[
         1.1,
         0,
@@ -162,32 +187,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
       ],
     },
     {
-      'name': 'Moon', // B&W High Contrast
-      'matrix': <double>[
-        0.33,
-        0.59,
-        0.11,
-        0,
-        0,
-        0.33,
-        0.59,
-        0.11,
-        0,
-        0,
-        0.33,
-        0.59,
-        0.11,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-      ],
-    },
-    {
-      'name': 'Cinematic', // Teal & Orange Look
+      'name': 'Cinematic',
       'matrix': <double>[
         1.2,
         0.1,
@@ -225,6 +225,11 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
     try {
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
+        _selectedCameraIndex = _cameras!.indexWhere(
+          (c) => c.lensDirection == CameraLensDirection.front,
+        );
+        if (_selectedCameraIndex == -1) _selectedCameraIndex = 0;
+
         _setCamera(_cameras![_selectedCameraIndex]);
       }
     } catch (e) {
@@ -288,12 +293,23 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
     HapticFeedback.lightImpact();
   }
 
+  bool _isFrontCamera() {
+    if (_cameras == null || _cameras!.isEmpty) return false;
+    return _cameras![_selectedCameraIndex].lensDirection ==
+        CameraLensDirection.front;
+  }
+
   Future<void> _takePicture() async {
     if (!_isCameraInitialized || _isRecording) return;
     HapticFeedback.mediumImpact();
     try {
       final XFile image = await _cameraController!.takePicture();
-      _navigateToEditor([File(image.path)], PostType.image, null);
+      _navigateToEditor(
+        [File(image.path)],
+        PostType.image,
+        null,
+        _isFrontCamera(),
+      );
     } catch (e) {
       debugPrint("Take picture error: $e");
     }
@@ -327,25 +343,40 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
         [File(video.path)],
         PostType.video,
         thumbPath != null ? File(thumbPath) : null,
+        _isFrontCamera(),
       );
     } catch (e) {
       debugPrint("Stop video error: $e");
     }
   }
 
-  void _navigateToEditor(List<File> files, PostType type, File? thumbnail) {
-    Navigator.pushReplacement(
+  void _navigateToEditor(
+    List<File> files,
+    PostType type,
+    File? thumbnail,
+    bool isFrontCamera,
+  ) {
+    // USE push() INSTEAD OF pushReplacement()
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder:
-            (_) => StoryEditorView(
+            (editorContext) => StoryEditorView(
               files: files,
               postType: type,
               thumbnailFile: thumbnail,
-              filterMatrix:
-                  _filters[_selectedFilterIndex]['matrix'], // Pass active filter
-              onBack: () => Navigator.pop(context),
-              onUploadComplete: () => Navigator.pop(context),
+              filterMatrix: _filters[_selectedFilterIndex]['matrix'],
+              isFrontCamera: isFrontCamera,
+              // Safely pop the editor context
+              onBack: () => Navigator.pop(editorContext),
+              onUploadComplete: () {
+                // Pop the Editor
+                Navigator.pop(editorContext);
+                // Then Pop the Camera to return to the Home/Feed
+                if (mounted) {
+                  Navigator.pop(context);
+                }
+              },
             ),
       ),
     );
@@ -377,6 +408,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                     files,
                     isVideo ? PostType.video : PostType.image,
                     null,
+                    false,
                   );
                 },
                 onCancel: () => Navigator.pop(ctx),
@@ -390,131 +422,132 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onVerticalDragEnd: (details) {
-          if (details.primaryVelocity! < -500)
-            _openGallery(); // Swipe up for gallery
-        },
-        child: Stack(
-          fit: StackFit.expand,
+      body: SafeArea(
+        bottom: false, // Ensures bottom bar touches the very bottom edge
+        child: Column(
           children: [
-            // --- 1. LIVE CAMERA & FILTERS ---
-            if (_isCameraInitialized)
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(30),
+            // --- 1. IDENTICAL FRAMED AREA ---
+            Expanded(
+              child: Padding(
+                // EXACT SAME padding in both screens
+                padding: const EdgeInsets.only(
+                  top: 8.0,
+                  left: 4.0,
+                  right: 4.0,
+                  bottom: 8.0,
                 ),
-                child: ColorFiltered(
-                  colorFilter: ColorFilter.matrix(
-                    _filters[_selectedFilterIndex]['matrix'],
-                  ),
-                  child: Transform.scale(
-                    scale: 1.0,
-                    child: Center(child: CameraPreview(_cameraController!)),
-                  ),
-                ),
-              )
-            else
-              const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-
-            // --- 2. CINEMATIC OVERLAYS ---
-            // Subtle Vignette
-            IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
-                    radius: 1.2,
-                  ),
-                ),
-              ),
-            ),
-            // Light Leak (Slight warm glow from top right)
-            IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    colors: [
-                      const Color(0xFFFF9A44).withOpacity(0.15),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // --- 3. TOP CONTROLS ---
-            Positioned(
-              top: 50,
-              left: 20,
-              right: 20,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 30,
-                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  Row(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          _flashMode == FlashMode.torch
-                              ? Icons.flash_on
-                              : Icons.flash_off,
-                          color: Colors.white,
-                          size: 28,
-                          shadows: const [
-                            Shadow(blurRadius: 4, color: Colors.black),
+                      // Camera Preview (Forced to cover the exact frame without stretching)
+                      if (_isCameraInitialized)
+                        SizedBox.expand(
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            child: SizedBox(
+                              width:
+                                  _cameraController!
+                                      .value
+                                      .previewSize
+                                      ?.height ??
+                                  1,
+                              height:
+                                  _cameraController!.value.previewSize?.width ??
+                                  1,
+                              child: ColorFiltered(
+                                colorFilter: ColorFilter.matrix(
+                                  _filters[_selectedFilterIndex]['matrix'],
+                                ),
+                                child: CameraPreview(_cameraController!),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+
+                      // Subtle dark gradient at top for visibility of buttons
+                      IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withOpacity(0.3),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.2),
+                              ],
+                              stops: const [0.0, 0.15, 0.85, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Top Controls inside the frame
+                      Positioned(
+                        top: 16,
+                        left: 16,
+                        right: 16,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _flashMode == FlashMode.torch
+                                        ? Icons.flash_on
+                                        : Icons.flash_off,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                  onPressed: _toggleFlash,
+                                ),
+                                const SizedBox(width: 16),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.settings_outlined,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                  onPressed: () {}, // Settings placeholder
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                        onPressed: _toggleFlash,
-                      ),
-                      const SizedBox(width: 16),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.flip_camera_ios_rounded,
-                          color: Colors.white,
-                          size: 28,
-                          shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                        ),
-                        onPressed: _switchCamera,
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
 
-            // --- 4. BOTTOM CONTROLS ---
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.only(top: 60, bottom: 40),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // FILTER SELECTOR
+            // --- 2. BOTTOM CONTROLS (FIXED EXACT HEIGHT: 160) ---
+            Container(
+              height: 160,
+              color: Colors.black,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Filter Selector (Hidden when recording)
+                  if (!_isRecording)
                     SizedBox(
-                      height: 80,
+                      height: 55,
                       child: PageView.builder(
                         controller: _filterPageController,
                         onPageChanged: (index) {
@@ -527,29 +560,17 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                           return Center(
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeOutCubic,
-                              width: isSelected ? 75 : 55,
-                              height: isSelected ? 75 : 55,
+                              width: isSelected ? 50 : 36,
+                              height: isSelected ? 50 : 36,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color:
                                       isSelected
                                           ? Colors.white
-                                          : Colors.white54,
-                                  width: isSelected ? 4 : 2,
+                                          : Colors.transparent,
+                                  width: 2,
                                 ),
-                                boxShadow:
-                                    isSelected
-                                        ? [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.3,
-                                            ),
-                                            blurRadius: 10,
-                                          ),
-                                        ]
-                                        : [],
                               ),
                               child: ClipOval(
                                 child: ColorFiltered(
@@ -557,7 +578,7 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                                     _filters[index]['matrix'],
                                   ),
                                   child: Image.network(
-                                    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&q=80', // Generic model placeholder
+                                    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&q=80',
                                     fit: BoxFit.cover,
                                   ),
                                 ),
@@ -566,98 +587,88 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                           );
                         },
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    // ACTIVE FILTER NAME
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: 1.0,
-                      child: Text(
-                        _filters[_selectedFilterIndex]['name'],
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                          shadows: [
-                            const Shadow(blurRadius: 4, color: Colors.black),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    )
+                  else
+                    const SizedBox(height: 55),
 
-                    // CAPTURE ROW
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Gallery Button
-                          GestureDetector(
-                            onTap: _openGallery,
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Colors.white70,
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                                color: Colors.black45,
-                              ),
-                              child: const Icon(
-                                Icons.photo_library_rounded,
-                                color: Colors.white,
-                                size: 22,
-                              ),
+                  const SizedBox(height: 15),
+
+                  // Capture Row
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Gallery Button
+                        GestureDetector(
+                          onTap: _openGallery,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.white, width: 2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.photo_library,
+                              color: Colors.white,
+                              size: 20,
                             ),
                           ),
-                          // Capture Button
-                          GestureDetector(
-                            onTap: _takePicture,
-                            onLongPress: _startVideoRecording,
-                            onLongPressUp: _stopVideoRecording,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: _isRecording ? 100 : 85,
-                              height: _isRecording ? 100 : 85,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 5,
-                                ),
-                                color:
-                                    _isRecording
-                                        ? Colors.redAccent.withOpacity(0.5)
-                                        : Colors.transparent,
-                              ),
-                              child: Center(
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: _isRecording ? 35 : 70,
-                                  height: _isRecording ? 35 : 70,
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _isRecording
-                                            ? Colors.red
-                                            : Colors.white,
-                                    borderRadius: BorderRadius.circular(
-                                      _isRecording ? 10 : 40,
-                                    ),
+                        ),
+
+                        // Capture Button
+                        GestureDetector(
+                          onTap: _takePicture,
+                          onLongPress: _startVideoRecording,
+                          onLongPressUp: _stopVideoRecording,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: _isRecording ? 90 : 75,
+                            height: _isRecording ? 90 : 75,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              color: Colors.transparent,
+                            ),
+                            child: Center(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: _isRecording ? 35 : 60,
+                                height: _isRecording ? 35 : 60,
+                                decoration: BoxDecoration(
+                                  color:
+                                      _isRecording ? Colors.red : Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    _isRecording ? 8 : 40,
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 48), // Balancer
-                        ],
-                      ),
+                        ),
+
+                        // Switch Camera Button
+                        GestureDetector(
+                          onTap: _switchCamera,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: Colors.white24,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.flip_camera_ios,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],

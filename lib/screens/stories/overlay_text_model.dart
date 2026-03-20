@@ -26,3 +26,16 @@ class OverlayItem {
     this.color = Colors.white,
   });
 }
+
+// New Model for the Drawing/Brush feature
+class DrawingStroke {
+  final Path path;
+  final Color color;
+  final double strokeWidth;
+
+  DrawingStroke({
+    required this.path,
+    required this.color,
+    required this.strokeWidth,
+  });
+}
