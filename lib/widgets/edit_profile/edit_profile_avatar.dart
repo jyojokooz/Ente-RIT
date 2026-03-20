@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: edit_profile_avatar.dart
 // FILE PATH: lib/widgets/edit_profile/edit_profile_avatar.dart
 // ===============================
 

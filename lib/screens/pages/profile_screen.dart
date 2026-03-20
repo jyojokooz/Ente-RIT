@@ -238,15 +238,174 @@ class _ProfileScreenState extends State<ProfileScreen>
           resourceType: CloudinaryResourceType.Image,
         ),
       );
+
+      // Update in users collection
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_currentUser.uid)
           .set({
             'profilePhotoUrl': response.secureUrl,
           }, SetOptions(merge: true));
+
+      // --- ADDED FIX: Cascade update to all posts, comments, etc ---
+      await _updateDenormalizedData(null, response.secureUrl);
+
       if (mounted) setState(() => _profilePhotoUrl = response.secureUrl);
     } catch (e) {
       debugPrint("Upload Error: $e");
+    }
+  }
+
+  // --- NEW BATCH UPDATER FUNCTION ---
+  // Automatically syncs profile picture/name across all documents when changed
+  Future<void> _updateDenormalizedData(
+    String? newName,
+    String? newPhotoUrl,
+  ) async {
+    if (newName == null && newPhotoUrl == null) return;
+
+    final uid = _currentUser.uid;
+    final firestore = FirebaseFirestore.instance;
+    WriteBatch batch = firestore.batch();
+    int operationCount = 0;
+
+    Future<void> commitBatchIfLimitReached() async {
+      if (operationCount >= 450) {
+        await batch.commit();
+        batch = firestore.batch();
+        operationCount = 0;
+      }
+    }
+
+    try {
+      // 1. Update Posts
+      final postsSnap =
+          await firestore
+              .collection('posts')
+              .where('userId', isEqualTo: uid)
+              .get();
+      for (var doc in postsSnap.docs) {
+        Map<String, dynamic> updates = {};
+        if (newName != null) updates['userName'] = newName;
+        if (newPhotoUrl != null) updates['userImageUrl'] = newPhotoUrl;
+        if (updates.isNotEmpty) {
+          batch.update(doc.reference, updates);
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // 2. Update Comments (Collection Group)
+      try {
+        final commentsSnap =
+            await firestore
+                .collectionGroup('comments')
+                .where('userId', isEqualTo: uid)
+                .get();
+        for (var doc in commentsSnap.docs) {
+          Map<String, dynamic> updates = {};
+          if (newName != null) updates['userName'] = newName;
+          if (newPhotoUrl != null) updates['userImageUrl'] = newPhotoUrl;
+          if (updates.isNotEmpty) {
+            batch.update(doc.reference, updates);
+            operationCount++;
+            await commitBatchIfLimitReached();
+          }
+        }
+      } catch (e) {
+        debugPrint("Comments update skipped (missing index?): $e");
+      }
+
+      // 3. Update Marketplace Products
+      final productsSnap =
+          await firestore
+              .collection('products')
+              .where('sellerId', isEqualTo: uid)
+              .get();
+      for (var doc in productsSnap.docs) {
+        Map<String, dynamic> updates = {};
+        if (newName != null) updates['sellerName'] = newName;
+        if (newPhotoUrl != null) updates['sellerPhotoUrl'] = newPhotoUrl;
+        if (updates.isNotEmpty) {
+          batch.update(doc.reference, updates);
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // 4. Update Stories
+      final storiesSnap =
+          await firestore
+              .collection('stories')
+              .where('userId', isEqualTo: uid)
+              .get();
+      for (var doc in storiesSnap.docs) {
+        Map<String, dynamic> updates = {};
+        if (newName != null) updates['userName'] = newName;
+        if (newPhotoUrl != null) updates['userImage'] = newPhotoUrl;
+        if (updates.isNotEmpty) {
+          batch.update(doc.reference, updates);
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // 5. Update Lost and Found
+      if (newName != null) {
+        final lfSnap =
+            await firestore
+                .collection('lost_and_found')
+                .where('userId', isEqualTo: uid)
+                .get();
+        for (var doc in lfSnap.docs) {
+          batch.update(doc.reference, {'userName': newName});
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // 6. Update Active Chats
+      final chatsSnap =
+          await firestore
+              .collection('chats')
+              .where('participants', arrayContains: uid)
+              .get();
+      for (var doc in chatsSnap.docs) {
+        Map<String, dynamic> updates = {};
+        if (newName != null) updates['participantNames.$uid'] = newName;
+        if (newPhotoUrl != null)
+          updates['participantImages.$uid'] = newPhotoUrl;
+        if (updates.isNotEmpty) {
+          batch.update(doc.reference, updates);
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // 7. Update Sent Notifications
+      final notifSnap =
+          await firestore
+              .collection('notifications')
+              .where('triggeringUserId', isEqualTo: uid)
+              .get();
+      for (var doc in notifSnap.docs) {
+        Map<String, dynamic> updates = {};
+        if (newName != null) updates['triggeringUserName'] = newName;
+        if (newPhotoUrl != null)
+          updates['triggeringUserAvatarUrl'] = newPhotoUrl;
+        if (updates.isNotEmpty) {
+          batch.update(doc.reference, updates);
+          operationCount++;
+          await commitBatchIfLimitReached();
+        }
+      }
+
+      // Final commit
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint("Error updating denormalized data: $e");
     }
   }
 
@@ -331,7 +490,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _loadAllData();
   }
 
-  // --- UPDATED TOGGLE PRIVACY METHOD ---
   Future<void> _togglePrivacy(bool isPrivate) async {
     try {
       // 1. Update user profile

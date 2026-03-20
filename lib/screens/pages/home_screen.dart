@@ -1,10 +1,15 @@
+// ===============================
+// FILE NAME: home_screen.dart
+// FILE PATH: lib/screens/pages/home_screen.dart
+// ===============================
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
-import '../../widgets/home/home_banner_carousel.dart'; // <--- IMPORT NEW BANNER
+import '../../widgets/home/home_banner_carousel.dart';
 import '../../widgets/home/home_upcoming_event_banner.dart';
 import '../../widgets/home/home_post_feed.dart';
 
@@ -17,31 +22,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
-  String _displayName = 'User';
 
   // Edge swipe detection variables
   double _startX = 0.0;
   double _startY = 0.0;
   bool _isSwiping = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-  }
-
-  Future<void> _loadUserData() async {
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-    if (doc.exists && mounted) {
-      setState(() {
-        _displayName = doc.data()?['displayName'] ?? 'User';
-      });
-    }
-  }
 
   Future<void> _refreshPosts() async {
     setState(() {});
@@ -108,36 +93,55 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFFFF3E8E),
           backgroundColor: cardColor,
           child: SafeArea(
-            child: CustomScrollView(
-              cacheExtent: 1000,
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: HomeHeader(
-                    displayName: _displayName,
-                    isDark: isDark,
-                    textColor: textColor,
-                  ),
-                ),
+            // --- WRAPPED IN STREAM BUILDER SO THE HEADER INSTANTLY UPDATES ---
+            child: StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                // Determine display name live from stream
+                String displayName = 'User';
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  displayName = data['displayName'] ?? 'User';
+                }
 
-                // --- NEW SLIDING AD BANNER ---
-                SliverToBoxAdapter(child: HomeBannerCarousel(isDark: isDark)),
+                return CustomScrollView(
+                  cacheExtent: 1000,
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: HomeHeader(
+                        displayName: displayName,
+                        isDark: isDark,
+                        textColor: textColor,
+                      ),
+                    ),
 
-                // Stories Bar
-                const SliverToBoxAdapter(child: StoriesBar()),
+                    // --- NEW SLIDING AD BANNER ---
+                    SliverToBoxAdapter(
+                      child: HomeBannerCarousel(isDark: isDark),
+                    ),
 
-                // Upcoming Event Banner
-                SliverToBoxAdapter(
-                  child: HomeUpcomingEventBanner(
-                    isDark: isDark,
-                    cardColor: cardColor,
-                  ),
-                ),
+                    // Stories Bar
+                    const SliverToBoxAdapter(child: StoriesBar()),
 
-                // Post Feed
-                HomePostFeed(textColor: textColor),
-                const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              ],
+                    // Upcoming Event Banner
+                    SliverToBoxAdapter(
+                      child: HomeUpcomingEventBanner(
+                        isDark: isDark,
+                        cardColor: cardColor,
+                      ),
+                    ),
+
+                    // Post Feed
+                    HomePostFeed(textColor: textColor),
+                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  ],
+                );
+              },
             ),
           ),
         ),

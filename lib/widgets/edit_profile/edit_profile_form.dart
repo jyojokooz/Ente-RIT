@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: edit_profile_form.dart
 // FILE PATH: lib/widgets/edit_profile/edit_profile_form.dart
 // ===============================
 
@@ -186,8 +185,9 @@ class EditProfileForm extends StatelessWidget {
           return 'Name is required';
         }
         if (isUsername) {
-          if (value == null || value.trim().isEmpty)
+          if (value == null || value.trim().isEmpty) {
             return 'Username is required';
+          }
           if (value.contains(' ') || value.contains('@')) {
             return 'No spaces or @ allowed';
           }
@@ -201,7 +201,7 @@ class EditProfileForm extends StatelessWidget {
   Widget _buildDepartmentDropdown() {
     return DropdownButtonFormField<String>(
       value: selectedDepartment,
-      isExpanded: true, // <-- FIX 1: Allow dropdown to expand horizontally
+      isExpanded: true,
       icon: Icon(Icons.keyboard_arrow_down_rounded, color: subtitleColor),
       dropdownColor: isDark ? const Color(0xFF252528) : Colors.white,
       style: GoogleFonts.poppins(fontSize: 14, color: textColor),
@@ -224,13 +224,7 @@ class EditProfileForm extends StatelessWidget {
           departmentOptions.map((String dept) {
             return DropdownMenuItem(
               value: dept,
-              child: Text(
-                dept,
-                maxLines: 1, // <-- FIX 2: Restrict to 1 line
-                overflow:
-                    TextOverflow
-                        .ellipsis, // <-- FIX 3: Add ellipsis "..." if it overflows
-              ),
+              child: Text(dept, maxLines: 1, overflow: TextOverflow.ellipsis),
             );
           }).toList(),
       onChanged: onDepartmentChanged,

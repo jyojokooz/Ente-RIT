@@ -146,7 +146,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Stops music if the user scrolls the post off-screen
   void _onVisibilityChanged(VisibilityInfo info) {
     if (info.visibleFraction < 0.5 && _isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
@@ -188,12 +187,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
-    final authorData = {
-      'displayName': postData['userName'] ?? 'Unknown',
-      'profilePhotoUrl': postData['userImageUrl'] ?? '',
-    };
-
+    final String postAuthorId = postData['userId'] ?? '';
     final String postType = postData['postType'] ?? 'image';
+
     List<String> mediaUrls = [];
     if (postData['postImages'] != null &&
         (postData['postImages'] as List).isNotEmpty) {
@@ -205,11 +201,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     final String? originalThumbnailUrl = postData['postThumbnailUrl'];
     final String caption = postData['caption'] ?? '';
-    final bool isAuthor = postData['userId'] == currentUserId;
+    final bool isAuthor = postAuthorId == currentUserId;
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
     final int commentsCount = postData['comments'] ?? 0;
-
-    // Extract music data
     final Map<String, dynamic>? musicData = postData['music'];
 
     return VisibilityDetector(
@@ -233,87 +227,111 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: widget.onProfileTapped,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor:
-                        isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    backgroundImage:
-                        authorData['profilePhotoUrl'].isNotEmpty
-                            ? CachedNetworkImageProvider(
-                              authorData['profilePhotoUrl'],
-                            )
-                            : null,
-                    child:
-                        authorData['profilePhotoUrl'].isEmpty
-                            ? Icon(Icons.person, color: subtitleColor)
-                            : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        authorData['displayName'],
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
+            // --- HEADER (Instantly listens to user's live profile changes) ---
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(postAuthorId)
+                      .snapshots(),
+              builder: (context, authorSnap) {
+                // Fallback to static post data if loading
+                String currentDisplayName = postData['userName'] ?? 'Unknown';
+                String currentProfilePic = postData['userImageUrl'] ?? '';
+
+                // If stream gets live data, overwrite the static data instantly
+                if (authorSnap.hasData && authorSnap.data!.exists) {
+                  final authorDocData =
+                      authorSnap.data!.data() as Map<String, dynamic>;
+                  currentDisplayName =
+                      authorDocData['displayName'] ?? currentDisplayName;
+                  currentProfilePic =
+                      authorDocData['profilePhotoUrl'] ?? currentProfilePic;
+                }
+
+                return Row(
+                  children: [
+                    GestureDetector(
+                      onTap: widget.onProfileTapped,
+                      child: CircleAvatar(
+                        radius: 20,
+                        backgroundColor:
+                            isDark
+                                ? Colors.grey.shade800
+                                : Colors.grey.shade200,
+                        backgroundImage:
+                            currentProfilePic.isNotEmpty
+                                ? CachedNetworkImageProvider(currentProfilePic)
+                                : null,
+                        child:
+                            currentProfilePic.isEmpty
+                                ? Icon(Icons.person, color: subtitleColor)
+                                : null,
                       ),
-                      Text(
-                        timestamp != null ? _formatTimeAgo(timestamp) : '',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: subtitleColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isAuthor)
-                  PopupMenuButton<String>(
-                    color: theme.colorScheme.surface,
-                    onSelected: (val) {
-                      if (val == 'edit') widget.onEditPressed();
-                      if (val == 'delete') widget.onDeletePressed();
-                    },
-                    icon: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white10 : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(Icons.more_horiz, size: 20),
                     ),
-                    itemBuilder:
-                        (ctx) => [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text(
-                              'Edit',
-                              style: TextStyle(color: textColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentDisplayName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text(
-                              'Delete',
-                              style: TextStyle(color: Colors.red),
+                          Text(
+                            timestamp != null ? _formatTimeAgo(timestamp) : '',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: subtitleColor,
                             ),
                           ),
                         ],
-                  ),
-              ],
+                      ),
+                    ),
+                    if (isAuthor)
+                      PopupMenuButton<String>(
+                        color: theme.colorScheme.surface,
+                        onSelected: (val) {
+                          if (val == 'edit') widget.onEditPressed();
+                          if (val == 'delete') widget.onDeletePressed();
+                        },
+                        icon: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                isDark ? Colors.white10 : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(Icons.more_horiz, size: 20),
+                        ),
+                        itemBuilder:
+                            (ctx) => [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Text(
+                                  'Edit',
+                                  style: TextStyle(color: textColor),
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
 
@@ -404,7 +422,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // --- MUSIC PILL OVERLAY (Only if image and music data exists) ---
+                  // --- MUSIC PILL OVERLAY ---
                   if (postType == 'image' &&
                       musicData != null &&
                       musicData['previewUrl'] != null)
@@ -427,9 +445,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             horizontal: 10,
                             vertical: 6,
                           ),
-                          constraints: const BoxConstraints(
-                            maxWidth: 160,
-                          ), // Prevents overflowing
+                          constraints: const BoxConstraints(maxWidth: 160),
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.6),
                             borderRadius: BorderRadius.circular(20),
@@ -501,9 +517,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(
-                                0.2,
-                              ), // Frosted glass effect
+                              color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
