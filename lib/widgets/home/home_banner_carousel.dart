@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shimmer/shimmer.dart'; // <-- Add this import
 
 class HomeBannerCarousel extends StatefulWidget {
   final bool isDark;
@@ -122,18 +123,24 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
                         fit:
                             BoxFit
                                 .cover, // Expands image fully across container
+                        // --- UPDATED SHIMMER PLACEHOLDER HERE ---
                         placeholder:
-                            (context, url) => Container(
-                              color:
+                            (context, url) => Shimmer.fromColors(
+                              baseColor:
                                   widget.isDark
-                                      ? Colors.white10
-                                      : Colors.grey.shade200,
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade300,
+                              highlightColor:
+                                  widget.isDark
+                                      ? Colors.grey.shade600
+                                      : Colors.grey.shade100,
+                              child: Container(
+                                color:
+                                    widget.isDark ? Colors.black : Colors.white,
                               ),
                             ),
+
+                        // -----------------------------------------
                         errorWidget:
                             (context, url, error) => Container(
                               color:
