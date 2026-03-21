@@ -30,7 +30,8 @@ class SuggestedUsersList extends StatefulWidget {
 
 class _SuggestedUsersListState extends State<SuggestedUsersList> {
   final String _currentUserId = FirebaseAuth.instance.currentUser!.uid;
-  List<DocumentSnapshot> _suggestions = [];
+  // Updated to hold both the DocumentSnapshot and mutual connections count
+  List<Map<String, dynamic>> _suggestions = [];
   bool _isLoadingInitial = true;
 
   @override
@@ -39,25 +40,18 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
     _filterInitialSuggestions();
   }
 
-  // --- THIS IS THE KEY TO THE FIX ---
-  // This lifecycle method is called whenever the parent widget rebuilds
-  // and passes down a new `suggestedUsersFuture`.
   @override
   void didUpdateWidget(covariant SuggestedUsersList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the future provided by the parent is a new one (i.e., on refresh),
-    // we re-run our filtering logic.
     if (widget.suggestedUsersFuture != oldWidget.suggestedUsersFuture) {
       _filterInitialSuggestions();
     }
   }
 
   Future<void> _filterInitialSuggestions() async {
-    // Set loading state to true to show a spinner during refresh
     if (mounted) setState(() => _isLoadingInitial = true);
 
     try {
-      // We now get the future directly from the widget properties
       final allUsers = await widget.suggestedUsersFuture;
       final userDoc =
           await FirebaseFirestore.instance
@@ -68,9 +62,9 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
       if (!mounted || !userDoc.exists) return;
 
       final myData = userDoc.data()!;
-      final myConnections = myData['connections'] ?? [];
-      final mySentRequests = myData['sentRequests'] ?? [];
-      final myReceivedRequests = myData['receivedRequests'] ?? [];
+      final List<dynamic> myConnections = myData['connections'] ?? [];
+      final List<dynamic> mySentRequests = myData['sentRequests'] ?? [];
+      final List<dynamic> myReceivedRequests = myData['receivedRequests'] ?? [];
 
       final Set<String> excludedIds = {
         _currentUserId,
@@ -79,10 +73,31 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
         ...myReceivedRequests.map((e) => e.toString()),
       };
 
+      List<Map<String, dynamic>> suggestionsData = [];
+
+      for (var doc in allUsers) {
+        if (!excludedIds.contains(doc.id)) {
+          final theirData = doc.data() as Map<String, dynamic>;
+          final List<dynamic> theirConnections = theirData['connections'] ?? [];
+
+          int mutualCount = 0;
+          for (var conn in theirConnections) {
+            if (myConnections.contains(conn)) {
+              mutualCount++;
+            }
+          }
+          suggestionsData.add({'doc': doc, 'mutualCount': mutualCount});
+        }
+      }
+
+      // Sort by highest mutual connections first
+      suggestionsData.sort(
+        (a, b) => (b['mutualCount'] as int).compareTo(a['mutualCount'] as int),
+      );
+
       if (mounted) {
         setState(() {
-          _suggestions =
-              allUsers.where((doc) => !excludedIds.contains(doc.id)).toList();
+          _suggestions = suggestionsData;
           _isLoadingInitial = false;
         });
       }
@@ -94,7 +109,9 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
   void _onMingleSent(String userId) {
     if (mounted) {
       setState(() {
-        _suggestions.removeWhere((doc) => doc.id == userId);
+        _suggestions.removeWhere(
+          (item) => (item['doc'] as DocumentSnapshot).id == userId,
+        );
       });
     }
   }
@@ -103,7 +120,7 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
   Widget build(BuildContext context) {
     if (_isLoadingInitial) {
       return const SizedBox(
-        height: 220,
+        height: 240,
         child: Center(
           child: CircularProgressIndicator(color: Color(0xFF00C6FB)),
         ),
@@ -115,17 +132,21 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
     }
 
     return SizedBox(
-      height: 220,
+      height: 240, // Increased slightly to accommodate mutual friends text
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _suggestions.length,
         itemBuilder: (context, index) {
-          final userDoc = _suggestions[index];
+          final item = _suggestions[index];
+          final userDoc = item['doc'] as DocumentSnapshot;
+          final mutualCount = item['mutualCount'] as int;
+
           return _SuggestedUserCard(
             key: ValueKey(userDoc.id),
             userDoc: userDoc,
+            mutualCount: mutualCount,
             currentUserId: _currentUserId,
             isDark: widget.isDark,
             cardColor: widget.cardColor,
@@ -138,9 +159,10 @@ class _SuggestedUsersListState extends State<SuggestedUsersList> {
   }
 }
 
-// --- THE CARD WIDGET REMAINS UNCHANGED ---
+// --- THE CARD WIDGET ---
 class _SuggestedUserCard extends StatefulWidget {
   final DocumentSnapshot userDoc;
+  final int mutualCount;
   final String currentUserId;
   final bool isDark;
   final Color cardColor;
@@ -150,6 +172,7 @@ class _SuggestedUserCard extends StatefulWidget {
   const _SuggestedUserCard({
     super.key,
     required this.userDoc,
+    required this.mutualCount,
     required this.currentUserId,
     required this.isDark,
     required this.cardColor,
@@ -215,7 +238,7 @@ class _SuggestedUserCardState extends State<_SuggestedUserCard> {
             ),
           ),
       child: Container(
-        width: 140,
+        width: 145, // Slightly wider to comfortably fit the text
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -252,7 +275,7 @@ class _SuggestedUserCardState extends State<_SuggestedUserCard> {
                       )
                       : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Text(
               name,
               maxLines: 1,
@@ -271,6 +294,40 @@ class _SuggestedUserCardState extends State<_SuggestedUserCard> {
                 fontSize: 10,
                 color: widget.isDark ? Colors.white54 : Colors.black54,
               ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  widget.mutualCount > 0
+                      ? Icons.people_alt_rounded
+                      : Icons.flare_rounded,
+                  size: 11,
+                  color:
+                      widget.mutualCount > 0
+                          ? const Color(0xFF00C6FB)
+                          : const Color(0xFFFF9A44),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    widget.mutualCount > 0
+                        ? '${widget.mutualCount} mutuals'
+                        : 'New here',
+                    style: GoogleFonts.poppins(
+                      color:
+                          widget.mutualCount > 0
+                              ? const Color(0xFF00C6FB)
+                              : const Color(0xFFFF9A44),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
             const Spacer(),
 
