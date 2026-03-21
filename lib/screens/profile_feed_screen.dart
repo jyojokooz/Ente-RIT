@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: profile_feed_screen.dart
 // FILE PATH: lib/screens/profile_feed_screen.dart
 // ===============================
 
@@ -11,7 +10,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'post_card.dart';
 import 'comments_sheet.dart';
 import 'edit_post_screen.dart';
-import 'pages/profile_screen.dart';
 
 class ProfileFeedScreen extends StatefulWidget {
   final List<DocumentSnapshot> posts;
@@ -72,13 +70,20 @@ class _ProfileFeedScreenState extends State<ProfileFeedScreen> {
     }
   }
 
-  void _editPost(String postId, String currentCaption) {
+  void _editPost(
+    String postId,
+    String currentCaption,
+    List<String> currentTags,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder:
-            (context) =>
-                EditPostScreen(postId: postId, initialCaption: currentCaption),
+            (context) => EditPostScreen(
+              postId: postId,
+              initialCaption: currentCaption,
+              initialTaggedUsers: currentTags,
+            ),
       ),
     );
   }
@@ -176,7 +181,11 @@ class _ProfileFeedScreenState extends State<ProfileFeedScreen> {
             postData['userId'] ?? '',
           ),
       onEditPressed:
-          () => _editPost(postSnapshot.id, postData['caption'] ?? ''),
+          () => _editPost(
+            postSnapshot.id,
+            postData['caption'] ?? '',
+            List<String>.from(postData['taggedUsers'] ?? []),
+          ),
     );
   }
 

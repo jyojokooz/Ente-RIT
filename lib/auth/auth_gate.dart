@@ -7,11 +7,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Import destinations
-import 'package:my_project/screens/create_username_screen.dart';
-import 'package:my_project/screens/main_screen.dart';
-import 'package:my_project/screens/auth_screen.dart';
-import 'package:my_project/screens/post_card_placeholder.dart';
+// --- RELATIVE IMPORTS ---
+import '../screens/create_username_screen.dart';
+import '../screens/main_screen.dart';
+import '../screens/auth_screen.dart';
+import '../screens/post_card_placeholder.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -19,12 +19,10 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Let the Scaffold background color adapt automatically
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, authSnapshot) {
-          // 1. Waiting for Auth
           if (authSnapshot.connectionState == ConnectionState.waiting) {
             return const _HomeSkeletonLoader();
           }
@@ -32,8 +30,6 @@ class AuthGate extends StatelessWidget {
           if (authSnapshot.hasData) {
             final user = authSnapshot.data!;
 
-            // This listens continuously. When the signup function finishes writing
-            // the user data to Firestore, this will auto-update and let the user in.
             return StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -41,13 +37,11 @@ class AuthGate extends StatelessWidget {
                       .doc(user.uid)
                       .snapshots(),
               builder: (context, userDocSnapshot) {
-                // 2. Waiting for Firestore connection
                 if (userDocSnapshot.connectionState ==
                     ConnectionState.waiting) {
                   return const _HomeSkeletonLoader();
                 }
 
-                // 3. User Document Exists
                 if (userDocSnapshot.hasData && userDocSnapshot.data!.exists) {
                   final userData =
                       userDocSnapshot.data!.data() as Map<String, dynamic>?;
@@ -57,17 +51,14 @@ class AuthGate extends StatelessWidget {
                     return const CreateUsernameScreen();
                   }
 
-                  // User is fully set up
                   return const MainScreen();
                 }
 
-                // 4. Document doesn't exist YET (Still being created by signup function)
-                // Keep showing loader. Since this is a Stream, it will refresh automatically
-                // the moment the document is created.
                 return const _HomeSkeletonLoader();
               },
             );
           } else {
+            // This safely returns the AuthScreen class imported from ../screens/auth_screen.dart
             return const AuthScreen();
           }
         },
@@ -76,14 +67,11 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// --- OPTIMIZED VISUAL FIX: Fake Home Screen ---
-// This now perfectly adapts to Dark/Light mode to prevent the white flash.
 class _HomeSkeletonLoader extends StatelessWidget {
   const _HomeSkeletonLoader();
 
   @override
   Widget build(BuildContext context) {
-    // Dynamically fetch the current theme colors
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = isDark ? Colors.white : Colors.black;
@@ -122,7 +110,6 @@ class _HomeSkeletonLoader extends StatelessWidget {
                 ],
               ),
             ),
-            // Use ListView with physics NeverScrollable to prevent user interaction during load
             Expanded(
               child: ListView.builder(
                 physics: const NeverScrollableScrollPhysics(),

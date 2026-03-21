@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: stories_bar.dart
 // FILE PATH: lib/screens/stories/stories_bar.dart
 // ===============================
 
@@ -20,15 +19,17 @@ class _StoriesBarState extends State<StoriesBar> {
   final StoriesService _service = StoriesService();
   final currentUser = FirebaseAuth.instance.currentUser;
 
-  // Professional gradient for active stories
+  // Instagram-style gradient matching the provided image
   final LinearGradient _activeStoryGradient = const LinearGradient(
     colors: [
-      Color(0xFFD300C5), // Vibrant Purple
-      Color(0xFFFF0069), // Pink
-      Color(0xFFFF7A00), // Orange
+      Color(0xFFD300C5), // Deep Purple (Bottom Left)
+      Color(0xFFFF0069), // Pink (Mid)
+      Color(0xFFFF7A00), // Orange (Top Right)
+      Color(0xFFFFD600), // Yellow (Bottom Right Edge)
     ],
-    begin: Alignment.topRight,
-    end: Alignment.bottomLeft,
+    stops: [0.0, 0.4, 0.8, 1.0],
+    begin: Alignment.bottomLeft,
+    end: Alignment.topRight,
   );
 
   void _addStory() {
@@ -41,7 +42,7 @@ class _StoriesBarState extends State<StoriesBar> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 110,
+      height: 115,
       margin: const EdgeInsets.only(top: 8),
       child: StreamBuilder<List<Story>>(
         stream: _service.getActiveStories(),
@@ -82,6 +83,8 @@ class _StoriesBarState extends State<StoriesBar> {
 
   Widget _buildMeButton(List<Story> myStories) {
     final bool hasStory = myStories.isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -89,6 +92,7 @@ class _StoriesBarState extends State<StoriesBar> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
               GestureDetector(
@@ -106,16 +110,20 @@ class _StoriesBarState extends State<StoriesBar> {
                 },
                 onLongPress: _addStory,
                 child: Container(
-                  width: 74,
-                  height: 74,
+                  width: 78,
+                  height: 78,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle, // Perfect Circle Layout
+                    // Using 28 radius on a 78 box gives the exact squircle shape from the image
+                    borderRadius: BorderRadius.circular(28),
                     gradient: hasStory ? _activeStoryGradient : null,
                     border:
                         hasStory
                             ? null
                             : Border.all(
-                              color: Colors.grey.shade300,
+                              color:
+                                  isDark
+                                      ? Colors.white24
+                                      : Colors.grey.shade300,
                               width: 1.5,
                             ),
                   ),
@@ -124,13 +132,14 @@ class _StoriesBarState extends State<StoriesBar> {
                   ), // Gradient border thickness
                   child: Container(
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Theme.of(context).scaffoldBackgroundColor,
+                      borderRadius: BorderRadius.circular(26),
+                      color: bgColor,
                     ),
                     padding: const EdgeInsets.all(
-                      2.5,
+                      3.0,
                     ), // Inner gap before image
-                    child: ClipOval(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
                       child: StreamBuilder<DocumentSnapshot>(
                         stream:
                             FirebaseFirestore.instance
@@ -161,22 +170,25 @@ class _StoriesBarState extends State<StoriesBar> {
               ),
               // Plus Badge
               Positioned(
-                bottom: 2,
-                right: 2,
+                bottom: -2,
+                right: -2,
                 child: GestureDetector(
                   onTap: _addStory,
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF007AFF), // Professional iOS Blue
+                      color: const Color(
+                        0xFF4A3AFF,
+                      ), // Deep Purple/Blue matching the image
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        width: 2.5,
+                        color: bgColor,
+                        width:
+                            3.5, // Thick white/black stroke to cut into the avatar
                       ),
                     ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 16),
+                    child: const Icon(Icons.add, color: Colors.white, size: 18),
                   ),
                 ),
               ),
@@ -188,7 +200,7 @@ class _StoriesBarState extends State<StoriesBar> {
             style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Colors.grey.shade800,
+              color: isDark ? Colors.white70 : Colors.grey.shade800,
               letterSpacing: 0.2,
             ),
           ),
@@ -201,6 +213,9 @@ class _StoriesBarState extends State<StoriesBar> {
     final story = stories.last;
     final myUid = currentUser?.uid;
     final bool allSeen = stories.every((s) => s.viewers.contains(myUid));
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
     ImageProvider imageProvider;
     if (story.userImage.isNotEmpty) {
@@ -222,38 +237,45 @@ class _StoriesBarState extends State<StoriesBar> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 74,
-              height: 74,
+              width: 78,
+              height: 78,
               decoration: BoxDecoration(
-                shape: BoxShape.circle, // Perfect Circle Layout
+                borderRadius: BorderRadius.circular(28),
                 gradient: allSeen ? null : _activeStoryGradient,
                 border:
                     allSeen
-                        ? Border.all(color: Colors.grey.shade300, width: 1.5)
+                        ? Border.all(
+                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                          width: 1.5,
+                        )
                         : null,
               ),
               padding: const EdgeInsets.all(2.5), // Gradient border thickness
               child: Container(
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: BorderRadius.circular(26),
+                  color: bgColor,
                 ),
-                padding: const EdgeInsets.all(2.5), // Inner gap before image
-                child: ClipOval(
+                padding: const EdgeInsets.all(3.0), // Inner gap before image
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
                   child: Image(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
             ),
             const SizedBox(height: 6),
             SizedBox(
-              width: 74, // Constraint to match circle width
+              width: 78, // Constraint to match container width
               child: Text(
                 story.userName.split(' ')[0], // First name only
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 12,
-                  color: allSeen ? Colors.grey.shade600 : Colors.black87,
-                  fontWeight: allSeen ? FontWeight.w400 : FontWeight.w500,
+                  color:
+                      allSeen
+                          ? (isDark ? Colors.white54 : Colors.grey.shade600)
+                          : (isDark ? Colors.white : Colors.black87),
+                  fontWeight: allSeen ? FontWeight.w500 : FontWeight.w600,
                   letterSpacing: 0.2,
                 ),
                 maxLines: 1,

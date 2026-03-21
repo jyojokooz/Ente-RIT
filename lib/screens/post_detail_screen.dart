@@ -1,5 +1,4 @@
 // ===============================
-// FILE NAME: post_detail_screen.dart
 // FILE PATH: lib/screens/post_detail_screen.dart
 // ===============================
 
@@ -42,7 +41,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         'likes': FieldValue.arrayUnion([user.uid]),
       });
       if (postAuthorId != user.uid) {
-        // Fetch current user data for notification
         final userDoc =
             await _firestore.collection('users').doc(user.uid).get();
         final userData = userDoc.data() ?? {};
@@ -63,7 +61,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  void _editPost(String currentCaption) {
+  // --- UPDATED: Passing tags ---
+  void _editPost(String currentCaption, List<String> currentTags) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -71,6 +70,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             (context) => EditPostScreen(
               postId: widget.postId,
               initialCaption: currentCaption,
+              initialTaggedUsers: currentTags,
             ),
       ),
     );
@@ -153,8 +153,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
-    // Exact colors from main screen to ensure seamless transition
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
 
@@ -213,7 +211,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                // Render the exact same PostCard used on the Home screen
                 PostCard(
                   postSnapshot: snapshot.data!,
                   onCommentPressed: _onCommentTapped,
@@ -225,9 +222,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         postData['userId'] ?? '',
                         postData['likes'] ?? [],
                       ),
-                  onEditPressed: () => _editPost(postData['caption'] ?? ''),
+                  // --- UPDATED: Pass current tags ---
+                  onEditPressed:
+                      () => _editPost(
+                        postData['caption'] ?? '',
+                        List<String>.from(postData['taggedUsers'] ?? []),
+                      ),
                 ),
-                const SizedBox(height: 40), // Safe area spacing at bottom
+                const SizedBox(height: 40),
               ],
             ),
           );

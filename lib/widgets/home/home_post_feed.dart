@@ -1,3 +1,7 @@
+// ===============================
+// FILE PATH: lib/widgets/home/home_post_feed.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +14,6 @@ import '../../screens/edit_post_screen.dart';
 import '../../screens/pages/profile_screen.dart';
 
 class HomePostFeed extends StatefulWidget {
-  // Removed selectedTab parameter
   final Color textColor;
 
   const HomePostFeed({super.key, required this.textColor});
@@ -22,13 +25,21 @@ class HomePostFeed extends StatefulWidget {
 class _HomePostFeedState extends State<HomePostFeed> {
   final user = FirebaseAuth.instance.currentUser!;
 
-  void _editPost(String postId, String currentCaption) {
+  // --- UPDATED: Added currentTags parameter ---
+  void _editPost(
+    String postId,
+    String currentCaption,
+    List<String> currentTags,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder:
-            (context) =>
-                EditPostScreen(postId: postId, initialCaption: currentCaption),
+            (context) => EditPostScreen(
+              postId: postId,
+              initialCaption: currentCaption,
+              initialTaggedUsers: currentTags,
+            ),
       ),
     );
   }
@@ -175,7 +186,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
         final List<dynamic> myConnections = myData['connections'] ?? [];
 
         return StreamBuilder<QuerySnapshot>(
-          // Firestore already handles sorting the recent posts for us!
           stream:
               FirebaseFirestore.instance
                   .collection('posts')
@@ -243,8 +253,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
               );
             }
 
-            // Notice we removed the Trending Sort Logic entirely.
-
             return SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {
                 final postSnapshot = visiblePosts[index];
@@ -263,9 +271,13 @@ class _HomePostFeedState extends State<HomePostFeed> {
                         postData['likes'] ?? [],
                         postData['userId'] ?? '',
                       ),
+                  // --- UPDATED: Pass current tags ---
                   onEditPressed:
-                      () =>
-                          _editPost(postSnapshot.id, postData['caption'] ?? ''),
+                      () => _editPost(
+                        postSnapshot.id,
+                        postData['caption'] ?? '',
+                        List<String>.from(postData['taggedUsers'] ?? []),
+                      ),
                 );
               }, childCount: visiblePosts.length),
             );

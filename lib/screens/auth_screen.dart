@@ -1,10 +1,8 @@
 // ===============================
-// FILE NAME: auth_screen.dart
 // FILE PATH: lib/screens/auth_screen.dart
 // ===============================
 
 import 'package:flutter/material.dart';
-// Note: WelcomePage import is removed as we are skipping it
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
 
@@ -18,7 +16,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   // 0 = Login, 1 = Signup
   // We start directly at Login (Index 0) to skip the "Get Started" screen
-  int _currentPageIndex = 0; 
+  int _currentPageIndex = 0;
   bool _areImagesPrecached = false;
 
   @override
@@ -60,7 +58,7 @@ class _AuthScreenState extends State<AuthScreen> {
       return SignupPage(
         key: const ValueKey<int>(1),
         onLoginTapped: _togglePage, // Switch back to Login
-        onBackTapped: _togglePage,  // Switch back to Login
+        onBackTapped: _togglePage, // Switch back to Login
       );
     } else {
       return LoginPage(
