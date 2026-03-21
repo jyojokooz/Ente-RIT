@@ -12,12 +12,14 @@ class ProfilePostsGrid extends StatelessWidget {
   final List<DocumentSnapshot> userPosts;
   final Color cardColor;
   final bool canViewPosts;
+  final bool isTaggedTab; // --- NEW: For toggling UI empty state
 
   const ProfilePostsGrid({
     super.key,
     required this.userPosts,
     required this.cardColor,
     required this.canViewPosts,
+    this.isTaggedTab = false, // --- NEW: Optional default parameter
   });
 
   @override
@@ -79,13 +81,17 @@ class ProfilePostsGrid extends StatelessWidget {
             child: Column(
               children: [
                 Icon(
-                  Icons.camera_alt_outlined,
+                  // Dynamic icon based on the active tab
+                  isTaggedTab
+                      ? Icons.loyalty_outlined
+                      : Icons.camera_alt_outlined,
                   size: 40,
                   color: Colors.grey.shade500,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "No posts yet",
+                  // Dynamic message based on the active tab
+                  isTaggedTab ? "No tagged posts yet" : "No posts yet",
                   style: GoogleFonts.poppins(color: Colors.grey),
                 ),
               ],

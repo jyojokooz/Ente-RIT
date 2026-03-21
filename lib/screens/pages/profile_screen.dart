@@ -44,7 +44,10 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _department = '';
   String _role = 'user';
   String? _profilePhotoUrl;
+
   List<DocumentSnapshot> _userPosts = [];
+  List<DocumentSnapshot> _taggedPosts = []; // --- NEW: Stores tagged posts
+
   bool _isAdmin = false;
   bool _isPrivate = false;
 
@@ -52,13 +55,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   ConnectionStatus _connectionStatus = ConnectionStatus.none;
 
   late TabController _tabController;
-  final ScrollController _scrollController =
-      ScrollController(); // Used for scrolling to posts
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+
+    // --- NEW: Add listener to rebuild UI when switching tabs ---
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     targetUserId = widget.userId ?? _currentUser.uid;
     isCurrentUser = targetUserId == _currentUser.uid;
     _loadAllData();
@@ -74,57 +82,81 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadAllData() async {
     if (_displayName == 'User') setState(() => _isLoading = true);
     try {
-      final targetUserDocFuture =
-          FirebaseFirestore.instance
+      // 1. Fetch Target User Data to get their Username (used for searching tags)
+      final targetUserDoc =
+          await FirebaseFirestore.instance
               .collection('users')
               .doc(targetUserId)
               .get();
+
+      if (targetUserDoc.exists) {
+        final data = targetUserDoc.data()!;
+        _displayName = data['displayName'] ?? 'User';
+        _username = data['username'] ?? 'username';
+        _bio = data['bio'] ?? '';
+        _department = data['department'] ?? '';
+        _role = data['role'] ?? 'student';
+        _profilePhotoUrl = data['profilePhotoUrl'];
+        _isAdmin = data['isAdmin'] ?? false;
+        _isPrivate = data['isPrivate'] ?? false;
+        _connections = data['connections'] ?? [];
+      }
+
+      // 2. Prepare Queries
       final postsQueryFuture =
           FirebaseFirestore.instance
               .collection('posts')
               .where('userId', isEqualTo: targetUserId)
               .orderBy('timestamp', descending: true)
               .get();
+
+      // Query posts where target user's username is in the taggedUsers array
+      final taggedPostsQueryFuture =
+          FirebaseFirestore.instance
+              .collection('posts')
+              .where('taggedUsers', arrayContains: _username)
+              .get(); // Sorting locally to prevent missing index crashes
+
       final currentUserDocFuture =
           isCurrentUser
-              ? targetUserDocFuture
+              ? Future.value(targetUserDoc)
               : FirebaseFirestore.instance
                   .collection('users')
                   .doc(_currentUser.uid)
                   .get();
 
+      // 3. Execute in parallel
       final results = await Future.wait([
-        targetUserDocFuture,
         postsQueryFuture,
+        taggedPostsQueryFuture,
         currentUserDocFuture,
       ]);
 
-      final targetUserSnapshot =
-          results[0] as DocumentSnapshot<Map<String, dynamic>>;
-      final postsSnapshot = results[1] as QuerySnapshot<Map<String, dynamic>>;
+      final postsSnapshot = results[0] as QuerySnapshot<Map<String, dynamic>>;
+      final taggedPostsSnapshot =
+          results[1] as QuerySnapshot<Map<String, dynamic>>;
       final currentUserSnapshot =
           results[2] as DocumentSnapshot<Map<String, dynamic>>;
 
       if (mounted) {
-        if (targetUserSnapshot.exists) {
-          final data = targetUserSnapshot.data()!;
-          _displayName = data['displayName'] ?? 'User';
-          _username = data['username'] ?? 'username';
-          _bio = data['bio'] ?? '';
-          _department = data['department'] ?? '';
-          _role = data['role'] ?? 'student';
-          _profilePhotoUrl = data['profilePhotoUrl'];
-          _isAdmin = data['isAdmin'] ?? false;
-          _isPrivate = data['isPrivate'] ?? false;
-          _connections = data['connections'] ?? [];
-
-          _determineConnectionStatus(
-            currentUserSnapshot.data(),
-            targetUserSnapshot.id,
-          );
-          _validateAndHealConnections();
-        }
         _userPosts = postsSnapshot.docs;
+
+        // Sort tagged posts locally by timestamp descending
+        _taggedPosts = taggedPostsSnapshot.docs.toList();
+        _taggedPosts.sort((a, b) {
+          final aTime =
+              (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+          final bTime =
+              (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+          if (aTime == null || bTime == null) return 0;
+          return bTime.compareTo(aTime);
+        });
+
+        _determineConnectionStatus(
+          currentUserSnapshot.data(),
+          targetUserDoc.id,
+        );
+        _validateAndHealConnections();
       }
     } catch (e) {
       debugPrint("Error: $e");
@@ -189,7 +221,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     setState(() {});
   }
 
-  // --- NEW: Scroll To Posts Logic ---
   void _scrollToPosts() {
     _scrollController.animateTo(
       MediaQuery.of(context).size.height * 0.45,
@@ -198,7 +229,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // --- NEW: View Story on Avatar Tap Logic ---
   Future<void> _viewStory() async {
     try {
       final yesterday = DateTime.now().subtract(const Duration(hours: 24));
@@ -465,6 +495,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         !_isPrivate ||
         _connectionStatus == ConnectionStatus.connected;
 
+    // --- NEW: Select proper list based on the active tab index ---
+    final isTaggedTab = _tabController.index == 1;
+    final displayedPosts = isTaggedTab ? _taggedPosts : _userPosts;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: RefreshIndicator(
@@ -505,7 +539,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       username: _username,
                       department: _department,
                       bio: _bio,
-                      postCount: _userPosts.length,
+                      postCount: _userPosts.length, // Base this on normal posts
                       mingleCount: _connections.length,
                       isCurrentUser: isCurrentUser,
                       connectionStatus: _connectionStatus,
@@ -541,7 +575,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     const SizedBox(height: 32),
 
-                    // Renders specialized quick actions only if the user is a driver or cafeteria admin
                     if (isCurrentUser) ...[
                       ProfileQuickAccess(
                         role: _role,
@@ -561,11 +594,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 delegate: SliverAppBarDelegate(
                   TabBar(
                     controller: _tabController,
-                    splashFactory:
-                        NoSplash.splashFactory, // REMOVES ORANGE SPLASH FIX
-                    overlayColor: WidgetStateProperty.all(
-                      Colors.transparent,
-                    ), // REMOVES HOVER COLOR FIX
+                    splashFactory: NoSplash.splashFactory,
+                    overlayColor: WidgetStateProperty.all(Colors.transparent),
                     labelColor: const Color(0xFFFF3E8E),
                     unselectedLabelColor: mutedTextColor,
                     indicatorColor: const Color(0xFFFF3E8E),
@@ -582,9 +612,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
             ProfilePostsGrid(
-              userPosts: _userPosts,
+              userPosts: displayedPosts, // Passes the active list to the grid
               cardColor: cardColor,
               canViewPosts: canViewPosts,
+              isTaggedTab: isTaggedTab, // Tell grid to adjust the empty state
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
