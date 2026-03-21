@@ -1,5 +1,6 @@
 // ===============================
-// FILE PATH: lib/screens/pages/profile_screen.dart
+// FILE NAME: profile_screen.dart
+// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\screens\pages\profile_screen.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -33,9 +34,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  final _currentUser = FirebaseAuth.instance.currentUser!;
-  late final String targetUserId;
-  late final bool isCurrentUser;
+  User? _currentUser;
+  late String targetUserId;
+  late bool isCurrentUser;
 
   bool _isLoading = true;
   String _displayName = 'User';
@@ -46,7 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _profilePhotoUrl;
 
   List<DocumentSnapshot> _userPosts = [];
-  List<DocumentSnapshot> _taggedPosts = []; // --- NEW: Stores tagged posts
+  List<DocumentSnapshot> _taggedPosts = [];
 
   bool _isAdmin = false;
   bool _isPrivate = false;
@@ -62,13 +63,24 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // --- NEW: Add listener to rebuild UI when switching tabs ---
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
 
-    targetUserId = widget.userId ?? _currentUser.uid;
-    isCurrentUser = targetUserId == _currentUser.uid;
+    _currentUser = FirebaseAuth.instance.currentUser;
+    if (_currentUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/auth-gate',
+          (route) => false,
+        );
+      });
+      return;
+    }
+
+    targetUserId = widget.userId ?? _currentUser!.uid;
+    isCurrentUser = targetUserId == _currentUser!.uid;
     _loadAllData();
   }
 
@@ -82,7 +94,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _loadAllData() async {
     if (_displayName == 'User') setState(() => _isLoading = true);
     try {
-      // 1. Fetch Target User Data to get their Username (used for searching tags)
       final targetUserDoc =
           await FirebaseFirestore.instance
               .collection('users')
@@ -102,7 +113,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         _connections = data['connections'] ?? [];
       }
 
-      // 2. Prepare Queries
       final postsQueryFuture =
           FirebaseFirestore.instance
               .collection('posts')
@@ -110,22 +120,20 @@ class _ProfileScreenState extends State<ProfileScreen>
               .orderBy('timestamp', descending: true)
               .get();
 
-      // Query posts where target user's username is in the taggedUsers array
       final taggedPostsQueryFuture =
           FirebaseFirestore.instance
               .collection('posts')
               .where('taggedUsers', arrayContains: _username)
-              .get(); // Sorting locally to prevent missing index crashes
+              .get();
 
       final currentUserDocFuture =
           isCurrentUser
               ? Future.value(targetUserDoc)
               : FirebaseFirestore.instance
                   .collection('users')
-                  .doc(_currentUser.uid)
+                  .doc(_currentUser!.uid)
                   .get();
 
-      // 3. Execute in parallel
       final results = await Future.wait([
         postsQueryFuture,
         taggedPostsQueryFuture,
@@ -141,7 +149,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         _userPosts = postsSnapshot.docs;
 
-        // Sort tagged posts locally by timestamp descending
         _taggedPosts = taggedPostsSnapshot.docs.toList();
         _taggedPosts.sort((a, b) {
           final aTime =
@@ -191,7 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (isCurrentUser) {
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(_currentUser.uid)
+            .doc(_currentUser!.uid)
             .update({'connections': validConnections});
       }
     }
@@ -292,7 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final batch = FirebaseFirestore.instance.batch();
     final me = FirebaseFirestore.instance
         .collection('users')
-        .doc(_currentUser.uid);
+        .doc(_currentUser!.uid);
     final them = FirebaseFirestore.instance
         .collection('users')
         .doc(targetUserId);
@@ -302,7 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         'sentRequests': FieldValue.arrayUnion([targetUserId]),
       });
       batch.update(them, {
-        'receivedRequests': FieldValue.arrayUnion([_currentUser.uid]),
+        'receivedRequests': FieldValue.arrayUnion([_currentUser!.uid]),
       });
     } else if (action == 'accept') {
       batch.update(me, {
@@ -310,8 +317,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         'receivedRequests': FieldValue.arrayRemove([targetUserId]),
       });
       batch.update(them, {
-        'connections': FieldValue.arrayUnion([_currentUser.uid]),
-        'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+        'connections': FieldValue.arrayUnion([_currentUser!.uid]),
+        'sentRequests': FieldValue.arrayRemove([_currentUser!.uid]),
       });
     } else if (action == 'cancel' || action == 'decline') {
       batch.update(me, {
@@ -319,15 +326,15 @@ class _ProfileScreenState extends State<ProfileScreen>
         'receivedRequests': FieldValue.arrayRemove([targetUserId]),
       });
       batch.update(them, {
-        'receivedRequests': FieldValue.arrayRemove([_currentUser.uid]),
-        'sentRequests': FieldValue.arrayRemove([_currentUser.uid]),
+        'receivedRequests': FieldValue.arrayRemove([_currentUser!.uid]),
+        'sentRequests': FieldValue.arrayRemove([_currentUser!.uid]),
       });
     } else if (action == 'remove') {
       batch.update(me, {
         'connections': FieldValue.arrayRemove([targetUserId]),
       });
       batch.update(them, {
-        'connections': FieldValue.arrayRemove([_currentUser.uid]),
+        'connections': FieldValue.arrayRemove([_currentUser!.uid]),
       });
     }
     await batch.commit();
@@ -338,12 +345,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(_currentUser.uid)
+          .doc(_currentUser!.uid)
           .update({'isPrivate': isPrivate});
       final postsQuery =
           await FirebaseFirestore.instance
               .collection('posts')
-              .where('userId', isEqualTo: _currentUser.uid)
+              .where('userId', isEqualTo: _currentUser!.uid)
               .get();
       final batch = FirebaseFirestore.instance.batch();
       for (var doc in postsQuery.docs) {
@@ -352,10 +359,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       await batch.commit();
       setState(() => _isPrivate = isPrivate);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to update privacy: $e')));
+      }
     }
   }
 
@@ -471,8 +479,28 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  void _handleBackNavigation() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/auth-gate',
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_currentUser == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+        ),
+      );
+    }
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -495,130 +523,140 @@ class _ProfileScreenState extends State<ProfileScreen>
         !_isPrivate ||
         _connectionStatus == ConnectionStatus.connected;
 
-    // --- NEW: Select proper list based on the active tab index ---
     final isTaggedTab = _tabController.index == 1;
     final displayedPosts = isTaggedTab ? _taggedPosts : _userPosts;
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      body: RefreshIndicator(
-        onRefresh: _loadAllData,
-        color: const Color(0xFFFF3E8E),
-        backgroundColor: cardColor,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: ProfileHeader(
-                isCurrentUser: isCurrentUser,
-                isAdmin: _isAdmin, // Connects to the admin shield icon
-                profilePhotoUrl: _profilePhotoUrl,
-                bgColor: bgColor,
-                textColor: textColor,
-                isDark: isDark,
-                onBack: () => Navigator.pop(context),
-                onSettings: () => _showSettingsBottomSheet(context),
-                onAdminTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminPanelScreen(),
+    return PopScope(
+      canPop: Navigator.canPop(context),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/auth-gate',
+            (route) => false,
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: RefreshIndicator(
+          onRefresh: _loadAllData,
+          color: const Color(0xFFFF3E8E),
+          backgroundColor: cardColor,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: ProfileHeader(
+                  isCurrentUser: isCurrentUser,
+                  isAdmin: _isAdmin,
+                  profilePhotoUrl: _profilePhotoUrl,
+                  bgColor: bgColor,
+                  textColor: textColor,
+                  isDark: isDark,
+                  onBack: _handleBackNavigation,
+                  onSettings: () => _showSettingsBottomSheet(context),
+                  onAdminTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminPanelScreen(),
+                        ),
                       ),
-                    ),
-                onAvatarTap: _viewStory, // Tapping picture now opens stories
+                  onAvatarTap: _viewStory,
+                ),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
-                child: Column(
-                  children: [
-                    ProfileInfo(
-                      displayName: _displayName,
-                      username: _username,
-                      department: _department,
-                      bio: _bio,
-                      postCount: _userPosts.length, // Base this on normal posts
-                      mingleCount: _connections.length,
-                      isCurrentUser: isCurrentUser,
-                      connectionStatus: _connectionStatus,
-                      textColor: textColor,
-                      mutedTextColor: mutedTextColor,
-                      cardColor: cardColor,
-                      onEditProfile: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const EditProfileScreen(),
-                          ),
-                        );
-                        _loadAllData();
-                      },
-                      onShareProfile: _showShareProfileSheet,
-                      onViewMingles: _viewMingles,
-                      onPostCountTap:
-                          _scrollToPosts, // Will scroll screen to grid
-                      onConnectionAction: _handleConnectionAction,
-                      onMessage:
-                          () => Navigator.push(
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
+                  child: Column(
+                    children: [
+                      ProfileInfo(
+                        displayName: _displayName,
+                        username: _username,
+                        department: _department,
+                        bio: _bio,
+                        postCount: _userPosts.length,
+                        mingleCount: _connections.length,
+                        isCurrentUser: isCurrentUser,
+                        connectionStatus: _connectionStatus,
+                        textColor: textColor,
+                        mutedTextColor: mutedTextColor,
+                        cardColor: cardColor,
+                        onEditProfile: () async {
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (_) => ChatScreen(
-                                    receiverId: targetUserId,
-                                    receiverName: _displayName,
-                                    receiverImageUrl: _profilePhotoUrl ?? '',
-                                  ),
+                              builder: (_) => const EditProfileScreen(),
                             ),
-                          ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    if (isCurrentUser) ...[
-                      ProfileQuickAccess(
-                        role: _role,
-                        isAdmin: _isAdmin,
-                        cardColor: cardColor,
-                        textColor: textColor,
+                          );
+                          _loadAllData();
+                        },
+                        onShareProfile: _showShareProfileSheet,
+                        onViewMingles: _viewMingles,
+                        onPostCountTap: _scrollToPosts,
+                        onConnectionAction: _handleConnectionAction,
+                        onMessage:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => ChatScreen(
+                                      receiverId: targetUserId,
+                                      receiverName: _displayName,
+                                      receiverImageUrl: _profilePhotoUrl ?? '',
+                                    ),
+                              ),
+                            ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 32),
+
+                      if (isCurrentUser) ...[
+                        ProfileQuickAccess(
+                          role: _role,
+                          isAdmin: _isAdmin,
+                          cardColor: cardColor,
+                          textColor: textColor,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
-            if (canViewPosts)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: SliverAppBarDelegate(
-                  TabBar(
-                    controller: _tabController,
-                    splashFactory: NoSplash.splashFactory,
-                    overlayColor: WidgetStateProperty.all(Colors.transparent),
-                    labelColor: const Color(0xFFFF3E8E),
-                    unselectedLabelColor: mutedTextColor,
-                    indicatorColor: const Color(0xFFFF3E8E),
-                    indicatorSize: TabBarIndicatorSize.label,
-                    indicatorWeight: 3,
-                    labelStyle: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    dividerColor: Colors.transparent,
-                    tabs: const [Tab(text: "Posts"), Tab(text: "Tagged")],
                   ),
-                  bgColor,
                 ),
               ),
-            ProfilePostsGrid(
-              userPosts: displayedPosts, // Passes the active list to the grid
-              cardColor: cardColor,
-              canViewPosts: canViewPosts,
-              isTaggedTab: isTaggedTab, // Tell grid to adjust the empty state
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 80)),
-          ],
+              if (canViewPosts)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: SliverAppBarDelegate(
+                    TabBar(
+                      controller: _tabController,
+                      splashFactory: NoSplash.splashFactory,
+                      overlayColor: WidgetStateProperty.all(Colors.transparent),
+                      labelColor: const Color(0xFFFF3E8E),
+                      unselectedLabelColor: mutedTextColor,
+                      indicatorColor: const Color(0xFFFF3E8E),
+                      indicatorSize: TabBarIndicatorSize.label,
+                      indicatorWeight: 3,
+                      labelStyle: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      dividerColor: Colors.transparent,
+                      tabs: const [Tab(text: "Posts"), Tab(text: "Tagged")],
+                    ),
+                    bgColor,
+                  ),
+                ),
+              ProfilePostsGrid(
+                userPosts: displayedPosts,
+                cardColor: cardColor,
+                canViewPosts: canViewPosts,
+                isTaggedTab: isTaggedTab,
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            ],
+          ),
         ),
       ),
     );

@@ -1,9 +1,4 @@
 // ===============================
-// FILE NAME: main.dart
-// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\main.dart
-// ===============================
-
-// ===============================
 // FILE PATH: lib/main.dart
 // ===============================
 
@@ -15,9 +10,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Added for ultrafast theme loading
+import 'package:shared_preferences/shared_preferences.dart';
 
-// --- FIXED IMPORTS: Using relative paths ---
 import 'theme_provider.dart';
 import 'auth/auth_gate.dart';
 import 'screens/main_screen.dart';
@@ -28,7 +22,7 @@ import 'screens/search_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/requests_screen.dart';
 import 'screens/create_username_screen.dart';
-// --- END OF FIX ---
+import 'screens/pages/profile_screen.dart'; // <-- ADDED: Needed for dynamic QR routing
 
 import 'firebase_options.dart';
 
@@ -41,21 +35,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // OPTIMIZATION: Load Env, Firebase, and SharedPreferences concurrently!
-  // This drastically reduces boot time and fixes the "white flash" issue.
   final futures = await Future.wait([
     dotenv.load(fileName: ".env"),
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
     SharedPreferences.getInstance(),
   ]);
 
-  // Extract the SharedPreferences instance from our concurrent load
   final prefs = futures[2] as SharedPreferences;
-
-  // Check if dark mode is saved (defaults to false/light mode if never set)
   final isDark = prefs.getBool('isDarkMode') ?? false;
 
-  // Initialize the global provider synchronously BEFORE the app runs
   themeProvider = ThemeProvider(isDark ? ThemeMode.dark : ThemeMode.light);
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -68,21 +56,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to theme changes dynamically
     return AnimatedBuilder(
       animation: themeProvider,
       builder: (context, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'Ente RIT',
-
-          // Pulls the mode instantly, no async delay causing white flashes
           themeMode: themeProvider.themeMode,
 
           // --- LIGHT THEME ---
           theme: ThemeData(
             brightness: Brightness.light,
-            scaffoldBackgroundColor: const Color(0xFFF8F9FE), // Soft Light Grey
+            scaffoldBackgroundColor: const Color(0xFFF8F9FE),
             colorScheme: const ColorScheme.light(
               primary: Color(0xFF9983F3),
               secondary: Color(0xFF9983F3),
@@ -106,11 +91,11 @@ class MyApp extends StatelessWidget {
           // --- DARK THEME ---
           darkTheme: ThemeData(
             brightness: Brightness.dark,
-            scaffoldBackgroundColor: Colors.black, // True Black
+            scaffoldBackgroundColor: Colors.black,
             colorScheme: const ColorScheme.dark(
               primary: Colors.yellow,
               secondary: Colors.yellow,
-              surface: Color(0xFF151515), // Very Dark Grey for cards
+              surface: Color(0xFF151515),
               onPrimary: Colors.black,
               onSurface: Colors.white,
             ),
@@ -131,6 +116,7 @@ class MyApp extends StatelessWidget {
 
           home: const SplashScreen(),
 
+          // Static Routes
           routes: {
             '/auth-gate': (context) => const AuthGate(),
             '/home': (context) => const MainScreen(),
@@ -140,6 +126,32 @@ class MyApp extends StatelessWidget {
             '/search': (context) => const SearchScreen(),
             '/requests': (context) => const RequestsScreen(),
             '/chat-list': (context) => const ChatListScreen(),
+          },
+
+          // --- THE FIX: DYNAMIC ROUTING FOR QR CODES ---
+          // This catches URLs like /profile/12345 or /verify/12345 and routes them
+          onGenerateRoute: (settings) {
+            final uri = Uri.tryParse(settings.name ?? '');
+
+            if (uri != null && uri.pathSegments.length == 2) {
+              final routeName = uri.pathSegments[0]; // e.g., 'profile'
+              final userId = uri.pathSegments[1]; // e.g., 'USER_UID'
+
+              // Handle Profile QR Scans
+              if (routeName == 'profile') {
+                return MaterialPageRoute(
+                  builder: (context) => ProfileScreen(userId: userId),
+                );
+              }
+
+              // Handle ID Card Verification QR Scans
+              if (routeName == 'verify') {
+                return MaterialPageRoute(
+                  builder: (context) => ProfileScreen(userId: userId),
+                );
+              }
+            }
+            return null; // Fallback to default
           },
         );
       },

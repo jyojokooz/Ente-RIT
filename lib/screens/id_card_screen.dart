@@ -332,7 +332,7 @@ class _IdCardScreenState extends State<IdCardScreen> {
   Widget _buildCardBack(Map<String, dynamic> userData, bool isDark) {
     final userUid = FirebaseAuth.instance.currentUser!.uid;
     final studentId = userData['studentId'] ?? '000000';
-    final qrData = 'https://enterit.web.app/verify/$userUid';
+    final qrData = 'https://fir-auth-bfed9.web.app/verify/$userUid';
 
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
 

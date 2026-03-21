@@ -64,6 +64,17 @@
                 <action android:name="FLUTTER_NOTIFICATION_CLICK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- UPDATE YOUR INTENT FILTER TO THIS: -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <!-- Change the host to match your Firebase URL -->
+                <data android:host="fir-auth-bfed9.web.app" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
