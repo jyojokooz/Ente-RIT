@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart'; // <-- Added Shimmer Import
 
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
@@ -491,31 +492,145 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  // --- NEW SHIMMER SKELETON METHOD ---
+  Widget _buildShimmerSkeleton(bool isDark, Color bgColor) {
+    final baseColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
+    final highlightColor = isDark ? Colors.grey.shade600 : Colors.grey.shade100;
+    final blockColor = isDark ? Colors.black : Colors.white;
+
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: Shimmer.fromColors(
+          baseColor: baseColor,
+          highlightColor: highlightColor,
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                const SizedBox(height: 60),
+                // Mock Avatar
+                CircleAvatar(radius: 55, backgroundColor: blockColor),
+                const SizedBox(height: 16),
+                // Mock Name
+                Container(
+                  height: 24,
+                  width: 160,
+                  decoration: BoxDecoration(
+                    color: blockColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Mock Username
+                Container(
+                  height: 16,
+                  width: 100,
+                  decoration: BoxDecoration(
+                    color: blockColor,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Mock Stats
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 40,
+                      width: 60,
+                      decoration: BoxDecoration(
+                        color: blockColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 40),
+                    Container(
+                      height: 40,
+                      width: 60,
+                      decoration: BoxDecoration(
+                        color: blockColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Mock Action Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 40,
+                      width: 140,
+                      decoration: BoxDecoration(
+                        color: blockColor,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      height: 40,
+                      width: 140,
+                      decoration: BoxDecoration(
+                        color: blockColor,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 40),
+                // Mock Tabs
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Container(height: 20, width: 60, color: blockColor),
+                      Container(height: 20, width: 60, color: blockColor),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Mock Grid
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(2),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 2,
+                    mainAxisSpacing: 2,
+                  ),
+                  itemCount: 9,
+                  itemBuilder: (_, __) => Container(color: blockColor),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_currentUser == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
-        ),
-      );
-    }
-
+    // Determine Theme upfront so Shimmer can use it
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final mutedTextColor = isDark ? Colors.white54 : Colors.grey.shade600;
 
+    // Loading State 1: Awaiting Current User
+    if (_currentUser == null) {
+      return _buildShimmerSkeleton(isDark, bgColor);
+    }
+
+    // Loading State 2: Awaiting Initial Profile Data Load
     if (_isLoading && _displayName == 'User') {
-      return Scaffold(
-        backgroundColor: bgColor,
-        body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
-        ),
-      );
+      return _buildShimmerSkeleton(isDark, bgColor);
     }
 
     bool canViewPosts =
