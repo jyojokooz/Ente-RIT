@@ -121,21 +121,64 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
     _zoomAnimationController.forward(from: 0);
   }
 
+  // --- FIX: Explicitly delete the notification on unlike ---
   Future<void> _toggleLike(List<dynamic> currentLikes) async {
     final postRef = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.postId);
     final isLiked = currentLikes.contains(currentUserId);
+    final notifId = 'like_${widget.postId}_$currentUserId';
 
     if (isLiked) {
+      // Remove the like
       await postRef.update({
         'likes': FieldValue.arrayRemove([currentUserId]),
       });
+      // Explicitly delete notification on unlike to prevent stale duplicates
+      await FirebaseFirestore.instance
+          .collection('notifications')
+          .doc(notifId)
+          .delete();
     } else {
+      // Add the like
       _likeController.forward().then((_) => _likeController.reverse());
       await postRef.update({
         'likes': FieldValue.arrayUnion([currentUserId]),
       });
+
+      final postSnapshot = await postRef.get();
+      final postData = postSnapshot.data();
+      final postAuthorId = postData?['userId'];
+
+      // If someone else liked the post, send a notification
+      if (postAuthorId != null && postAuthorId != currentUserId) {
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUserId)
+                .get();
+        final userData = userDoc.data() ?? {};
+
+        // This ensures that if the user unlikes and re-likes, it overwrites the existing
+        // notification instead of creating a brand new duplicate one.
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .doc(notifId)
+            .set({
+              'userId': postAuthorId,
+              'title': 'New Like',
+              'body':
+                  '${userData['displayName'] ?? 'Someone'} liked your post.',
+              'type': 'like',
+              'relatedDocId': widget.postId,
+              'triggeringUserId': currentUserId,
+              'triggeringUserName': userData['displayName'] ?? 'User',
+              'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
+              'isRead':
+                  false, // Marks the overwritten notification as unread again
+              'timestamp': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+      }
     }
   }
 
@@ -300,8 +343,9 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer>
                                 .doc(widget.postId)
                                 .snapshots(),
                         builder: (context, snapshot) {
-                          if (!snapshot.hasData || !snapshot.data!.exists)
+                          if (!snapshot.hasData || !snapshot.data!.exists) {
                             return const SizedBox.shrink();
+                          }
 
                           final postData =
                               snapshot.data!.data() as Map<String, dynamic>;

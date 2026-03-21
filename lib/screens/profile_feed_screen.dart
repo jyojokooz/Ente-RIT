@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: profile_feed_screen.dart
 // FILE PATH: lib/screens/profile_feed_screen.dart
 // ===============================
 
@@ -29,32 +30,40 @@ class _ProfileFeedScreenState extends State<ProfileFeedScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   final _firestore = FirebaseFirestore.instance;
 
-  // The Center Key is the magic trick in Flutter that tells a CustomScrollView
-  // exactly where to start its viewport!
+  // The Center Key tells the CustomScrollView where to start its viewport.
   final Key _centerKey = const ValueKey('center-post');
 
+  // --- FIX: Accept isLikedNow and explicitly delete the notification on unlike ---
   Future<void> _toggleLike(
     String postId,
-    List<dynamic> currentLikes,
+    bool isLikedNow,
     String postAuthorId,
   ) async {
     final postRef = _firestore.collection('posts').doc(postId);
-    final isLiked = currentLikes.contains(user.uid);
+    final notifId = 'like_${postId}_${user.uid}';
 
-    if (isLiked) {
+    if (!isLikedNow) {
+      // Remove the like
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
+      // Explicitly delete notification on unlike to prevent stale duplicates
+      await _firestore.collection('notifications').doc(notifId).delete();
     } else {
+      // Add the like
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
+
+      // If someone else liked the post, send a notification
       if (postAuthorId != user.uid) {
         final userDoc =
             await _firestore.collection('users').doc(user.uid).get();
         final userData = userDoc.data() ?? {};
 
-        await _firestore.collection('notifications').add({
+        // This ensures that if the user unlikes and re-likes, it overwrites the existing
+        // notification instead of creating a brand new duplicate one.
+        await _firestore.collection('notifications').doc(notifId).set({
           'userId': postAuthorId,
           'title': 'New Like',
           'body': '${userData['displayName'] ?? 'Someone'} liked your post.',
@@ -63,9 +72,9 @@ class _ProfileFeedScreenState extends State<ProfileFeedScreen> {
           'triggeringUserId': user.uid,
           'triggeringUserName': userData['displayName'] ?? 'User',
           'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
-          'isRead': false,
+          'isRead': false, // Marks the overwritten notification as unread again
           'timestamp': FieldValue.serverTimestamp(),
-        });
+        }, SetOptions(merge: true));
       }
     }
   }
@@ -174,10 +183,11 @@ class _ProfileFeedScreenState extends State<ProfileFeedScreen> {
       onCommentPressed: () => _onCommentTapped(postSnapshot.id),
       onDeletePressed: () => _deletePost(postSnapshot.id),
       onProfileTapped: () => _onProfileTapped(postData['userId'] ?? ''),
+      // --- FIX: Map the callback to include the new boolean ---
       onLikePressed:
-          () => _toggleLike(
+          (bool isLikedNow) => _toggleLike(
             postSnapshot.id,
-            postData['likes'] ?? [],
+            isLikedNow,
             postData['userId'] ?? '',
           ),
       onEditPressed:

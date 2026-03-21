@@ -73,7 +73,8 @@ class PostCard extends StatefulWidget {
   final Function() onCommentPressed;
   final Function() onDeletePressed;
   final Function() onProfileTapped;
-  final Function() onLikePressed;
+  final Function(bool isLikedNow)
+  onLikePressed; // <-- FIX: explicitly pass the new like state
   final Function() onEditPressed;
 
   const PostCard({
@@ -154,15 +155,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   void _triggerLikeButtonPress() {
+    final bool newLikeState = !_isLiked; // Determine the intended new state
+
     setState(() {
-      _isLiked = !_isLiked;
-      _likesCount += _isLiked ? 1 : -1;
+      _isLiked = newLikeState;
+      _likesCount += newLikeState ? 1 : -1;
     });
 
     if (_likeController != null) {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
-    widget.onLikePressed();
+
+    // <-- FIX: Pass the new state back up to the parent screen
+    widget.onLikePressed(newLikeState);
   }
 
   String getOptimizedCloudinaryUrl(String originalUrl) {

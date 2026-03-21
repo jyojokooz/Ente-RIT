@@ -40,7 +40,7 @@ class _CommentInputBarState extends State<CommentInputBar> {
   @override
   void initState() {
     super.initState();
-    // Only rebuilds the send button state, not the whole screen!
+    // This listener efficiently rebuilds only the send button state, not the whole screen.
     _commentController.addListener(() {
       final isNotEmpty = _commentController.text.trim().isNotEmpty;
       if (_isComposing != isNotEmpty) {
@@ -48,11 +48,13 @@ class _CommentInputBarState extends State<CommentInputBar> {
       }
     });
 
+    // Listens for when the user taps "Reply" on a comment.
     widget.replyStateNotifier.addListener(_onReplyStateChanged);
   }
 
   void _onReplyStateChanged() {
     if (widget.replyStateNotifier.value != null) {
+      // Automatically focuses the text field when a reply is initiated.
       _focusNode.requestFocus();
     }
   }
@@ -102,6 +104,7 @@ class _CommentInputBarState extends State<CommentInputBar> {
         'likes': [],
       };
 
+      // Use a transaction for atomic write (update count + add comment)
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final postSnapshot = await transaction.get(postRef);
         if (!postSnapshot.exists) return;
@@ -109,23 +112,33 @@ class _CommentInputBarState extends State<CommentInputBar> {
         transaction.set(postRef.collection('comments').doc(), newCommentData);
       });
 
-      // Send Notification
+      // Send Notification to Post Author
       final postDoc = await postRef.get();
       final postAuthorId = postDoc.data()?['userId'];
 
       if (postAuthorId != null && postAuthorId != widget.currentUser.uid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId,
-          'title': 'New Comment',
-          'body': '${userData['displayName'] ?? 'Someone'} commented: "$text"',
-          'type': 'comment',
-          'relatedDocId': widget.postId,
-          'triggeringUserId': widget.currentUser.uid,
-          'triggeringUserName': userData['displayName'] ?? 'Someone',
-          'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        // --- FIX: Group all comments from this user on this post into ONE notification ---
+        final notifId = 'comment_${widget.postId}_${widget.currentUser.uid}';
+
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .doc(notifId)
+            .set(
+              {
+                'userId': postAuthorId,
+                'title': 'New Comment',
+                'body':
+                    '${userData['displayName'] ?? 'Someone'} commented: "$text"',
+                'type': 'comment',
+                'relatedDocId': widget.postId,
+                'triggeringUserId': widget.currentUser.uid,
+                'triggeringUserName': userData['displayName'] ?? 'Someone',
+                'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            ); // Using merge:true overwrites the old notification
       }
     } catch (e) {
       debugPrint("Error posting comment: $e");
@@ -153,7 +166,7 @@ class _CommentInputBarState extends State<CommentInputBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Reply Indicator Banner (Rebuilds only this part when reply state changes)
+          // Reply Indicator Banner
           ValueListenableBuilder<ReplyState?>(
             valueListenable: widget.replyStateNotifier,
             builder: (context, replyState, child) {
@@ -189,7 +202,7 @@ class _CommentInputBarState extends State<CommentInputBar> {
             },
           ),
 
-          // Actual Text Field
+          // Main Input Row
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -239,7 +252,7 @@ class _CommentInputBarState extends State<CommentInputBar> {
               ),
               const SizedBox(width: 12),
 
-              // Post Button (Animated)
+              // Animated Post Button
               GestureDetector(
                 onTap: (_isComposing && !_isSending) ? _postComment : null,
                 child: Container(

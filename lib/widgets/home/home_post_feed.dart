@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: home_post_feed.dart
 // FILE PATH: lib/widgets/home/home_post_feed.dart
 // ===============================
 
@@ -25,7 +26,6 @@ class HomePostFeed extends StatefulWidget {
 class _HomePostFeedState extends State<HomePostFeed> {
   final user = FirebaseAuth.instance.currentUser!;
 
-  // --- UPDATED: Added currentTags parameter ---
   void _editPost(
     String postId,
     String currentCaption,
@@ -104,22 +104,32 @@ class _HomePostFeedState extends State<HomePostFeed> {
     }
   }
 
+  // --- FIX: Accept isLikedNow and explicitly delete the notification on unlike ---
   Future<void> _toggleLike(
     String postId,
-    List<dynamic> currentLikes,
+    bool isLikedNow,
     String postAuthorId,
   ) async {
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
-    final isLiked = currentLikes.contains(user.uid);
+    final notifId = 'like_${postId}_${user.uid}';
 
-    if (isLiked) {
+    if (!isLikedNow) {
+      // Remove the like
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
+      // Explicitly delete notification on unlike to prevent stale duplicates
+      await FirebaseFirestore.instance
+          .collection('notifications')
+          .doc(notifId)
+          .delete();
     } else {
+      // Add the like
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
+
+      // If someone else liked the post, send a notification
       if (postAuthorId != user.uid) {
         final userDoc =
             await FirebaseFirestore.instance
@@ -130,18 +140,24 @@ class _HomePostFeedState extends State<HomePostFeed> {
         final displayName = userData?['displayName'] ?? 'User';
         final profilePic = userData?['profilePhotoUrl'] ?? '';
 
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': postAuthorId,
-          'title': 'New Like',
-          'body': '$displayName liked your post.',
-          'type': 'like',
-          'relatedDocId': postId,
-          'triggeringUserId': user.uid,
-          'triggeringUserName': displayName,
-          'triggeringUserAvatarUrl': profilePic,
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        // This ensures that if the user unlikes and re-likes, it overwrites the existing
+        // notification instead of creating a brand new duplicate row in the DB.
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .doc(notifId)
+            .set({
+              'userId': postAuthorId,
+              'title': 'New Like',
+              'body': '$displayName liked your post.',
+              'type': 'like',
+              'relatedDocId': postId,
+              'triggeringUserId': user.uid,
+              'triggeringUserName': displayName,
+              'triggeringUserAvatarUrl': profilePic,
+              'isRead':
+                  false, // Marks the overwritten notification as unread again
+              'timestamp': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
       }
     }
   }
@@ -265,13 +281,13 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   onDeletePressed: () => _deletePost(postSnapshot.id),
                   onProfileTapped:
                       () => _onProfileTapped(postData['userId'] ?? ''),
+                  // --- FIX: Map the callback to include the new boolean ---
                   onLikePressed:
-                      () => _toggleLike(
+                      (bool isLikedNow) => _toggleLike(
                         postSnapshot.id,
-                        postData['likes'] ?? [],
+                        isLikedNow,
                         postData['userId'] ?? '',
                       ),
-                  // --- UPDATED: Pass current tags ---
                   onEditPressed:
                       () => _editPost(
                         postSnapshot.id,

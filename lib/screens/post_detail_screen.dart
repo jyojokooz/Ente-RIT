@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: post_detail_screen.dart
 // FILE PATH: lib/screens/post_detail_screen.dart
 // ===============================
 
@@ -25,27 +26,33 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final user = FirebaseAuth.instance.currentUser!;
   final _firestore = FirebaseFirestore.instance;
 
-  Future<void> _toggleLike(
-    String postAuthorId,
-    List<dynamic> currentLikes,
-  ) async {
+  // --- FIX: Accept isLikedNow and explicitly delete the notification on unlike ---
+  Future<void> _toggleLike(String postAuthorId, bool isLikedNow) async {
     final postRef = _firestore.collection('posts').doc(widget.postId);
-    final isLiked = currentLikes.contains(user.uid);
+    final notifId = 'like_${widget.postId}_${user.uid}';
 
-    if (isLiked) {
+    if (!isLikedNow) {
+      // Remove the like
       await postRef.update({
         'likes': FieldValue.arrayRemove([user.uid]),
       });
+      // Explicitly delete notification on unlike to prevent stale duplicates
+      await _firestore.collection('notifications').doc(notifId).delete();
     } else {
+      // Add the like
       await postRef.update({
         'likes': FieldValue.arrayUnion([user.uid]),
       });
+
+      // If someone else liked the post, send a notification
       if (postAuthorId != user.uid) {
         final userDoc =
             await _firestore.collection('users').doc(user.uid).get();
         final userData = userDoc.data() ?? {};
 
-        await _firestore.collection('notifications').add({
+        // This ensures that if the user unlikes and re-likes, it overwrites the existing
+        // notification instead of creating a brand new duplicate one.
+        await _firestore.collection('notifications').doc(notifId).set({
           'userId': postAuthorId,
           'title': 'New Like',
           'body': '${userData['displayName'] ?? 'Someone'} liked your post.',
@@ -54,14 +61,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           'triggeringUserId': user.uid,
           'triggeringUserName': userData['displayName'] ?? 'User',
           'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
-          'isRead': false,
+          'isRead': false, // Marks the overwritten notification as unread again
           'timestamp': FieldValue.serverTimestamp(),
-        });
+        }, SetOptions(merge: true));
       }
     }
   }
 
-  // --- UPDATED: Passing tags ---
   void _editPost(String currentCaption, List<String> currentTags) {
     Navigator.push(
       context,
@@ -200,6 +206,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       fontSize: 16,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "This post may have been deleted.",
+                    style: GoogleFonts.poppins(
+                      color: isDark ? Colors.white54 : Colors.black54,
+                      fontSize: 14,
+                    ),
+                  ),
                 ],
               ),
             );
@@ -217,12 +231,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   onDeletePressed: _deletePost,
                   onProfileTapped:
                       () => _onProfileTapped(postData['userId'] ?? ''),
+                  // --- FIX: Map the callback to include the new boolean ---
                   onLikePressed:
-                      () => _toggleLike(
-                        postData['userId'] ?? '',
-                        postData['likes'] ?? [],
-                      ),
-                  // --- UPDATED: Pass current tags ---
+                      (bool isLikedNow) =>
+                          _toggleLike(postData['userId'] ?? '', isLikedNow),
                   onEditPressed:
                       () => _editPost(
                         postData['caption'] ?? '',
