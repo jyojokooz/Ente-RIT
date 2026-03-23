@@ -63,7 +63,8 @@ class _HomePostFeedState extends State<HomePostFeed> {
           content: Text(
             'Are you sure you want to permanently remove this post?',
             style: GoogleFonts.poppins(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              // Replaced .withOpacity(0.7) with .withAlpha(178)
+              color: theme.colorScheme.onSurface.withAlpha(178),
             ),
           ),
           actions: <Widget>[
@@ -281,7 +282,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   onDeletePressed: () => _deletePost(postSnapshot.id),
                   onProfileTapped:
                       () => _onProfileTapped(postData['userId'] ?? ''),
-                  // --- FIX: Map the callback to include the new boolean ---
                   onLikePressed:
                       (bool isLikedNow) => _toggleLike(
                         postSnapshot.id,

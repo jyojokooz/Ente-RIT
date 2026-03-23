@@ -5,6 +5,7 @@
 // ignore_for_file: unnecessary_import
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- ADDED: Required for caching settings
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +23,7 @@ import 'screens/search_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/requests_screen.dart';
 import 'screens/create_username_screen.dart';
-import 'screens/pages/profile_screen.dart'; // <-- ADDED: Needed for dynamic QR routing
+import 'screens/pages/profile_screen.dart';
 
 import 'firebase_options.dart';
 
@@ -40,6 +41,16 @@ Future<void> main() async {
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
     SharedPreferences.getInstance(),
   ]);
+
+  // --- NEW: EXPLICIT FIRESTORE CACHING ---
+  // This enables offline persistence with an unlimited cache size.
+  // The app will instantly show cached data (posts, marketplace, profile)
+  // while seamlessly fetching fresh data in the background.
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+  // ---------------------------------------
 
   final prefs = futures[2] as SharedPreferences;
   final isDark = prefs.getBool('isDarkMode') ?? false;
@@ -128,7 +139,7 @@ class MyApp extends StatelessWidget {
             '/chat-list': (context) => const ChatListScreen(),
           },
 
-          // --- THE FIX: DYNAMIC ROUTING FOR QR CODES ---
+          // --- DYNAMIC ROUTING FOR QR CODES ---
           // This catches URLs like /profile/12345 or /verify/12345 and routes them
           onGenerateRoute: (settings) {
             final uri = Uri.tryParse(settings.name ?? '');

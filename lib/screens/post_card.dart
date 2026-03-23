@@ -16,6 +16,9 @@ import 'full_screen_video_player.dart';
 import 'full_screen_image_viewer.dart';
 import 'share_post_sheet.dart';
 
+// --- NEW IMPORT FOR AGGRESSIVE CACHING ---
+import '../helpers/app_cache_manager.dart';
+
 class GlobalAudioHandler {
   static final AudioPlayer _player = AudioPlayer();
   static String? _currentPostId;
@@ -73,8 +76,7 @@ class PostCard extends StatefulWidget {
   final Function() onCommentPressed;
   final Function() onDeletePressed;
   final Function() onProfileTapped;
-  final Function(bool isLikedNow)
-  onLikePressed; // <-- FIX: explicitly pass the new like state
+  final Function(bool isLikedNow) onLikePressed;
   final Function() onEditPressed;
 
   const PostCard({
@@ -166,7 +168,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
 
-    // <-- FIX: Pass the new state back up to the parent screen
+    // Pass the new state back up to the parent screen
     widget.onLikePressed(newLikeState);
   }
 
@@ -266,7 +268,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                 : Colors.grey.shade200,
                         backgroundImage:
                             currentProfilePic.isNotEmpty
-                                ? CachedNetworkImageProvider(currentProfilePic)
+                                ? CachedNetworkImageProvider(
+                                  currentProfilePic,
+                                  // --- CACHE MANAGER APPLIED HERE ---
+                                  cacheManager: AppCacheManager.instance,
+                                )
                                 : null,
                         child:
                             currentProfilePic.isEmpty
@@ -384,6 +390,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   ? (originalThumbnailUrl ?? '')
                                   : mediaUrls.first,
                             ),
+                            // --- CACHE MANAGER APPLIED HERE ---
+                            cacheManager: AppCacheManager.instance,
                             fit: BoxFit.cover,
                             placeholder:
                                 (c, u) => Container(

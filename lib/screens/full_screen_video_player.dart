@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -30,7 +31,12 @@ class FullScreenVideoPlayer extends StatefulWidget {
 
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     with SingleTickerProviderStateMixin {
-  late VideoPlayerController _controller;
+  late CachedVideoPlayerPlus _player;
+
+  // Only assigned after initialize() completes — never accessed before then
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+
   bool _showControls = true;
   bool _isMuted = false;
   bool _isScrubbing = false;
@@ -44,18 +50,27 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
-      ..initialize().then((_) {
-        setState(() {});
-        _controller.play();
-        _controller.setLooping(true);
-        _startHideTimer();
+
+    _player = CachedVideoPlayerPlus.networkUrl(
+      Uri.parse(widget.videoUrl),
+      httpHeaders: {'User-Agent': 'EnteRITApp'},
+    );
+
+    _player.initialize().then((_) {
+      if (!mounted) return;
+
+      // Only assign _controller AFTER initialization is confirmed complete
+      final ctrl = _player.controller;
+      ctrl.setLooping(true);
+      ctrl.play();
+      ctrl.addListener(_onControllerUpdate);
+
+      setState(() {
+        _controller = ctrl;
+        _isInitialized = true;
       });
 
-    _controller.addListener(() {
-      if (mounted && _controller.value.isPlaying && !_isScrubbing) {
-        setState(() {});
-      }
+      _startHideTimer();
     });
 
     _likeController = AnimationController(
@@ -67,10 +82,17 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     );
   }
 
+  void _onControllerUpdate() {
+    if (mounted && !_isScrubbing) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
-    _controller.dispose();
+    _controller?.removeListener(_onControllerUpdate);
+    _player.dispose();
     _likeController.dispose();
     super.dispose();
   }
@@ -78,7 +100,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   void _startHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _controller.value.isPlaying && !_isScrubbing) {
+      if (mounted && (_controller?.value.isPlaying ?? false) && !_isScrubbing) {
         setState(() => _showControls = false);
       }
     });
@@ -94,27 +116,30 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   }
 
   void _togglePlayPause() {
+    final ctrl = _controller;
+    if (ctrl == null) return;
     setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
+      if (ctrl.value.isPlaying) {
+        ctrl.pause();
         _showControls = true;
         _hideTimer?.cancel();
       } else {
-        _controller.play();
+        ctrl.play();
         _startHideTimer();
       }
     });
   }
 
   void _toggleMute() {
+    final ctrl = _controller;
+    if (ctrl == null) return;
     setState(() {
       _isMuted = !_isMuted;
-      _controller.setVolume(_isMuted ? 0.0 : 1.0);
+      ctrl.setVolume(_isMuted ? 0.0 : 1.0);
     });
     _startHideTimer();
   }
 
-  // --- FIX: Explicitly delete the notification on unlike ---
   Future<void> _toggleLike(List<dynamic> currentLikes) async {
     final postRef = FirebaseFirestore.instance
         .collection('posts')
@@ -123,17 +148,14 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     final notifId = 'like_${widget.postId}_$currentUserId';
 
     if (isLiked) {
-      // Remove the like
       await postRef.update({
         'likes': FieldValue.arrayRemove([currentUserId]),
       });
-      // Explicitly delete notification on unlike to prevent stale duplicates
       await FirebaseFirestore.instance
           .collection('notifications')
           .doc(notifId)
           .delete();
     } else {
-      // Add the like
       _likeController.forward().then((_) => _likeController.reverse());
       await postRef.update({
         'likes': FieldValue.arrayUnion([currentUserId]),
@@ -143,7 +165,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
       final postData = postSnapshot.data();
       final postAuthorId = postData?['userId'];
 
-      // If someone else liked the post, send a notification
       if (postAuthorId != null && postAuthorId != currentUserId) {
         final userDoc =
             await FirebaseFirestore.instance
@@ -152,8 +173,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 .get();
         final userData = userDoc.data() ?? {};
 
-        // This ensures that if the user unlikes and re-likes, it overwrites the existing
-        // notification instead of creating a brand new duplicate one.
         await FirebaseFirestore.instance
             .collection('notifications')
             .doc(notifId)
@@ -167,8 +186,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
               'triggeringUserId': currentUserId,
               'triggeringUserName': userData['displayName'] ?? 'User',
               'triggeringUserAvatarUrl': userData['profilePhotoUrl'] ?? '',
-              'isRead':
-                  false, // Marks the overwritten notification as unread again
+              'isRead': false,
               'timestamp': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
       }
@@ -176,7 +194,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   }
 
   void _openComments() {
-    _controller.pause();
+    _controller?.pause();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -188,31 +206,32 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
             ),
             child: CommentsSheet(postId: widget.postId),
           ),
-    ).then((_) => _controller.play());
+    ).then((_) => _controller?.play());
   }
 
   void _openShare() {
-    _controller.pause();
+    _controller?.pause();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => SharePostSheet(postId: widget.postId),
-    ).then((_) => _controller.play());
+    ).then((_) => _controller?.play());
   }
 
   String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    return "$twoDigitMinutes:$twoDigitSeconds";
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final ctrl = _controller; // local snapshot — null if not yet initialized
     final double opacity = (1 - (_dragY.abs() / 300)).clamp(0.0, 1.0);
-    final duration = _controller.value.duration.inMilliseconds.toDouble();
-    final position = _controller.value.position.inMilliseconds.toDouble();
+    final duration =
+        ctrl != null ? ctrl.value.duration.inMilliseconds.toDouble() : 0.0;
+    final position =
+        ctrl != null ? ctrl.value.position.inMilliseconds.toDouble() : 0.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -232,18 +251,18 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
           }
         },
         child: Container(
-          color: Colors.black.withOpacity(opacity),
+          color: Colors.black.withAlpha((opacity * 255).round()),
           child: Stack(
             children: [
-              // --- 1. VIDEO PLAYER ---
+              // ── Video / loading ──────────────────────────────────────────
               Center(
                 child: Transform.translate(
                   offset: Offset(0, _dragY),
                   child:
-                      _controller.value.isInitialized
+                      _isInitialized && ctrl != null
                           ? AspectRatio(
-                            aspectRatio: _controller.value.aspectRatio,
-                            child: VideoPlayer(_controller),
+                            aspectRatio: ctrl.value.aspectRatio,
+                            child: VideoPlayer(ctrl),
                           )
                           : const CircularProgressIndicator(
                             color: Colors.yellow,
@@ -251,20 +270,17 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 ),
               ),
 
-              // --- 2. TOP BAR (Back Button) ---
+              // ── Top bar (back button) ────────────────────────────────────
               AnimatedOpacity(
                 opacity: _showControls && _dragY == 0 ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
                 child: Container(
                   height: 120,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.6),
-                        Colors.transparent,
-                      ],
+                      colors: [Colors.black54, Colors.transparent],
                     ),
                   ),
                   child: SafeArea(
@@ -286,15 +302,14 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 ),
               ),
 
-              // --- 3. CENTER PLAY/PAUSE (Shows when paused) ---
-              if (!_controller.value.isPlaying &&
-                  _controller.value.isInitialized)
+              // ── Paused overlay icon ──────────────────────────────────────
+              if (_isInitialized && ctrl != null && !ctrl.value.isPlaying)
                 Center(
                   child: IgnorePointer(
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withAlpha(102),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white24),
                       ),
@@ -307,23 +322,19 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                   ),
                 ),
 
-              // --- 4. BOTTOM REELS-STYLE OVERLAY ---
+              // ── Bottom controls ──────────────────────────────────────────
               AnimatedOpacity(
-                opacity:
-                    _dragY == 0 ? 1.0 : 0.0, // Fade out when scrubbing/dragging
+                opacity: _dragY == 0 ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(16, 60, 16, 30),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.8),
-                          Colors.transparent,
-                        ],
+                        colors: [Colors.black87, Colors.transparent],
                       ),
                     ),
                     child: SafeArea(
@@ -331,7 +342,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // User Info, Caption & Actions
+                          // Post metadata row
                           StreamBuilder<DocumentSnapshot>(
                             stream:
                                 FirebaseFirestore.instance
@@ -356,7 +367,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                               return Row(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  // Left: Info
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -391,8 +401,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.poppins(
-                                              color: Colors.white.withOpacity(
-                                                0.9,
+                                              color: Colors.white.withAlpha(
+                                                230,
                                               ),
                                               fontSize: 14,
                                             ),
@@ -403,7 +413,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   ),
                                   const SizedBox(width: 16),
 
-                                  // Right: Actions
+                                  // Action buttons
                                   Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -426,7 +436,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              "${likes.length}",
+                                              '${likes.length}',
                                               style: GoogleFonts.poppins(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -447,7 +457,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              "$commentsCount",
+                                              '$commentsCount',
                                               style: GoogleFonts.poppins(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -468,7 +478,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                             ),
                                             SizedBox(height: 4),
                                             Text(
-                                              "Share",
+                                              'Share',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -485,7 +495,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                           ),
                           const SizedBox(height: 16),
 
-                          // Video Controls (Timeline & Mute)
+                          // Seek bar + play/mute row
                           Column(
                             children: [
                               Row(
@@ -493,7 +503,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   GestureDetector(
                                     onTap: _togglePlayPause,
                                     child: Icon(
-                                      _controller.value.isPlaying
+                                      (ctrl?.value.isPlaying ?? false)
                                           ? Icons.pause_rounded
                                           : Icons.play_arrow_rounded,
                                       color: Colors.white,
@@ -502,7 +512,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    "${_formatDuration(_controller.value.position)} / ${_formatDuration(_controller.value.duration)}",
+                                    ctrl != null
+                                        ? '${_formatDuration(ctrl.value.position)} / ${_formatDuration(ctrl.value.duration)}'
+                                        : '00:00 / 00:00',
                                     style: GoogleFonts.robotoMono(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -546,11 +558,10 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                     _hideTimer?.cancel();
                                   },
                                   onChanged: (value) {
-                                    setState(() {
-                                      _controller.seekTo(
-                                        Duration(milliseconds: value.toInt()),
-                                      );
-                                    });
+                                    ctrl?.seekTo(
+                                      Duration(milliseconds: value.toInt()),
+                                    );
+                                    setState(() {});
                                   },
                                   onChangeEnd: (_) {
                                     setState(() => _isScrubbing = false);
