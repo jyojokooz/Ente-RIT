@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: main_screen.dart
-// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\screens\main_screen.dart
+// FILE PATH: lib/screens/main_screen.dart
 // ===============================
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,12 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-// --- FIXED IMPORTS ---
-// Using absolute package paths is more robust and solves the errors.
 import 'package:my_project/screens/pages/pages.dart';
 import 'package:my_project/screens/create_post_screen.dart';
 import 'package:my_project/widgets/notification_badge.dart';
-// --- END OF FIX ---
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -27,17 +24,15 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   DateTime? _lastPressedAt;
   late final List<Widget> _pages;
-  late final PageController _pageController; // Added PageController for swiping
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    // Initialize the PageController with the starting index
     _pageController = PageController(initialPage: _currentIndex);
 
-    // Wrapped pages in KeepAlivePage to prevent them from reloading when swiped away
     _pages = [
       const KeepAlivePage(child: HomeScreen()),
       const KeepAlivePage(child: ExploreScreen()),
@@ -55,7 +50,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
-    _pageController.dispose(); // Dispose the controller to prevent memory leaks
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -95,15 +90,13 @@ class _MainScreenState extends State<MainScreen> {
 
     int pageIndex = index > 2 ? index - 1 : index;
 
-    // Animate to the page when a bottom nav item is tapped
     _pageController.animateToPage(
       pageIndex,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+      curve: Curves.easeInOutCubic,
     );
   }
 
-  // Called when the user swipes left/right
   void _onPageChanged(int index) {
     setState(() {
       _currentIndex = index;
@@ -114,7 +107,6 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final brandPurple = isDark ? Colors.yellow : const Color(0xFF9983F3);
 
     return PopScope(
       canPop: false,
@@ -137,61 +129,93 @@ class _MainScreenState extends State<MainScreen> {
       },
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
-
-        // Replaced IndexedStack with PageView for swipe gestures
         body: PageView(
           controller: _pageController,
           onPageChanged: _onPageChanged,
-          physics:
-              const BouncingScrollPhysics(), // Gives a nice iOS-style bounce
+          physics: const BouncingScrollPhysics(),
           children: _pages,
         ),
 
         floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         floatingActionButton: GestureDetector(
           onTap: () => _onTabTapped(2),
-          child: SizedBox(
-            width: 70,
-            height: 70,
-            child: Image.asset(
-              'assets/app_icon.png',
-              errorBuilder:
-                  (c, e, s) => Container(
-                    decoration: BoxDecoration(
-                      color: brandPurple,
-                      shape: BoxShape.circle,
+          child: Container(
+            width: 52, // Decreased to a smaller, sleeker size
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/app_icon.png',
+                fit: BoxFit.cover,
+                errorBuilder:
+                    (c, e, s) => Container(
+                      color: const Color(0xFFFF3E8E),
+                      // No plus symbol, just a camera fallback if the image fails to load
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.add,
-                      color: isDark ? Colors.black : Colors.white,
-                    ),
-                  ),
+              ),
             ),
           ),
         ),
 
         bottomNavigationBar: BottomAppBar(
-          height: 55,
+          height: 65,
           color: theme.bottomAppBarTheme.color,
-          elevation: 0,
+          elevation: 10,
+          shadowColor: Colors.black.withOpacity(0.2),
           surfaceTintColor: theme.bottomAppBarTheme.color,
           shape: const CircularNotchedRectangle(),
-          notchMargin: 10.0,
+          notchMargin: 8.0,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildTabIcon(Icons.home, Icons.home_outlined, 0, 0, theme),
-                _buildTabIcon(Icons.search, Icons.search_outlined, 1, 1, theme),
-                const SizedBox(width: 48),
-                _buildTabIcon(Icons.apps, Icons.apps_outlined, 2, 3, theme),
                 _buildTabIcon(
-                  Icons.person,
-                  Icons.person_outline,
+                  Icons.home_rounded,
+                  Icons.home_outlined,
+                  0,
+                  0,
+                  theme,
+                  isDark,
+                ),
+                _buildTabIcon(
+                  Icons.search_rounded,
+                  Icons.search_rounded,
+                  1,
+                  1,
+                  theme,
+                  isDark,
+                ),
+                const SizedBox(width: 48), // Gap for FAB
+                _buildTabIcon(
+                  Icons.grid_view_rounded,
+                  Icons.grid_view_rounded,
+                  2,
+                  3,
+                  theme,
+                  isDark,
+                ),
+                _buildTabIcon(
+                  Icons.person_rounded,
+                  Icons.person_outline_rounded,
                   3,
                   4,
                   theme,
+                  isDark,
                   isProfile: true,
                 ),
               ],
@@ -207,17 +231,32 @@ class _MainScreenState extends State<MainScreen> {
     IconData inactiveIcon,
     int pageIndex,
     int visualIndex,
-    ThemeData theme, {
+    ThemeData theme,
+    bool isDark, {
     bool isProfile = false,
   }) {
     final bool isSelected = _currentIndex == pageIndex;
-    final color =
-        isSelected ? theme.colorScheme.onSurface : Colors.grey.shade500;
 
-    Widget icon = Icon(
-      isSelected ? activeIcon : inactiveIcon,
-      color: color,
-      size: 28,
+    // Modern Accent Color matches the gradient used elsewhere
+    final Color activeColor = const Color(0xFFFF3E8E);
+    final Color inactiveColor = isDark ? Colors.white54 : Colors.grey.shade400;
+
+    Widget icon = AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.symmetric(
+        horizontal: isSelected ? 16 : 8,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: isSelected ? activeColor.withOpacity(0.12) : Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Icon(
+        isSelected ? activeIcon : inactiveIcon,
+        color: isSelected ? activeColor : inactiveColor,
+        size: isSelected ? 26 : 24, // Slight pop effect when selected
+      ),
     );
 
     if (isProfile) {
@@ -235,7 +274,6 @@ class _MainScreenState extends State<MainScreen> {
 }
 
 // --- Helper Widget to maintain state across swipes ---
-// This prevents pages from reloading/losing scroll position when swiping away
 class KeepAlivePage extends StatefulWidget {
   final Widget child;
   const KeepAlivePage({super.key, required this.child});
@@ -251,7 +289,7 @@ class _KeepAlivePageState extends State<KeepAlivePage>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Crucial step for AutomaticKeepAliveClientMixin
+    super.build(context);
     return widget.child;
   }
 }
