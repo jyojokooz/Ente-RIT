@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: splash_screen.dart
+// FILE PATH: lib/screens/splash_screen.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -89,35 +94,24 @@ class _SplashScreenState extends State<SplashScreen>
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: Center(
-            child:
-                isDark
-                    // Dark Mode: Gradient Text on Black Background
-                    ? ShaderMask(
-                      blendMode: BlendMode.srcIn,
-                      shaderCallback:
-                          (bounds) => const LinearGradient(
-                            colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ).createShader(bounds),
-                      child: Text(
-                        "Ente RIT",
-                        style: GoogleFonts.satisfy(
-                          fontSize: 48, // Reduced size
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    )
-                    // Light Mode: White Text on Gradient Background
-                    : Text(
-                      "Ente RIT",
-                      style: GoogleFonts.satisfy(
-                        fontSize: 48, // Reduced size
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+            // --- REPLACED TEXT WITH IMAGE LOGO ---
+            child: Image.asset(
+              'assets/enterit_logo.png', // Ensure this matches the image name you used in the header
+              width: 250, // Nice large width for the splash screen
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                // Fallback to text if the image fails to load for any reason
+                return Text(
+                  "Ente RIT",
+                  style: GoogleFonts.satisfy(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                );
+              },
+            ),
+            // --- END OF CHANGE ---
           ),
         ),
       ),
