@@ -9,9 +9,10 @@ import 'package:flutter/material.dart';
 
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
+import '../../widgets/home/home_banner_carousel.dart'; // <-- IMPORT CAROUSEL
 import '../../widgets/home/home_post_feed.dart';
 import '../../widgets/home/home_campus_highlights.dart';
-import '../../widgets/home/home_quick_links.dart'; // <-- IMPORT THE NEW WIDGET
+import '../../widgets/home/home_quick_links.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -117,22 +118,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 2. Stories Bar
+                    // 2. RESTORED: Banner Carousel directly below the header
+                    SliverToBoxAdapter(
+                      child: HomeBannerCarousel(isDark: isDark),
+                    ),
+
+                    // 3. Stories Bar
                     const SliverToBoxAdapter(child: StoriesBar()),
 
-                    // 3. Campus Highlights
+                    // 4. Campus Highlights
                     SliverToBoxAdapter(
                       child: HomeCampusHighlights(isDark: isDark),
                     ),
 
-                    // 4. NEW: Glowing Quick Links Bar
+                    // 5. Glowing Quick Links Bar
                     SliverToBoxAdapter(
                       child: HomeQuickLinksBar(isDark: isDark),
                     ),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                    // 5. Main Post Feed
+                    // 6. Main Post Feed
                     HomePostFeed(textColor: textColor),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
