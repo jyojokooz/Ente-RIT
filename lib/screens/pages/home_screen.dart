@@ -93,7 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFFFF3E8E),
           backgroundColor: cardColor,
           child: SafeArea(
-            // --- WRAPPED IN STREAM BUILDER SO THE HEADER INSTANTLY UPDATES ---
             child: StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -101,7 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       .doc(user.uid)
                       .snapshots(),
               builder: (context, snapshot) {
-                // Determine display name live from stream
                 String displayName = 'User';
                 if (snapshot.hasData && snapshot.data!.exists) {
                   final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -120,13 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // --- NEW SLIDING AD BANNER ---
+                    // --- STORIES MOVED HERE (Directly below header) ---
+                    const SliverToBoxAdapter(child: StoriesBar()),
+
+                    // --- BANNER MOVED BELOW STORIES ---
                     SliverToBoxAdapter(
                       child: HomeBannerCarousel(isDark: isDark),
                     ),
-
-                    // Stories Bar
-                    const SliverToBoxAdapter(child: StoriesBar()),
 
                     // Upcoming Event Banner
                     SliverToBoxAdapter(

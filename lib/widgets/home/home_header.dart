@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: home_header.dart
+// FILE PATH: lib/widgets/home/home_header.dart
+// ===============================
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -68,64 +73,50 @@ class HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      // Reduced bottom padding so the stories sit closer to the header
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
+          Image.asset(
+            'assets/enterit_logo.png', // Ensure this matches your filename in the assets folder
+            height: 38,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Text(
                 'Ente RIT',
                 style: GoogleFonts.satisfy(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: textColor,
                 ),
+              );
+            },
+          ),
+          Row(
+            children: [
+              NotificationBadge(
+                child: _buildTopBarButton(
+                  context,
+                  icon: Icons.notifications_none_rounded,
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        _createSmoothRoute(const NotificationsScreen()),
+                      ),
+                ),
               ),
-              Row(
-                children: [
-                  NotificationBadge(
-                    child: _buildTopBarButton(
+              const SizedBox(width: 12),
+              _buildTopBarButton(
+                context,
+                icon: Icons.maps_ugc_rounded,
+                onTap:
+                    () => Navigator.push(
                       context,
-                      icon: Icons.notifications_none_rounded,
-                      onTap:
-                          () => Navigator.push(
-                            context,
-                            _createSmoothRoute(const NotificationsScreen()),
-                          ),
+                      _createSmoothRoute(const ChatListScreen()),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _buildTopBarButton(
-                    context,
-                    icon: Icons.maps_ugc_rounded,
-                    onTap:
-                        () => Navigator.push(
-                          context,
-                          _createSmoothRoute(const ChatListScreen()),
-                        ),
-                  ),
-                ],
               ),
             ],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Hello ${displayName.split(' ').first}! 👋',
-            style: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "What's bothering you?",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: isDark ? Colors.white54 : Colors.black54,
-            ),
           ),
         ],
       ),

@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: stories_bar.dart
 // FILE PATH: lib/screens/stories/stories_bar.dart
 // ===============================
 
@@ -19,15 +20,13 @@ class _StoriesBarState extends State<StoriesBar> {
   final StoriesService _service = StoriesService();
   final currentUser = FirebaseAuth.instance.currentUser;
 
-  // Instagram-style gradient matching the provided image
+  // Vibrant Pink/Purple/Blue gradient matching your design image
   final LinearGradient _activeStoryGradient = const LinearGradient(
     colors: [
-      Color(0xFFD300C5), // Deep Purple (Bottom Left)
-      Color(0xFFFF0069), // Pink (Mid)
-      Color(0xFFFF7A00), // Orange (Top Right)
-      Color(0xFFFFD600), // Yellow (Bottom Right Edge)
+      Color(0xFF5A32FA), // Purple
+      Color(0xFFD300C5), // Magenta/Pink
+      Color(0xFFFF0069), // Hot Pink
     ],
-    stops: [0.0, 0.4, 0.8, 1.0],
     begin: Alignment.bottomLeft,
     end: Alignment.topRight,
   );
@@ -39,11 +38,35 @@ class _StoriesBarState extends State<StoriesBar> {
     );
   }
 
+  // Helper to extract department acronym like the post card
+  String _getAcronym(String name) {
+    if (name.isEmpty) return "";
+    String lowerName = name.toLowerCase();
+
+    if (lowerName.contains("mca") || lowerName.contains("application"))
+      return "MCA";
+    if (lowerName.contains("computer")) return "CSE";
+    if (lowerName.contains("mechanical")) return "ME";
+    if (lowerName.contains("electrical") && lowerName.contains("electronics"))
+      return "EEE";
+    if (lowerName.contains("electronics") &&
+        lowerName.contains("communication"))
+      return "ECE";
+    if (lowerName.contains("civil")) return "CE";
+    if (lowerName.contains("architecture")) return "B.Arch";
+
+    List<String> words = name.split(" ");
+    if (words.length > 1) {
+      return words.take(2).map((e) => e[0].toUpperCase()).join();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 115,
-      margin: const EdgeInsets.only(top: 8),
+      height: 110,
+      margin: const EdgeInsets.only(top: 4, bottom: 8),
       child: StreamBuilder<List<Story>>(
         stream: _service.getActiveStories(),
         builder: (context, snapshot) {
@@ -110,11 +133,10 @@ class _StoriesBarState extends State<StoriesBar> {
                 },
                 onLongPress: _addStory,
                 child: Container(
-                  width: 78,
-                  height: 78,
+                  width: 74,
+                  height: 74,
                   decoration: BoxDecoration(
-                    // Using 28 radius on a 78 box gives the exact squircle shape from the image
-                    borderRadius: BorderRadius.circular(28),
+                    shape: BoxShape.circle,
                     gradient: hasStory ? _activeStoryGradient : null,
                     border:
                         hasStory
@@ -132,14 +154,13 @@ class _StoriesBarState extends State<StoriesBar> {
                   ), // Gradient border thickness
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(26),
+                      shape: BoxShape.circle,
                       color: bgColor,
                     ),
                     padding: const EdgeInsets.all(
-                      3.0,
+                      2.5,
                     ), // Inner gap before image
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
+                    child: ClipOval(
                       child: StreamBuilder<DocumentSnapshot>(
                         stream:
                             FirebaseFirestore.instance
@@ -168,27 +189,24 @@ class _StoriesBarState extends State<StoriesBar> {
                   ),
                 ),
               ),
-              // Plus Badge
+              // Plus Badge positioned exactly like the image
               Positioned(
-                bottom: -2,
-                right: -2,
+                bottom: 0,
+                right: 0,
                 child: GestureDetector(
                   onTap: _addStory,
                   child: Container(
-                    width: 28,
-                    height: 28,
+                    width: 24,
+                    height: 24,
                     decoration: BoxDecoration(
-                      color: const Color(
-                        0xFF4A3AFF,
-                      ), // Deep Purple/Blue matching the image
+                      color: const Color(0xFF833AB4), // Vibrant purple
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: bgColor,
-                        width:
-                            3.5, // Thick white/black stroke to cut into the avatar
+                        width: 3.0, // Cuts into the avatar to look detached
                       ),
                     ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 18),
+                    child: const Icon(Icons.add, color: Colors.white, size: 16),
                   ),
                 ),
               ),
@@ -198,7 +216,7 @@ class _StoriesBarState extends State<StoriesBar> {
           Text(
             "Your Story",
             style: GoogleFonts.poppins(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: isDark ? Colors.white70 : Colors.grey.shade800,
               letterSpacing: 0.2,
@@ -237,10 +255,10 @@ class _StoriesBarState extends State<StoriesBar> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 78,
-              height: 78,
+              width: 74,
+              height: 74,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
+                shape: BoxShape.circle,
                 gradient: allSeen ? null : _activeStoryGradient,
                 border:
                     allSeen
@@ -253,34 +271,56 @@ class _StoriesBarState extends State<StoriesBar> {
               padding: const EdgeInsets.all(2.5), // Gradient border thickness
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(26),
+                  shape: BoxShape.circle,
                   color: bgColor,
                 ),
-                padding: const EdgeInsets.all(3.0), // Inner gap before image
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
+                padding: const EdgeInsets.all(2.5), // Inner gap before image
+                child: ClipOval(
                   child: Image(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
             ),
             const SizedBox(height: 6),
-            SizedBox(
-              width: 78, // Constraint to match container width
-              child: Text(
-                story.userName.split(' ')[0], // First name only
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color:
-                      allSeen
-                          ? (isDark ? Colors.white54 : Colors.grey.shade600)
-                          : (isDark ? Colors.white : Colors.black87),
-                  fontWeight: allSeen ? FontWeight.w500 : FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+
+            // Get department to show below the name (e.g. "CSE '26" or Name)
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(story.userId)
+                      .snapshots(),
+              builder: (context, userSnap) {
+                String labelText =
+                    story.userName.split(' ')[0]; // Fallback to first name
+
+                if (userSnap.hasData && userSnap.data!.exists) {
+                  final data = userSnap.data!.data() as Map<String, dynamic>;
+                  final department = data['department'] ?? '';
+                  if (department.isNotEmpty) {
+                    // Add a mock year just to match your design image style, or just the acronym
+                    labelText = _getAcronym(department);
+                  }
+                }
+
+                return SizedBox(
+                  width: 74,
+                  child: Text(
+                    labelText,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color:
+                          allSeen
+                              ? (isDark ? Colors.white54 : Colors.grey.shade600)
+                              : (isDark ? Colors.white : Colors.black87),
+                      fontWeight: allSeen ? FontWeight.w500 : FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
             ),
           ],
         ),

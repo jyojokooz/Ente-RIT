@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: post_card.dart
 // FILE PATH: lib/screens/post_card.dart
 // ===============================
 
@@ -16,9 +17,9 @@ import 'full_screen_video_player.dart';
 import 'full_screen_image_viewer.dart';
 import 'share_post_sheet.dart';
 
-// --- NEW IMPORT FOR AGGRESSIVE CACHING ---
 import '../helpers/app_cache_manager.dart';
 
+// --- GLOBAL AUDIO HANDLER ---
 class GlobalAudioHandler {
   static final AudioPlayer _player = AudioPlayer();
   static String? _currentPostId;
@@ -157,7 +158,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   void _triggerLikeButtonPress() {
-    final bool newLikeState = !_isLiked; // Determine the intended new state
+    final bool newLikeState = !_isLiked;
 
     setState(() {
       _isLiked = newLikeState;
@@ -168,7 +169,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
 
-    // Pass the new state back up to the parent screen
     widget.onLikePressed(newLikeState);
   }
 
@@ -182,6 +182,30 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     return originalUrl;
   }
 
+  // Helper to dynamically abbreviate departments (e.g. Computer Science -> CSE)
+  String _getAcronym(String name) {
+    if (name.isEmpty) return "";
+    String lowerName = name.toLowerCase();
+
+    if (lowerName.contains("mca") || lowerName.contains("application"))
+      return "MCA";
+    if (lowerName.contains("computer")) return "CSE";
+    if (lowerName.contains("mechanical")) return "ME";
+    if (lowerName.contains("electrical") && lowerName.contains("electronics"))
+      return "EEE";
+    if (lowerName.contains("electronics") &&
+        lowerName.contains("communication"))
+      return "ECE";
+    if (lowerName.contains("civil")) return "CE";
+    if (lowerName.contains("architecture")) return "B.Arch";
+
+    List<String> words = name.split(" ");
+    if (words.length > 1) {
+      return words.take(2).map((e) => e[0].toUpperCase()).join();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
@@ -190,9 +214,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final cardBgColor = isDark ? const Color(0xFF252528) : Colors.white;
+
+    // Card styling matching the sleek dark mockup
+    final cardBgColor = isDark ? const Color(0xFF121215) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
+    final subtitleColor = isDark ? Colors.white60 : Colors.black54;
 
     final String postAuthorId = postData['userId'] ?? '';
     final String postType = postData['postType'] ?? 'image';
@@ -217,24 +243,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       key: Key('post-vis-${widget.postSnapshot.id}'),
       onVisibilityChanged: _onVisibilityChanged,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: cardBgColor,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            if (!isDark)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-          ],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.black12,
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER (Instantly listens to user's live profile changes) ---
+            // --- HEADER (Avatar, Name, Dept, Time) ---
             StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -242,11 +264,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       .doc(postAuthorId)
                       .snapshots(),
               builder: (context, authorSnap) {
-                // Fallback to static post data if loading
                 String currentDisplayName = postData['userName'] ?? 'Unknown';
                 String currentProfilePic = postData['userImageUrl'] ?? '';
+                String department = '';
 
-                // If stream gets live data, overwrite the static data instantly
                 if (authorSnap.hasData && authorSnap.data!.exists) {
                   final authorDocData =
                       authorSnap.data!.data() as Map<String, dynamic>;
@@ -254,33 +275,61 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       authorDocData['displayName'] ?? currentDisplayName;
                   currentProfilePic =
                       authorDocData['profilePhotoUrl'] ?? currentProfilePic;
+                  department = authorDocData['department'] ?? '';
                 }
 
+                String deptAcronym = _getAcronym(department);
+                String formattedTime =
+                    timestamp != null
+                        ? DateFormat("MMM d 'at' h:mm a").format(timestamp)
+                        : '';
+
                 return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Gradient Ring Avatar
                     GestureDetector(
                       onTap: widget.onProfileTapped,
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor:
-                            isDark
-                                ? Colors.grey.shade800
-                                : Colors.grey.shade200,
-                        backgroundImage:
-                            currentProfilePic.isNotEmpty
-                                ? CachedNetworkImageProvider(
-                                  currentProfilePic,
-                                  // --- CACHE MANAGER APPLIED HERE ---
-                                  cacheManager: AppCacheManager.instance,
-                                )
-                                : null,
-                        child:
-                            currentProfilePic.isEmpty
-                                ? Icon(Icons.person, color: subtitleColor)
-                                : null,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: cardBgColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: CircleAvatar(
+                            radius: 20,
+                            backgroundColor:
+                                isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade200,
+                            backgroundImage:
+                                currentProfilePic.isNotEmpty
+                                    ? CachedNetworkImageProvider(
+                                      currentProfilePic,
+                                      cacheManager: AppCacheManager.instance,
+                                    )
+                                    : null,
+                            child:
+                                currentProfilePic.isEmpty
+                                    ? Icon(Icons.person, color: subtitleColor)
+                                    : null,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
+
+                    // Name, Time, and Department
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,20 +338,49 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             currentDisplayName,
                             style: GoogleFonts.poppins(
                               fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.bold,
                               color: textColor,
+                              letterSpacing: 0.2,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            timestamp != null ? _formatTimeAgo(timestamp) : '',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: subtitleColor,
-                            ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                formattedTime,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: subtitleColor,
+                                ),
+                              ),
+                              if (deptAcronym.isNotEmpty) ...[
+                                Text(
+                                  ' • ',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: subtitleColor,
+                                  ),
+                                ),
+                                Text(
+                                  deptAcronym,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: const Color(
+                                      0xFF9983F3,
+                                    ), // Accent Purple
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
                     ),
+
+                    // Options Menu
                     if (isAuthor)
                       PopupMenuButton<String>(
                         color: theme.colorScheme.surface,
@@ -310,17 +388,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           if (val == 'edit') widget.onEditPressed();
                           if (val == 'delete') widget.onDeletePressed();
                         },
-                        icon: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                isDark ? Colors.white10 : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(Icons.more_horiz, size: 20),
+                        icon: Icon(
+                          Icons.more_horiz,
+                          color: subtitleColor,
+                          size: 24,
                         ),
                         itemBuilder:
                             (ctx) => [
@@ -344,15 +415,27 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 );
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // --- CONTENT AREA ---
-            ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Stack(
-                children: [
-                  // Background Image/Video
-                  if (mediaUrls.isNotEmpty)
+            // --- CAPTION / TEXT CONTENT ---
+            if (caption.isNotEmpty) ...[
+              Text(
+                caption,
+                style: GoogleFonts.poppins(
+                  color: textColor,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // --- MEDIA DISPLAY ---
+            if (mediaUrls.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  children: [
                     GestureDetector(
                       onTap: () {
                         if (postType == 'video') {
@@ -390,7 +473,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   ? (originalThumbnailUrl ?? '')
                                   : mediaUrls.first,
                             ),
-                            // --- CACHE MANAGER APPLIED HERE ---
                             cacheManager: AppCacheManager.instance,
                             fit: BoxFit.cover,
                             placeholder:
@@ -403,271 +485,207 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(minHeight: 180),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
                     ),
 
-                  // Overlay Gradient for text readability
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.6),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // --- MUSIC PILL OVERLAY ---
-                  if (postType == 'image' &&
-                      musicData != null &&
-                      musicData['previewUrl'] != null)
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: GestureDetector(
-                        onTap: () {
-                          GlobalAudioHandler.playOrPause(
-                            widget.postSnapshot.id,
-                            musicData['previewUrl'],
-                            (isPlaying) {
-                              if (mounted)
-                                setState(() => _isPlayingMusic = isPlaying);
-                            },
-                          );
-                        },
+                    // Multi-image indicator (Top Right)
+                    if (mediaUrls.length > 1)
+                      Positioned(
+                        top: 12,
+                        right: 12,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
-                            vertical: 6,
+                            vertical: 5,
                           ),
-                          constraints: const BoxConstraints(maxWidth: 160),
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white24),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _isPlayingMusic
-                                    ? Icons.graphic_eq
-                                    : Icons.music_note_rounded,
-                                color:
-                                    _isPlayingMusic
-                                        ? const Color(0xFF00C6FB)
-                                        : Colors.white,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  musicData['trackName'] ?? 'Music',
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            "1/${mediaUrls.length}",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                  // Caption Text
-                  Positioned(
-                    bottom: 70,
-                    left: 16,
-                    right: 16,
-                    child: Text(
-                      caption,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    // Video Play Button Overlay
+                    if (postType == 'video')
+                      Positioned.fill(
+                        child: Center(
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 36,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
 
-                  // Interaction Pills (Bottom)
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    right: 16,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Comment Pill
-                        GestureDetector(
-                          onTap: widget.onCommentPressed,
+                    // Music Pill Overlay (Bottom Left)
+                    if (postType == 'image' &&
+                        musicData != null &&
+                        musicData['previewUrl'] != null)
+                      Positioned(
+                        bottom: 12,
+                        left: 12,
+                        child: GestureDetector(
+                          onTap: () {
+                            GlobalAudioHandler.playOrPause(
+                              widget.postSnapshot.id,
+                              musicData['previewUrl'],
+                              (isPlaying) {
+                                if (mounted)
+                                  setState(() => _isPlayingMusic = isPlaying);
+                              },
+                            );
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
+                              horizontal: 10,
+                              vertical: 6,
                             ),
+                            constraints: const BoxConstraints(maxWidth: 160),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.black.withOpacity(0.7),
                               borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white24),
                             ),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.chat_bubble_rounded,
-                                  color: Colors.white,
-                                  size: 16,
+                                Icon(
+                                  _isPlayingMusic
+                                      ? Icons.graphic_eq
+                                      : Icons.music_note_rounded,
+                                  color:
+                                      _isPlayingMusic
+                                          ? const Color(0xFF00C6FB)
+                                          : Colors.white,
+                                  size: 14,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "$commentsCount Comments",
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    musicData['trackName'] ?? 'Music',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
+                      ),
+                  ],
+                ),
+              ),
 
-                        // Like & Share Row
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _triggerLikeButtonPress,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Row(
-                                  children: [
-                                    ScaleTransition(
-                                      scale: _likeScaleAnimation,
-                                      child: Icon(
-                                        _isLiked
-                                            ? Icons.favorite
-                                            : Icons.favorite_border,
-                                        color:
-                                            _isLiked
-                                                ? Colors.redAccent
-                                                : Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      "$_likesCount",
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: theme.colorScheme.surface,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(20),
-                                    ),
-                                  ),
-                                  builder:
-                                      (context) => SharePostSheet(
-                                        postId: widget.postSnapshot.id,
-                                      ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.near_me_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+            // Add spacing if there is media
+            if (mediaUrls.isNotEmpty) const SizedBox(height: 16),
 
-                  // Play button for video
-                  if (postType == 'video')
-                    Positioned.fill(
-                      child: Center(
-                        child: IgnorePointer(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 36,
-                            ),
-                          ),
+            // --- BOTTOM ACTIONS (Like, Comment, Share) ---
+            Row(
+              children: [
+                // Like Button
+                GestureDetector(
+                  onTap: _triggerLikeButtonPress,
+                  child: Row(
+                    children: [
+                      ScaleTransition(
+                        scale: _likeScaleAnimation,
+                        child: Icon(
+                          _isLiked ? Icons.favorite : Icons.favorite_border,
+                          color:
+                              _isLiked
+                                  ? const Color(0xFFFF4B72)
+                                  : subtitleColor,
+                          size: 24,
                         ),
                       ),
-                    ),
-                ],
-              ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "$_likesCount",
+                        style: GoogleFonts.poppins(
+                          color: subtitleColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+
+                // Comment Button
+                GestureDetector(
+                  onTap: widget.onCommentPressed,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: subtitleColor,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "$commentsCount",
+                        style: GoogleFonts.poppins(
+                          color: subtitleColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Spacer(),
+
+                // Share Button
+                GestureDetector(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: theme.colorScheme.surface,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                      ),
+                      builder:
+                          (context) =>
+                              SharePostSheet(postId: widget.postSnapshot.id),
+                    );
+                  },
+                  child: Icon(
+                    Icons.near_me_outlined,
+                    color: subtitleColor,
+                    size: 24,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatTimeAgo(DateTime date) {
-    final diff = DateTime.now().difference(date);
-    if (diff.inDays > 7) return DateFormat('MMM d').format(date);
-    if (diff.inDays > 0) return '${diff.inDays} days ago';
-    if (diff.inHours > 0) return '${diff.inHours} hours ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
-    return 'Just now';
   }
 }

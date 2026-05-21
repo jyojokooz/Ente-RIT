@@ -24,7 +24,7 @@ class HomePostFeed extends StatefulWidget {
 }
 
 class _HomePostFeedState extends State<HomePostFeed> {
-  final user = FirebaseAuth.instance.currentUser!;
+  final User? user = FirebaseAuth.instance.currentUser;
 
   void _editPost(
     String postId,
@@ -63,7 +63,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
           content: Text(
             'Are you sure you want to permanently remove this post?',
             style: GoogleFonts.poppins(
-              // Replaced .withOpacity(0.7) with .withAlpha(178)
               color: theme.colorScheme.onSurface.withAlpha(178),
             ),
           ),
@@ -95,6 +94,12 @@ class _HomePostFeedState extends State<HomePostFeed> {
             ),
           );
         }
+      } on FirebaseException catch (e) {
+        if (scaffoldMessenger.mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(content: Text('Permission Denied or Error: ${e.message}')),
+          );
+        }
       } catch (e) {
         if (scaffoldMessenger.mounted) {
           scaffoldMessenger.showSnackBar(
@@ -105,61 +110,62 @@ class _HomePostFeedState extends State<HomePostFeed> {
     }
   }
 
-  // --- FIX: Accept isLikedNow and explicitly delete the notification on unlike ---
   Future<void> _toggleLike(
     String postId,
     bool isLikedNow,
     String postAuthorId,
   ) async {
+    if (user == null) return;
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
-    final notifId = 'like_${postId}_${user.uid}';
+    final notifId = 'like_${postId}_${user!.uid}';
 
-    if (!isLikedNow) {
-      // Remove the like
-      await postRef.update({
-        'likes': FieldValue.arrayRemove([user.uid]),
-      });
-      // Explicitly delete notification on unlike to prevent stale duplicates
-      await FirebaseFirestore.instance
-          .collection('notifications')
-          .doc(notifId)
-          .delete();
-    } else {
-      // Add the like
-      await postRef.update({
-        'likes': FieldValue.arrayUnion([user.uid]),
-      });
-
-      // If someone else liked the post, send a notification
-      if (postAuthorId != user.uid) {
-        final userDoc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .get();
-        final userData = userDoc.data();
-        final displayName = userData?['displayName'] ?? 'User';
-        final profilePic = userData?['profilePhotoUrl'] ?? '';
-
-        // This ensures that if the user unlikes and re-likes, it overwrites the existing
-        // notification instead of creating a brand new duplicate row in the DB.
+    try {
+      if (!isLikedNow) {
+        // Remove the like
+        await postRef.update({
+          'likes': FieldValue.arrayRemove([user!.uid]),
+        });
+        // Explicitly delete notification on unlike to prevent stale duplicates
         await FirebaseFirestore.instance
             .collection('notifications')
             .doc(notifId)
-            .set({
-              'userId': postAuthorId,
-              'title': 'New Like',
-              'body': '$displayName liked your post.',
-              'type': 'like',
-              'relatedDocId': postId,
-              'triggeringUserId': user.uid,
-              'triggeringUserName': displayName,
-              'triggeringUserAvatarUrl': profilePic,
-              'isRead':
-                  false, // Marks the overwritten notification as unread again
-              'timestamp': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            .delete();
+      } else {
+        // Add the like
+        await postRef.update({
+          'likes': FieldValue.arrayUnion([user!.uid]),
+        });
+
+        // If someone else liked the post, send a notification
+        if (postAuthorId != user!.uid) {
+          final userDoc =
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user!.uid)
+                  .get();
+          final userData = userDoc.data();
+          final displayName = userData?['displayName'] ?? 'User';
+          final profilePic = userData?['profilePhotoUrl'] ?? '';
+
+          await FirebaseFirestore.instance
+              .collection('notifications')
+              .doc(notifId)
+              .set({
+                'userId': postAuthorId,
+                'title': 'New Like',
+                'body': '$displayName liked your post.',
+                'type': 'like',
+                'relatedDocId': postId,
+                'triggeringUserId': user!.uid,
+                'triggeringUserName': displayName,
+                'triggeringUserAvatarUrl': profilePic,
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+        }
       }
+    } catch (e) {
+      debugPrint("Toggle like error: $e");
     }
   }
 
@@ -188,13 +194,36 @@ class _HomePostFeedState extends State<HomePostFeed> {
 
   @override
   Widget build(BuildContext context) {
+    if (user == null) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Text(
+            "Please log in to view posts.",
+            style: TextStyle(color: widget.textColor),
+          ),
+        ),
+      );
+    }
+
     return StreamBuilder<DocumentSnapshot>(
       stream:
           FirebaseFirestore.instance
               .collection('users')
-              .doc(user.uid)
+              .doc(user!.uid)
               .snapshots(),
       builder: (context, userSnap) {
+        if (userSnap.hasError) {
+          return SliverFillRemaining(
+            child: Center(
+              child: Text(
+                "Error loading profile data.\nCheck Firebase Rules.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: widget.textColor),
+              ),
+            ),
+          );
+        }
+
         if (!userSnap.hasData) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
@@ -209,16 +238,45 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
           builder: (context, snapshot) {
+            // Check for permission-denied errors explicitly
             if (snapshot.hasError) {
+              final errorString = snapshot.error.toString();
               return SliverFillRemaining(
                 child: Center(
-                  child: Text(
-                    "Error loading posts",
-                    style: TextStyle(color: widget.textColor),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.lock_outline,
+                          size: 50,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Access Denied",
+                          style: GoogleFonts.poppins(
+                            color: widget.textColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          errorString.contains('permission-denied')
+                              ? "Your Firebase Firestore rules are blocking read access. Please update your rules in the Firebase Console."
+                              : "Error loading posts: $errorString",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(color: Colors.grey),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
             }
+
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData) {
               return SliverList(
@@ -228,6 +286,7 @@ class _HomePostFeedState extends State<HomePostFeed> {
                 ),
               );
             }
+
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return SliverFillRemaining(
                 hasScrollBody: false,
@@ -249,7 +308,7 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   final authorId = data['userId'];
                   final isPrivate = data['isAuthorPrivate'] ?? false;
 
-                  if (authorId == user.uid) return true;
+                  if (authorId == user!.uid) return true;
                   if (myConnections.contains(authorId)) return true;
                   if (isPrivate) return false;
                   return true;
