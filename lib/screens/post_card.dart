@@ -182,7 +182,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     return originalUrl;
   }
 
-  // Helper to dynamically abbreviate departments (e.g. Computer Science -> CSE)
   String _getAcronym(String name) {
     if (name.isEmpty) return "";
     String lowerName = name.toLowerCase();
@@ -215,7 +214,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Card styling matching the sleek dark mockup
     final cardBgColor = isDark ? const Color(0xFF121215) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.white60 : Colors.black54;
@@ -287,7 +285,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Gradient Ring Avatar
                     GestureDetector(
                       onTap: widget.onProfileTapped,
                       child: Container(
@@ -328,8 +325,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Name, Time, and Department
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -379,8 +374,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-
-                    // Options Menu
                     if (isAuthor)
                       PopupMenuButton<String>(
                         color: theme.colorScheme.surface,
@@ -430,7 +423,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               const SizedBox(height: 12),
             ],
 
-            // --- MEDIA DISPLAY ---
+            // --- MEDIA DISPLAY (FORCED LANDSCAPE 16:9) ---
             if (mediaUrls.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
@@ -464,7 +457,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         }
                       },
                       child: AspectRatio(
-                        aspectRatio: postType == 'video' ? 1.0 : 4 / 3,
+                        // FORCED WIDE LANDSCAPE RATIO
+                        aspectRatio: 16 / 9,
                         child: Hero(
                           tag: 'post_${widget.postSnapshot.id}',
                           child: CachedNetworkImage(
@@ -474,7 +468,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   : mediaUrls.first,
                             ),
                             cacheManager: AppCacheManager.instance,
-                            fit: BoxFit.cover,
+                            fit:
+                                BoxFit
+                                    .cover, // Ensures image fills the 16:9 box nicely
                             placeholder:
                                 (c, u) => Container(
                                   color:
@@ -597,7 +593,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
               ),
 
-            // Add spacing if there is media
             if (mediaUrls.isNotEmpty) const SizedBox(height: 16),
 
             // --- BOTTOM ACTIONS (Like, Comment, Share) ---

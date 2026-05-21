@@ -26,6 +26,10 @@ class HomePostFeed extends StatefulWidget {
 class _HomePostFeedState extends State<HomePostFeed> {
   final User? user = FirebaseAuth.instance.currentUser;
 
+  // Track the active feed tab
+  String _activeTab = 'For You';
+  final List<String> _tabs = ['For You', 'Following', 'Popular'];
+
   void _editPost(
     String postId,
     String currentCaption,
@@ -94,12 +98,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
             ),
           );
         }
-      } on FirebaseException catch (e) {
-        if (scaffoldMessenger.mounted) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text('Permission Denied or Error: ${e.message}')),
-          );
-        }
       } catch (e) {
         if (scaffoldMessenger.mounted) {
           scaffoldMessenger.showSnackBar(
@@ -121,22 +119,17 @@ class _HomePostFeedState extends State<HomePostFeed> {
 
     try {
       if (!isLikedNow) {
-        // Remove the like
         await postRef.update({
           'likes': FieldValue.arrayRemove([user!.uid]),
         });
-        // Explicitly delete notification on unlike to prevent stale duplicates
         await FirebaseFirestore.instance
             .collection('notifications')
             .doc(notifId)
             .delete();
       } else {
-        // Add the like
         await postRef.update({
           'likes': FieldValue.arrayUnion([user!.uid]),
         });
-
-        // If someone else liked the post, send a notification
         if (postAuthorId != user!.uid) {
           final userDoc =
               await FirebaseFirestore.instance
@@ -192,6 +185,54 @@ class _HomePostFeedState extends State<HomePostFeed> {
     );
   }
 
+  // --- BUILD TABS UI ---
+  Widget _buildTabsHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 20),
+      child: Row(
+        children:
+            _tabs.map((tab) {
+              final isActive = _activeTab == tab;
+              return GestureDetector(
+                onTap: () => setState(() => _activeTab = tab),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        tab,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight:
+                              isActive ? FontWeight.bold : FontWeight.w500,
+                          color:
+                              isActive
+                                  ? (isDark ? Colors.white : Colors.black)
+                                  : Colors.grey.shade500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Animated underline
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 3,
+                        width: isActive ? 24 : 0,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF9983F3), // Purple Accent
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (user == null) {
@@ -212,19 +253,7 @@ class _HomePostFeedState extends State<HomePostFeed> {
               .doc(user!.uid)
               .snapshots(),
       builder: (context, userSnap) {
-        if (userSnap.hasError) {
-          return SliverFillRemaining(
-            child: Center(
-              child: Text(
-                "Error loading profile data.\nCheck Firebase Rules.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: widget.textColor),
-              ),
-            ),
-          );
-        }
-
-        if (!userSnap.hasData) {
+        if (userSnap.hasError || !userSnap.hasData) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
@@ -238,39 +267,14 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
           builder: (context, snapshot) {
-            // Check for permission-denied errors explicitly
             if (snapshot.hasError) {
-              final errorString = snapshot.error.toString();
-              return SliverFillRemaining(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.lock_outline,
-                          size: 50,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          "Access Denied",
-                          style: GoogleFonts.poppins(
-                            color: widget.textColor,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          errorString.contains('permission-denied')
-                              ? "Your Firebase Firestore rules are blocking read access. Please update your rules in the Firebase Console."
-                              : "Error loading posts: $errorString",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(color: Colors.grey),
-                        ),
-                      ],
+              return SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Center(
+                    child: Text(
+                      "Error loading posts.",
+                      style: TextStyle(color: widget.textColor),
                     ),
                   ),
                 ),
@@ -281,27 +285,16 @@ class _HomePostFeedState extends State<HomePostFeed> {
                 !snapshot.hasData) {
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => const PostCardPlaceholder(),
-                  childCount: 3,
+                  (context, index) =>
+                      index == 0
+                          ? _buildTabsHeader()
+                          : const PostCardPlaceholder(),
+                  childCount: 4,
                 ),
               );
             }
 
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    'No posts yet.',
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              );
-            }
-
+            // 1. Initial Filtering (Privacy Check)
             List<DocumentSnapshot> visiblePosts =
                 snapshot.data!.docs.where((postDoc) {
                   final data = postDoc.data() as Map<String, dynamic>;
@@ -314,47 +307,79 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   return true;
                 }).toList();
 
-            if (visiblePosts.isEmpty) {
-              return SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    'No visible posts available.',
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              );
+            // 2. Tab Logic (Filtering & Sorting)
+            if (_activeTab == 'Following') {
+              visiblePosts =
+                  visiblePosts.where((doc) {
+                    final authorId =
+                        (doc.data() as Map<String, dynamic>)['userId'];
+                    return myConnections.contains(authorId) ||
+                        authorId == user!.uid;
+                  }).toList();
+            } else if (_activeTab == 'Popular') {
+              visiblePosts.sort((a, b) {
+                final aLikes =
+                    ((a.data() as Map<String, dynamic>)['likes'] as List?)
+                        ?.length ??
+                    0;
+                final bLikes =
+                    ((b.data() as Map<String, dynamic>)['likes'] as List?)
+                        ?.length ??
+                    0;
+                return bLikes.compareTo(aLikes); // Descending order
+              });
             }
 
             return SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final postSnapshot = visiblePosts[index];
-                final postData = postSnapshot.data() as Map<String, dynamic>;
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  // Render tabs at the very top of the list
+                  if (index == 0) return _buildTabsHeader();
 
-                return PostCard(
-                  key: ValueKey(postSnapshot.id),
-                  postSnapshot: postSnapshot,
-                  onCommentPressed: () => _onCommentTapped(postSnapshot.id),
-                  onDeletePressed: () => _deletePost(postSnapshot.id),
-                  onProfileTapped:
-                      () => _onProfileTapped(postData['userId'] ?? ''),
-                  onLikePressed:
-                      (bool isLikedNow) => _toggleLike(
-                        postSnapshot.id,
-                        isLikedNow,
-                        postData['userId'] ?? '',
+                  final postIndex =
+                      index - 1; // Adjust index since 0 is the tabs
+
+                  if (visiblePosts.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Center(
+                        child: Text(
+                          'No posts found for this filter.',
+                          style: GoogleFonts.poppins(color: Colors.grey),
+                        ),
                       ),
-                  onEditPressed:
-                      () => _editPost(
-                        postSnapshot.id,
-                        postData['caption'] ?? '',
-                        List<String>.from(postData['taggedUsers'] ?? []),
-                      ),
-                );
-              }, childCount: visiblePosts.length),
+                    );
+                  }
+
+                  if (postIndex >= visiblePosts.length)
+                    return const SizedBox.shrink();
+
+                  final postSnapshot = visiblePosts[postIndex];
+                  final postData = postSnapshot.data() as Map<String, dynamic>;
+
+                  return PostCard(
+                    key: ValueKey(postSnapshot.id),
+                    postSnapshot: postSnapshot,
+                    onCommentPressed: () => _onCommentTapped(postSnapshot.id),
+                    onDeletePressed: () => _deletePost(postSnapshot.id),
+                    onProfileTapped:
+                        () => _onProfileTapped(postData['userId'] ?? ''),
+                    onLikePressed:
+                        (bool isLikedNow) => _toggleLike(
+                          postSnapshot.id,
+                          isLikedNow,
+                          postData['userId'] ?? '',
+                        ),
+                    onEditPressed:
+                        () => _editPost(
+                          postSnapshot.id,
+                          postData['caption'] ?? '',
+                          List<String>.from(postData['taggedUsers'] ?? []),
+                        ),
+                  );
+                },
+                childCount: visiblePosts.isEmpty ? 2 : visiblePosts.length + 1,
+              ), // +1 for the Tab Header
             );
           },
         );
