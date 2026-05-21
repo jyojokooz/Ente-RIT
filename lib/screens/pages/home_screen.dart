@@ -9,9 +9,8 @@ import 'package:flutter/material.dart';
 
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
-import '../../widgets/home/home_banner_carousel.dart';
-import '../../widgets/home/home_upcoming_event_banner.dart';
 import '../../widgets/home/home_post_feed.dart';
+import '../../widgets/home/home_campus_highlights.dart'; // <-- IMPORT THE NEW WIDGET
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -110,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   cacheExtent: 1000,
                   physics: const BouncingScrollPhysics(),
                   slivers: [
+                    // 1. App Header with Logo
                     SliverToBoxAdapter(
                       child: HomeHeader(
                         displayName: displayName,
@@ -118,24 +118,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // --- STORIES MOVED HERE (Directly below header) ---
+                    // 2. Stories Bar
                     const SliverToBoxAdapter(child: StoriesBar()),
 
-                    // --- BANNER MOVED BELOW STORIES ---
+                    // 3. NEW: Campus Highlights Section
                     SliverToBoxAdapter(
-                      child: HomeBannerCarousel(isDark: isDark),
+                      child: HomeCampusHighlights(isDark: isDark),
                     ),
 
-                    // Upcoming Event Banner
-                    SliverToBoxAdapter(
-                      child: HomeUpcomingEventBanner(
-                        isDark: isDark,
-                        cardColor: cardColor,
-                      ),
-                    ),
-
-                    // Post Feed
+                    // 4. Main Post Feed
                     HomePostFeed(textColor: textColor),
+
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
                   ],
                 );
