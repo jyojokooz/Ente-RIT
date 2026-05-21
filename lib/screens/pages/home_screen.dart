@@ -10,7 +10,8 @@ import 'package:flutter/material.dart';
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
 import '../../widgets/home/home_post_feed.dart';
-import '../../widgets/home/home_campus_highlights.dart'; // <-- IMPORT THE NEW WIDGET
+import '../../widgets/home/home_campus_highlights.dart';
+import '../../widgets/home/home_quick_links.dart'; // <-- IMPORT THE NEW WIDGET
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +23,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser!;
 
-  // Edge swipe detection variables
   double _startX = 0.0;
   double _startY = 0.0;
   bool _isSwiping = false;
@@ -55,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
           final dx = event.position.dx - _startX;
           final dy = (event.position.dy - _startY).abs();
 
-          // Swipe logic for stories
           if (dx > 40 && dy < 60 && _startX < 100) {
             Navigator.push(
               context,
@@ -121,12 +120,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 2. Stories Bar
                     const SliverToBoxAdapter(child: StoriesBar()),
 
-                    // 3. NEW: Campus Highlights Section
+                    // 3. Campus Highlights
                     SliverToBoxAdapter(
                       child: HomeCampusHighlights(isDark: isDark),
                     ),
 
-                    // 4. Main Post Feed
+                    // 4. NEW: Glowing Quick Links Bar
+                    SliverToBoxAdapter(
+                      child: HomeQuickLinksBar(isDark: isDark),
+                    ),
+
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                    // 5. Main Post Feed
                     HomePostFeed(textColor: textColor),
 
                     const SliverToBoxAdapter(child: SizedBox(height: 80)),
