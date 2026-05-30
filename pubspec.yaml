@@ -91,7 +91,6 @@ dependencies:
   stack_trace: ^1.12.1
   web: ^0.5.1
   emoji_picker_flutter: ^2.2.0
-  email_otp: ^2.1.0
   pinput: ^4.0.0
   audioplayers: ^6.0.0 # Add this for playing music
   just_audio: ^0.9.36
@@ -104,6 +103,7 @@ dependencies:
   camera: ^0.12.0+1
   flutter_cache_manager: ^3.4.1
   cached_video_player_plus: ^4.1.0
+  mailer: ^7.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

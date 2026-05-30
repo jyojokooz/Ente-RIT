@@ -4,8 +4,10 @@
 
 // ignore_for_file: unnecessary_import
 
+import 'dart:io'; // <-- ADDED: Required for HttpOverrides
+
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- ADDED: Required for caching settings
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,6 +29,17 @@ import 'screens/pages/profile_screen.dart';
 
 import 'firebase_options.dart';
 
+// --- NEW: Custom HttpOverrides to bypass the expired SSL Certificate issue ---
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+  }
+}
+// ----------------------------------------------------------------------------
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -36,16 +49,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // --- NEW: Apply the global HttpOverrides here BEFORE initializing Firebase ---
+  HttpOverrides.global = MyHttpOverrides();
+  // ----------------------------------------------------------------------------
+
   final futures = await Future.wait([
     dotenv.load(fileName: ".env"),
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
     SharedPreferences.getInstance(),
   ]);
 
-  // --- NEW: EXPLICIT FIRESTORE CACHING ---
-  // This enables offline persistence with an unlimited cache size.
-  // The app will instantly show cached data (posts, marketplace, profile)
-  // while seamlessly fetching fresh data in the background.
+  // --- EXPLICIT FIRESTORE CACHING ---
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
@@ -140,29 +154,20 @@ class MyApp extends StatelessWidget {
           },
 
           // --- DYNAMIC ROUTING FOR QR CODES ---
-          // This catches URLs like /profile/12345 or /verify/12345 and routes them
           onGenerateRoute: (settings) {
             final uri = Uri.tryParse(settings.name ?? '');
 
             if (uri != null && uri.pathSegments.length == 2) {
-              final routeName = uri.pathSegments[0]; // e.g., 'profile'
-              final userId = uri.pathSegments[1]; // e.g., 'USER_UID'
+              final routeName = uri.pathSegments[0];
+              final userId = uri.pathSegments[1];
 
-              // Handle Profile QR Scans
-              if (routeName == 'profile') {
-                return MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userId: userId),
-                );
-              }
-
-              // Handle ID Card Verification QR Scans
-              if (routeName == 'verify') {
+              if (routeName == 'profile' || routeName == 'verify') {
                 return MaterialPageRoute(
                   builder: (context) => ProfileScreen(userId: userId),
                 );
               }
             }
-            return null; // Fallback to default
+            return null;
           },
         );
       },

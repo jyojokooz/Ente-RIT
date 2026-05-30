@@ -4,11 +4,15 @@
 // ===============================
 
 import 'dart:async';
-import 'dart:ui';
-import 'package:email_otp/email_otp.dart';
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pinput/pinput.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../auth/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -28,7 +32,6 @@ class SignupPage extends StatefulWidget {
 class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
-  final EmailOTP _emailOTP = EmailOTP();
 
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
@@ -38,6 +41,13 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _generatedOtp;
+
+  // --- Real-Time Email Checking State ---
+  Timer? _debounce;
+  bool _isCheckingEmail = false;
+  bool? _isEmailAvailable;
+  String? _emailErrorMessage;
 
   late AnimationController _entranceController;
   late Animation<double> _fadeAnimation;
@@ -46,13 +56,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _emailOTP.setConfig(
-      appEmail: "support@enterit.ac.in",
-      appName: "Ente RIT",
-      userEmail: _emailController.text,
-      otpLength: 6,
-      otpType: OTPType.digitsOnly,
-    );
 
     _entranceController = AnimationController(
       vsync: this,
@@ -78,6 +81,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _nameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
@@ -95,48 +99,160 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     }
   }
 
-  // --- STEP 1: SEND OTP ---
+  // --- REAL-TIME EMAIL CHECK LOGIC ---
+  void _onEmailChanged(String email) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    final cleanEmail = email.trim();
+
+    // Reset states if field is empty or invalid format
+    if (cleanEmail.isEmpty ||
+        !cleanEmail.contains('@') ||
+        !cleanEmail.contains('.')) {
+      setState(() {
+        _isEmailAvailable = null;
+        _isCheckingEmail = false;
+        _emailErrorMessage = null;
+      });
+      return;
+    }
+
+    // Start checking state
+    setState(() {
+      _isCheckingEmail = true;
+      _isEmailAvailable = null;
+      _emailErrorMessage = null;
+    });
+
+    // Debounce to avoid spamming the database on every single keystroke
+    _debounce = Timer(const Duration(milliseconds: 800), () async {
+      try {
+        bool isTaken = false;
+
+        // METHOD 1: Check Firebase Auth directly
+        final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(
+          cleanEmail,
+        );
+        if (methods.isNotEmpty) {
+          isTaken = true;
+        }
+
+        // METHOD 2: Fallback check against Firestore
+        if (!isTaken) {
+          try {
+            final query =
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .where('email', isEqualTo: cleanEmail)
+                    .limit(1)
+                    .get();
+            if (query.docs.isNotEmpty) {
+              isTaken = true;
+            }
+          } catch (_) {
+            // Ignore permission denied errors
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _isCheckingEmail = false;
+            if (isTaken) {
+              _isEmailAvailable = false;
+              _emailErrorMessage = 'This email is already registered.';
+            } else {
+              _isEmailAvailable = true;
+              _emailErrorMessage = null;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint("Email validation error: $e");
+        if (mounted) {
+          setState(() {
+            _isCheckingEmail = false;
+            _isEmailAvailable = null;
+            _emailErrorMessage = null;
+          });
+        }
+      }
+    });
+  }
+
+  // --- STEP 1: GENERATE AND SEND OTP USING MAILER ---
   Future<void> _handleSignupStep() async {
+    // Prevent sending if email is taken or still being checked
+    if (_isEmailAvailable == false || _isCheckingEmail) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please use an available email address."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      _emailOTP.setConfig(
-        appEmail: "support@enterit.ac.in",
-        appName: "Ente RIT",
-        userEmail: _emailController.text.trim(),
-        otpLength: 6,
-        otpType: OTPType.digitsOnly,
-      );
+      // Generate a random 6-digit OTP
+      _generatedOtp = (100000 + Random().nextInt(900000)).toString();
+
+      // Retrieve credentials from .env
+      String senderEmail = dotenv.env['SMTP_EMAIL'] ?? '';
+      String senderPassword = dotenv.env['SMTP_PASSWORD'] ?? '';
+
+      if (senderEmail.isEmpty || senderPassword.isEmpty) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("SMTP credentials are not configured in .env"),
+          ),
+        );
+        return;
+      }
+
+      final smtpServer = gmail(senderEmail, senderPassword);
+
+      final message =
+          Message()
+            ..from = Address(senderEmail, 'Ente RIT Support')
+            ..recipients.add(_emailController.text.trim())
+            ..subject = 'Your Verification Code for Ente RIT'
+            ..html = '''
+          <!DOCTYPE html>
+          <html>
+          <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
+              <h2 style="color: #9983F3; margin-top: 0;">Welcome to Ente RIT!</h2>
+              <p style="color: #333333; font-size: 16px;">Hi ${_nameController.text.trim()},</p>
+              <p style="color: #555555; font-size: 15px; line-height: 1.5;">
+                Thank you for registering. To complete your secure sign-up process, please use the 6-digit verification code below:
+              </p>
+              <div style="background-color: #f4f4f4; padding: 20px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 8px; text-align: center; color: #222; margin: 30px 0;">
+                $_generatedOtp
+              </div>
+              <p style="color: #555555; font-size: 14px;">
+                Please note: This code will expire in 10 minutes. Do not share this code with anyone.
+              </p>
+            </div>
+          </body>
+          </html>
+        ''';
 
       try {
-        bool otpSent = await _emailOTP.sendOTP();
+        await send(message, smtpServer);
 
         if (mounted) {
           setState(() => _isLoading = false);
-
-          if (otpSent) {
-            _showOtpDialog();
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text(
-                  "Failed to send OTP. Please check your email.",
-                ),
-                backgroundColor: Colors.redAccent,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          }
+          _showOtpDialog();
         }
       } catch (e) {
         if (mounted) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Error: $e"),
+              content: Text("Failed to send email: $e"),
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -149,11 +265,9 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     }
   }
 
-  // --- STEP 2: VERIFY OTP ---
+  // --- STEP 2: VERIFY LOCALLY STORED OTP ---
   Future<void> _verifyAndCreateAccount(String pin) async {
-    bool isVerified = _emailOTP.verifyOTP(otp: pin);
-
-    if (isVerified) {
+    if (pin == _generatedOtp) {
       Navigator.of(context).pop(); // Close Dialog
       setState(() => _isLoading = true);
 
@@ -167,7 +281,16 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         _checkAuthAndNavigate();
       } catch (e) {
         if (mounted) {
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            // FAILSAFE: If Firebase rejects it here, immediately update the text field to show the Red Cross.
+            if (e.toString().contains('email-already-in-use') ||
+                e.toString().contains('already in use')) {
+              _isEmailAvailable = false;
+              _emailErrorMessage =
+                  'The email address is already in use by another account.';
+            }
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(e.toString().replaceFirst("Exception: ", "")),
@@ -191,10 +314,10 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
           ),
         ),
       );
+      _otpController.clear();
     }
   }
 
-  // --- UI: BEAUTIFUL OTP DIALOG ---
   void _showOtpDialog() {
     _otpController.clear();
     final theme = Theme.of(context);
@@ -203,7 +326,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.6), // Dim background
+      barrierColor: Colors.black.withOpacity(0.6),
       transitionBuilder: (context, a1, a2, widget) {
         return Transform.scale(
           scale: a1.value,
@@ -363,7 +486,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // --- Header ---
                       Text(
                         "Create Account",
                         textAlign: TextAlign.center,
@@ -385,7 +507,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 40),
 
-                      // --- Input Fields ---
+                      // NAME FIELD WITH EMOJI/SPECIAL CHARACTER BLOCKER
                       _buildTextField(
                         controller: _nameController,
                         hint: "Full Name",
@@ -394,11 +516,18 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                         bgColor: inputBgColor,
                         textColor: textColor,
                         isDark: isDark,
-                        validator:
-                            (val) =>
-                                (val == null || val.isEmpty)
-                                    ? 'Name is required'
-                                    : null,
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Name is required';
+                          }
+                          if (val.trim().length < 2) {
+                            return 'Name must be at least 2 characters';
+                          }
+                          if (!RegExp(r"^[a-zA-Z\s]+$").hasMatch(val)) {
+                            return 'Only letters and spaces are allowed';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -414,11 +543,15 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                           if (val == null || val.isEmpty)
                             return 'Username is required';
                           if (val.length < 3) return 'Min 3 characters';
+                          if (!RegExp(r"^[a-zA-Z0-9_.]+$").hasMatch(val)) {
+                            return 'Only letters, numbers, _ and . allowed';
+                          }
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
 
+                      // Email Field with Real-Time Validation
                       _buildTextField(
                         controller: _emailController,
                         hint: "Email Address",
@@ -427,16 +560,42 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                         bgColor: inputBgColor,
                         textColor: textColor,
                         isDark: isDark,
+                        onChanged: _onEmailChanged,
+                        errorText: _emailErrorMessage,
+                        suffixIcon:
+                            _isCheckingEmail
+                                ? const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF00C6FB),
+                                    ),
+                                  ),
+                                )
+                                : _isEmailAvailable == true
+                                ? const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                )
+                                : _isEmailAvailable == false
+                                ? const Icon(Icons.cancel, color: Colors.red)
+                                : null,
                         validator: (val) {
                           if (val == null || val.isEmpty)
                             return 'Email is required';
                           if (!val.contains('@') || !val.contains('.'))
                             return 'Enter a valid email';
+                          if (_isEmailAvailable == false)
+                            return 'Email already in use';
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
 
+                      // PASSWORD FIELD WITH EMOJI & SPACE BLOCKER
                       _buildTextField(
                         controller: _passwordController,
                         hint: "Create Password",
@@ -458,21 +617,24 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                                 () => _obscurePassword = !_obscurePassword,
                               ),
                         ),
-                        validator:
-                            (val) =>
-                                val!.length >= 6 ? null : 'Min 6 characters',
+                        validator: (val) {
+                          if (val == null || val.isEmpty)
+                            return 'Password is required';
+                          if (val.length < 6) return 'Min 6 characters';
+                          // Ensures no emojis and no spaces. Allows only visible ASCII chars.
+                          if (!RegExp(r'^[\x21-\x7E]+$').hasMatch(val)) {
+                            return 'Spaces and emojis are not allowed';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 40),
 
-                      // --- Signup Button ---
                       Container(
                         height: 56,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF00C6FB),
-                              Color(0xFF005BEA),
-                            ], // Cyan to Blue
+                            colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -517,7 +679,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 40),
 
-                      // --- Footer ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -533,9 +694,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                             child: Text(
                               "Log In",
                               style: GoogleFonts.poppins(
-                                color: const Color(
-                                  0xFF00C6FB,
-                                ), // Matches gradient
+                                color: const Color(0xFF00C6FB),
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                               ),
@@ -565,6 +724,8 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
     Widget? suffixIcon,
+    String? errorText,
+    void Function(String)? onChanged,
     String? Function(String?)? validator,
   }) {
     return Container(
@@ -582,12 +743,14 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
+        onChanged: onChanged,
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.w500,
           color: textColor,
         ),
         decoration: InputDecoration(
           hintText: hint,
+          errorText: errorText,
           hintStyle: GoogleFonts.poppins(
             color: isDark ? Colors.white30 : Colors.black38,
           ),
@@ -597,6 +760,14 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
             borderSide: BorderSide.none,
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
           ),
           prefixIcon: Icon(
             icon,
@@ -611,7 +782,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   }
 }
 
-// --- ISOLATED TIMER WIDGET FOR OTP ---
 class _OtpTimer extends StatefulWidget {
   final VoidCallback onResend;
   final bool isDark;
