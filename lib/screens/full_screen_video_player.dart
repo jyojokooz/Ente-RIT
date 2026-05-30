@@ -4,16 +4,18 @@
 // ===============================
 
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'comments_sheet.dart';
 import 'share_post_sheet.dart';
+import '../services/video_preload_service.dart';
 
 class FullScreenVideoPlayer extends StatefulWidget {
   final String videoUrl;
@@ -31,11 +33,10 @@ class FullScreenVideoPlayer extends StatefulWidget {
 
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     with SingleTickerProviderStateMixin {
-  late CachedVideoPlayerPlus _player;
-
-  // Only assigned after initialize() completes — never accessed before then
   VideoPlayerController? _controller;
+
   bool _isInitialized = false;
+  bool _hasError = false;
 
   bool _showControls = true;
   bool _isMuted = false;
@@ -50,17 +51,42 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   @override
   void initState() {
     super.initState();
+    _initializeVideo();
 
-    _player = CachedVideoPlayerPlus.networkUrl(
-      Uri.parse(widget.videoUrl),
-      httpHeaders: {'User-Agent': 'EnteRITApp'},
+    _likeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
     );
+    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
+      CurvedAnimation(parent: _likeController, curve: Curves.elasticOut),
+    );
+  }
 
-    _player.initialize().then((_) {
-      if (!mounted) return;
+  // --- THE FIX: INSTANT PRELOAD FETCH + ERROR HANDLING ---
+  Future<void> _initializeVideo() async {
+    try {
+      // Ask the preload service if a controller is already ready for us!
+      var ctrl = VideoPreloadService.instance.takeController(widget.videoUrl);
 
-      // Only assign _controller AFTER initialization is confirmed complete
-      final ctrl = _player.controller;
+      // If it wasn't in the top 3, we initialize it manually here.
+      if (ctrl == null) {
+        ctrl = VideoPlayerController.networkUrl(
+          Uri.parse(widget.videoUrl),
+          httpHeaders: {'User-Agent': 'EnteRITApp'},
+        );
+        await ctrl.initialize();
+      }
+
+      if (!mounted) {
+        ctrl.dispose();
+        return;
+      }
+
+      if (ctrl.value.hasError) {
+        throw Exception(ctrl.value.errorDescription);
+      }
+
+      ctrl.setVolume(_isMuted ? 0.0 : 1.0); // Reset volume just in case
       ctrl.setLooping(true);
       ctrl.play();
       ctrl.addListener(_onControllerUpdate);
@@ -71,15 +97,12 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
       });
 
       _startHideTimer();
-    });
-
-    _likeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
-      CurvedAnimation(parent: _likeController, curve: Curves.elasticOut),
-    );
+    } catch (e) {
+      debugPrint("Video Player Initialization Error: $e");
+      if (mounted) {
+        setState(() => _hasError = true);
+      }
+    }
   }
 
   void _onControllerUpdate() {
@@ -92,7 +115,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   void dispose() {
     _hideTimer?.cancel();
     _controller?.removeListener(_onControllerUpdate);
-    _player.dispose();
+    _controller?.dispose();
     _likeController.dispose();
     super.dispose();
   }
@@ -226,7 +249,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
 
   @override
   Widget build(BuildContext context) {
-    final ctrl = _controller; // local snapshot — null if not yet initialized
+    final ctrl = _controller;
     final double opacity = (1 - (_dragY.abs() / 300)).clamp(0.0, 1.0);
     final duration =
         ctrl != null ? ctrl.value.duration.inMilliseconds.toDouble() : 0.0;
@@ -254,23 +277,48 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
           color: Colors.black.withAlpha((opacity * 255).round()),
           child: Stack(
             children: [
-              // ── Video / loading ──────────────────────────────────────────
+              // ── 1. Video / Loading / Error Layer ────────────────────────
               Center(
                 child: Transform.translate(
                   offset: Offset(0, _dragY),
                   child:
-                      _isInitialized && ctrl != null
+                      _hasError
+                          ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.white54,
+                                size: 50,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "Video unavailable",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white54,
+                                ),
+                              ),
+                            ],
+                          )
+                          : (_isInitialized && ctrl != null)
                           ? AspectRatio(
                             aspectRatio: ctrl.value.aspectRatio,
                             child: VideoPlayer(ctrl),
                           )
-                          : const CircularProgressIndicator(
-                            color: Colors.yellow,
+                          // Sleek Shimmer loader
+                          : Shimmer.fromColors(
+                            baseColor: Colors.grey.shade900,
+                            highlightColor: Colors.grey.shade800,
+                            child: Container(
+                              width: double.infinity,
+                              height: double.infinity,
+                              color: Colors.black,
+                            ),
                           ),
                 ),
               ),
 
-              // ── Top bar (back button) ────────────────────────────────────
+              // ── 2. Top bar (Back button) ───────────────────────────────
               AnimatedOpacity(
                 opacity: _showControls && _dragY == 0 ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
@@ -302,7 +350,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                 ),
               ),
 
-              // ── Paused overlay icon ──────────────────────────────────────
+              // ── 3. Paused overlay icon ──────────────────────────────────
               if (_isInitialized && ctrl != null && !ctrl.value.isPlaying)
                 Center(
                   child: IgnorePointer(
@@ -322,7 +370,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                   ),
                 ),
 
-              // ── Bottom controls ──────────────────────────────────────────
+              // ── 4. MODERN UI: Right Side Actions & Bottom Info ────────────────────────
               AnimatedOpacity(
                 opacity: _dragY == 0 ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
@@ -335,6 +383,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [Colors.black87, Colors.transparent],
+                        stops: [0.0, 1.0],
                       ),
                     ),
                     child: SafeArea(
@@ -342,7 +391,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Post metadata row
                           StreamBuilder<DocumentSnapshot>(
                             stream:
                                 FirebaseFirestore.instance
@@ -367,32 +415,66 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                               return Row(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
+                                  // Left side: User info & Caption with Glassmorphism pill
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 18,
-                                              backgroundImage:
-                                                  CachedNetworkImageProvider(
-                                                    userImage,
-                                                  ),
-                                              backgroundColor:
-                                                  Colors.grey.shade800,
+                                        // Profile Tag Pill
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            24,
+                                          ),
+                                          child: BackdropFilter(
+                                            filter: ImageFilter.blur(
+                                              sigmaX: 10,
+                                              sigmaY: 10,
                                             ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              userName,
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withAlpha(
+                                                  77,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(24),
+                                                border: Border.all(
+                                                  color: Colors.white.withAlpha(
+                                                    26,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  CircleAvatar(
+                                                    radius: 14,
+                                                    backgroundImage:
+                                                        CachedNetworkImageProvider(
+                                                          userImage,
+                                                        ),
+                                                    backgroundColor:
+                                                        Colors.grey.shade800,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    userName,
+                                                    style: GoogleFonts.poppins(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                          ],
+                                          ),
                                         ),
                                         if (caption.isNotEmpty) ...[
                                           const SizedBox(height: 12),
@@ -405,6 +487,13 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                                 230,
                                               ),
                                               fontSize: 14,
+                                              shadows: [
+                                                const Shadow(
+                                                  color: Colors.black45,
+                                                  blurRadius: 4,
+                                                  offset: Offset(0, 1),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -413,163 +502,185 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   ),
                                   const SizedBox(width: 16),
 
-                                  // Action buttons
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      GestureDetector(
-                                        onTap: () => _toggleLike(likes),
-                                        child: Column(
-                                          children: [
-                                            ScaleTransition(
-                                              scale: _likeScaleAnimation,
-                                              child: Icon(
-                                                isLiked
-                                                    ? Icons.favorite
-                                                    : Icons.favorite_border,
-                                                color:
-                                                    isLiked
-                                                        ? Colors.redAccent
-                                                        : Colors.white,
-                                                size: 32,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '${likes.length}',
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                  // Right side: Vertical Action Buttons (Glassmorphism design)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                      horizontal: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withAlpha(64),
+                                      borderRadius: BorderRadius.circular(30),
+                                      border: Border.all(
+                                        color: Colors.white.withAlpha(26),
                                       ),
-                                      const SizedBox(height: 20),
-                                      GestureDetector(
-                                        onTap: _openComments,
-                                        child: Column(
-                                          children: [
-                                            const Icon(
-                                              Icons.chat_bubble_outline_rounded,
-                                              color: Colors.white,
-                                              size: 30,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '$commentsCount',
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Like
+                                        GestureDetector(
+                                          onTap: () => _toggleLike(likes),
+                                          child: Column(
+                                            children: [
+                                              ScaleTransition(
+                                                scale: _likeScaleAnimation,
+                                                child: Icon(
+                                                  isLiked
+                                                      ? Icons.favorite_rounded
+                                                      : Icons
+                                                          .favorite_outline_rounded,
+                                                  color:
+                                                      isLiked
+                                                          ? const Color(
+                                                            0xFFFF3E8E,
+                                                          )
+                                                          : Colors.white,
+                                                  size: 32,
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 20),
-                                      GestureDetector(
-                                        onTap: _openShare,
-                                        child: const Column(
-                                          children: [
-                                            Icon(
-                                              Icons.near_me_outlined,
-                                              color: Colors.white,
-                                              size: 32,
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Share',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '${likes.length}',
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 20),
+
+                                        // Comment
+                                        GestureDetector(
+                                          onTap: _openComments,
+                                          child: Column(
+                                            children: [
+                                              const Icon(
+                                                Icons
+                                                    .chat_bubble_outline_rounded,
+                                                color: Colors.white,
+                                                size: 30,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '$commentsCount',
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Share
+                                        GestureDetector(
+                                          onTap: _openShare,
+                                          child: const Column(
+                                            children: [
+                                              Icon(
+                                                Icons.ios_share_rounded,
+                                                color: Colors.white,
+                                                size: 30,
+                                              ),
+                                              SizedBox(height: 4),
+                                              Text(
+                                                "Share",
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               );
                             },
                           ),
+
                           const SizedBox(height: 16),
 
-                          // Seek bar + play/mute row
-                          Column(
+                          // ── Seek bar + play/mute row ────────────────────────
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: _togglePlayPause,
-                                    child: Icon(
-                                      (ctrl?.value.isPlaying ?? false)
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    ctrl != null
-                                        ? '${_formatDuration(ctrl.value.position)} / ${_formatDuration(ctrl.value.duration)}'
-                                        : '00:00 / 00:00',
-                                    style: GoogleFonts.robotoMono(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  GestureDetector(
-                                    onTap: _toggleMute,
-                                    child: Icon(
-                                      _isMuted
-                                          ? Icons.volume_off_rounded
-                                          : Icons.volume_up_rounded,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 3.0,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 5.0,
-                                  ),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 10.0,
-                                  ),
-                                  activeTrackColor: Colors.white,
-                                  inactiveTrackColor: Colors.white24,
-                                  thumbColor: Colors.yellow,
+                              GestureDetector(
+                                onTap: _togglePlayPause,
+                                child: Icon(
+                                  (ctrl?.value.isPlaying ?? false)
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 24,
                                 ),
-                                child: Slider(
-                                  value: position.clamp(
-                                    0.0,
-                                    duration > 0 ? duration : 1.0,
-                                  ),
-                                  min: 0.0,
-                                  max: duration > 0 ? duration : 1.0,
-                                  onChangeStart: (_) {
-                                    setState(() => _isScrubbing = true);
-                                    _hideTimer?.cancel();
-                                  },
-                                  onChanged: (value) {
-                                    ctrl?.seekTo(
-                                      Duration(milliseconds: value.toInt()),
-                                    );
-                                    setState(() {});
-                                  },
-                                  onChangeEnd: (_) {
-                                    setState(() => _isScrubbing = false);
-                                    _startHideTimer();
-                                  },
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                ctrl != null
+                                    ? '${_formatDuration(ctrl.value.position)} / ${_formatDuration(ctrl.value.duration)}'
+                                    : '00:00 / 00:00',
+                                style: GoogleFonts.robotoMono(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: _toggleMute,
+                                child: Icon(
+                                  _isMuted
+                                      ? Icons.volume_off_rounded
+                                      : Icons.volume_up_rounded,
+                                  color: Colors.white,
+                                  size: 20,
                                 ),
                               ),
                             ],
+                          ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3.0,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6.0,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 12.0,
+                              ),
+                              activeTrackColor: Colors.white,
+                              inactiveTrackColor: Colors.white30,
+                              thumbColor: const Color(0xFF00C6FB), // Cyan thumb
+                            ),
+                            child: Slider(
+                              value: position.clamp(
+                                0.0,
+                                duration > 0 ? duration : 1.0,
+                              ),
+                              min: 0.0,
+                              max: duration > 0 ? duration : 1.0,
+                              onChangeStart: (_) {
+                                setState(() => _isScrubbing = true);
+                                _hideTimer?.cancel();
+                              },
+                              onChanged: (value) {
+                                ctrl?.seekTo(
+                                  Duration(milliseconds: value.toInt()),
+                                );
+                                setState(() {});
+                              },
+                              onChangeEnd: (_) {
+                                setState(() => _isScrubbing = false);
+                                _startHideTimer();
+                              },
+                            ),
                           ),
                         ],
                       ),

@@ -12,6 +12,7 @@ import '../../screens/post_card.dart';
 import '../../screens/comments_sheet.dart';
 import '../../screens/edit_post_screen.dart';
 import '../../screens/pages/profile_screen.dart';
+import '../../services/video_preload_service.dart'; // <-- IMPORT THE NEW PRELOAD SERVICE
 
 class HomePostFeed extends StatefulWidget {
   final Color textColor;
@@ -136,8 +137,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   .doc(user!.uid)
                   .get();
           final userData = userDoc.data();
-          final displayName = userData?['displayName'] ?? 'User';
-          final profilePic = userData?['profilePhotoUrl'] ?? '';
 
           await FirebaseFirestore.instance
               .collection('notifications')
@@ -145,12 +144,13 @@ class _HomePostFeedState extends State<HomePostFeed> {
               .set({
                 'userId': postAuthorId,
                 'title': 'New Like',
-                'body': '$displayName liked your post.',
+                'body':
+                    '${userData?['displayName'] ?? 'User'} liked your post.',
                 'type': 'like',
                 'relatedDocId': postId,
                 'triggeringUserId': user!.uid,
-                'triggeringUserName': displayName,
-                'triggeringUserAvatarUrl': profilePic,
+                'triggeringUserName': userData?['displayName'] ?? 'User',
+                'triggeringUserAvatarUrl': userData?['profilePhotoUrl'] ?? '',
                 'isRead': false,
                 'timestamp': FieldValue.serverTimestamp(),
               }, SetOptions(merge: true));
@@ -184,7 +184,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
     );
   }
 
-  // --- BUILD TABS UI ---
   Widget _buildTabsHeader() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
@@ -213,13 +212,12 @@ class _HomePostFeedState extends State<HomePostFeed> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      // Animated underline
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         height: 3,
                         width: isActive ? 24 : 0,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF9983F3), // Purple Accent
+                          color: const Color(0xFF9983F3),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -280,35 +278,28 @@ class _HomePostFeedState extends State<HomePostFeed> {
               );
             }
 
-            // --- THE FIX IS HERE ---
-            // Removed the giant Shimmer block and replaced it with a tiny spinner
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData) {
               return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    if (index == 0) return _buildTabsHeader();
-                    // Small loading spinner below the navbar
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 40.0),
-                      child: Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Color(0xFF9983F3), // Purple Accent
-                          ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  if (index == 0) return _buildTabsHeader();
+                  return const Padding(
+                    padding: EdgeInsets.only(top: 40.0),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF9983F3),
                         ),
                       ),
-                    );
-                  },
-                  childCount: 2, // 1 for the Tab Header, 1 for the Spinner
-                ),
+                    ),
+                  );
+                }, childCount: 2),
               );
             }
 
-            // 1. Initial Filtering (Privacy Check)
             List<DocumentSnapshot> visiblePosts =
                 snapshot.data!.docs.where((postDoc) {
                   final data = postDoc.data() as Map<String, dynamic>;
@@ -321,7 +312,6 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   return true;
                 }).toList();
 
-            // 2. Tab Logic (Filtering & Sorting)
             if (_activeTab == 'Following') {
               visiblePosts =
                   visiblePosts.where((doc) {
@@ -340,18 +330,39 @@ class _HomePostFeedState extends State<HomePostFeed> {
                     ((b.data() as Map<String, dynamic>)['likes'] as List?)
                         ?.length ??
                     0;
-                return bLikes.compareTo(aLikes); // Descending order
+                return bLikes.compareTo(aLikes);
               });
             }
+
+            // --- THE FIX: PRELOAD THE FIRST 3 VIDEOS INSTANTLY ---
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final videoUrls =
+                  visiblePosts
+                      .where(
+                        (doc) =>
+                            (doc.data() as Map<String, dynamic>)['postType'] ==
+                            'video',
+                      )
+                      .take(3)
+                      .map(
+                        (doc) =>
+                            (doc.data() as Map<String, dynamic>)['postMediaUrl']
+                                as String?,
+                      )
+                      .where((url) => url != null && url.isNotEmpty)
+                      .cast<String>()
+                      .toList();
+
+              if (videoUrls.isNotEmpty) {
+                VideoPreloadService.instance.preloadVideos(videoUrls);
+              }
+            });
 
             return SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  // Render tabs at the very top of the list
                   if (index == 0) return _buildTabsHeader();
-
-                  final postIndex =
-                      index - 1; // Adjust index since 0 is the tabs
+                  final postIndex = index - 1;
 
                   if (visiblePosts.isEmpty) {
                     return Padding(
@@ -393,7 +404,7 @@ class _HomePostFeedState extends State<HomePostFeed> {
                   );
                 },
                 childCount: visiblePosts.isEmpty ? 2 : visiblePosts.length + 1,
-              ), // +1 for the Tab Header
+              ),
             );
           },
         );
