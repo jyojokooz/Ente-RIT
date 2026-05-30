@@ -9,7 +9,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../screens/post_card.dart';
-import '../../screens/post_card_placeholder.dart';
 import '../../screens/comments_sheet.dart';
 import '../../screens/edit_post_screen.dart';
 import '../../screens/pages/profile_screen.dart';
@@ -281,15 +280,30 @@ class _HomePostFeedState extends State<HomePostFeed> {
               );
             }
 
+            // --- THE FIX IS HERE ---
+            // Removed the giant Shimmer block and replaced it with a tiny spinner
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData) {
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) =>
-                      index == 0
-                          ? _buildTabsHeader()
-                          : const PostCardPlaceholder(),
-                  childCount: 4,
+                  (context, index) {
+                    if (index == 0) return _buildTabsHeader();
+                    // Small loading spinner below the navbar
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 40.0),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Color(0xFF9983F3), // Purple Accent
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: 2, // 1 for the Tab Header, 1 for the Spinner
                 ),
               );
             }

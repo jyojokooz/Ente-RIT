@@ -1,13 +1,12 @@
 // ===============================
-// FILE NAME: profile_screen.dart
-// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\screens\pages\profile_screen.dart
+// FILE PATH: lib/screens/pages/profile_screen.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shimmer/shimmer.dart'; // <-- Added Shimmer Import
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../connections_screen.dart';
 import '../edit_profile_screen.dart';
@@ -18,8 +17,6 @@ import '../../theme_provider.dart';
 import '../stories/stories_connector.dart';
 import '../../models/connection_status.dart';
 
-import '../../widgets/profile/profile_header.dart';
-import '../../widgets/profile/profile_info.dart';
 import '../../widgets/profile/profile_quick_access.dart';
 import '../../widgets/profile/profile_posts_grid.dart';
 import '../../widgets/profile/share_profile_sheet.dart';
@@ -39,23 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   late String targetUserId;
   late bool isCurrentUser;
 
-  bool _isLoading = true;
-  String _displayName = 'User';
-  String _username = 'username';
-  String _bio = '';
-  String _department = '';
-  String _role = 'user';
-  String? _profilePhotoUrl;
-
-  List<DocumentSnapshot> _userPosts = [];
-  List<DocumentSnapshot> _taggedPosts = [];
-
-  bool _isAdmin = false;
-  bool _isPrivate = false;
-
-  List<dynamic> _connections = [];
-  ConnectionStatus _connectionStatus = ConnectionStatus.none;
-
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
 
@@ -63,7 +43,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -82,7 +61,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     targetUserId = widget.userId ?? _currentUser!.uid;
     isCurrentUser = targetUserId == _currentUser!.uid;
-    _loadAllData();
   }
 
   @override
@@ -92,146 +70,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.dispose();
   }
 
-  Future<void> _loadAllData() async {
-    if (_displayName == 'User') setState(() => _isLoading = true);
-    try {
-      final targetUserDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(targetUserId)
-              .get();
-
-      if (targetUserDoc.exists) {
-        final data = targetUserDoc.data()!;
-        _displayName = data['displayName'] ?? 'User';
-        _username = data['username'] ?? 'username';
-        _bio = data['bio'] ?? '';
-        _department = data['department'] ?? '';
-        _role = data['role'] ?? 'student';
-        _profilePhotoUrl = data['profilePhotoUrl'];
-        _isAdmin = data['isAdmin'] ?? false;
-        _isPrivate = data['isPrivate'] ?? false;
-        _connections = data['connections'] ?? [];
-      }
-
-      final postsQueryFuture =
-          FirebaseFirestore.instance
-              .collection('posts')
-              .where('userId', isEqualTo: targetUserId)
-              .orderBy('timestamp', descending: true)
-              .get();
-
-      final taggedPostsQueryFuture =
-          FirebaseFirestore.instance
-              .collection('posts')
-              .where('taggedUsers', arrayContains: _username)
-              .get();
-
-      final currentUserDocFuture =
-          isCurrentUser
-              ? Future.value(targetUserDoc)
-              : FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(_currentUser!.uid)
-                  .get();
-
-      final results = await Future.wait([
-        postsQueryFuture,
-        taggedPostsQueryFuture,
-        currentUserDocFuture,
-      ]);
-
-      final postsSnapshot = results[0] as QuerySnapshot<Map<String, dynamic>>;
-      final taggedPostsSnapshot =
-          results[1] as QuerySnapshot<Map<String, dynamic>>;
-      final currentUserSnapshot =
-          results[2] as DocumentSnapshot<Map<String, dynamic>>;
-
-      if (mounted) {
-        _userPosts = postsSnapshot.docs;
-
-        _taggedPosts = taggedPostsSnapshot.docs.toList();
-        _taggedPosts.sort((a, b) {
-          final aTime =
-              (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-          final bTime =
-              (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-          if (aTime == null || bTime == null) return 0;
-          return bTime.compareTo(aTime);
-        });
-
-        _determineConnectionStatus(
-          currentUserSnapshot.data(),
-          targetUserDoc.id,
-        );
-        _validateAndHealConnections();
-      }
-    } catch (e) {
-      debugPrint("Error: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _validateAndHealConnections() async {
-    if (_connections.isEmpty) return;
-    List<dynamic> validConnections = [];
-    bool hasGhostUsers = false;
-
-    for (String connId in _connections) {
-      try {
-        final doc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(connId)
-                .get();
-        if (doc.exists)
-          validConnections.add(connId);
-        else
-          hasGhostUsers = true;
-      } catch (e) {
-        validConnections.add(connId);
-      }
-    }
-
-    if (hasGhostUsers) {
-      if (mounted) setState(() => _connections = validConnections);
-      if (isCurrentUser) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUser!.uid)
-            .update({'connections': validConnections});
-      }
-    }
-  }
-
-  void _determineConnectionStatus(
-    Map<String, dynamic>? currentUserData,
-    String targetUserId,
-  ) {
-    if (isCurrentUser || currentUserData == null) {
-      setState(() => _connectionStatus = ConnectionStatus.none);
-      return;
-    }
-    final List<dynamic> connections = currentUserData['connections'] ?? [];
-    final List<dynamic> sentRequests = currentUserData['sentRequests'] ?? [];
-    final List<dynamic> receivedRequests =
-        currentUserData['receivedRequests'] ?? [];
-
-    if (connections.contains(targetUserId))
-      _connectionStatus = ConnectionStatus.connected;
-    else if (sentRequests.contains(targetUserId))
-      _connectionStatus = ConnectionStatus.sent;
-    else if (receivedRequests.contains(targetUserId))
-      _connectionStatus = ConnectionStatus.received;
-    else
-      _connectionStatus = ConnectionStatus.none;
-    setState(() {});
-  }
+  // --- ACTIONS ---
 
   void _scrollToPosts() {
     _scrollController.animateTo(
-      MediaQuery.of(context).size.height * 0.45,
+      MediaQuery.of(context).size.height * 0.40,
       duration: const Duration(milliseconds: 600),
       curve: Curves.easeInOutCubic,
     );
@@ -251,12 +94,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               .get();
 
       if (snap.docs.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No recent stories'),
-              duration: Duration(milliseconds: 1500),
-            ),
+        if (mounted && isCurrentUser) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const StoryCreatorScreen()),
           );
         }
         return;
@@ -280,16 +121,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     Navigator.pushNamedAndRemoveUntil(context, '/auth-gate', (route) => false);
   }
 
-  void _viewMingles() {
-    if (isCurrentUser || _connectionStatus == ConnectionStatus.connected) {
+  void _viewMingles(
+    List<dynamic> connections,
+    String displayName,
+    ConnectionStatus status,
+  ) {
+    if (isCurrentUser || status == ConnectionStatus.connected) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder:
               (context) => ConnectionsScreen(
                 title:
-                    isCurrentUser ? 'Your Mingles' : '$_displayName\'s Mingles',
-                userIds: _connections,
+                    isCurrentUser ? 'Your Mingles' : '$displayName\'s Mingles',
+                userIds: connections,
               ),
         ),
       );
@@ -339,7 +184,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       });
     }
     await batch.commit();
-    _loadAllData();
   }
 
   Future<void> _togglePrivacy(bool isPrivate) async {
@@ -358,17 +202,16 @@ class _ProfileScreenState extends State<ProfileScreen>
         batch.update(doc.reference, {'isAuthorPrivate': isPrivate});
       }
       await batch.commit();
-      setState(() => _isPrivate = isPrivate);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update privacy: $e')));
-      }
+      debugPrint("Failed to update privacy: $e");
     }
   }
 
-  void _showShareProfileSheet() {
+  void _showShareProfileSheet(
+    String username,
+    String displayName,
+    String? profilePhotoUrl,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -376,14 +219,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       builder:
           (context) => ShareProfileSheet(
             userId: targetUserId,
-            username: _username,
-            displayName: _displayName,
-            profilePhotoUrl: _profilePhotoUrl,
+            username: username,
+            displayName: displayName,
+            profilePhotoUrl: profilePhotoUrl,
           ),
     );
   }
 
-  void _showSettingsBottomSheet(BuildContext context) {
+  void _showSettingsBottomSheet(BuildContext context, bool isPrivate) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -413,7 +256,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                           title: Text(
                             'Dark Mode',
                             style: GoogleFonts.poppins(
-                              color: Theme.of(context).colorScheme.onSurface,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -421,18 +263,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                             themeProvider.isDarkMode
                                 ? Icons.dark_mode
                                 : Icons.light_mode,
-                            color: const Color(0xFFFF9A44),
+                            color: const Color(0xFF673AB7),
                           ),
                           value: themeProvider.isDarkMode,
                           onChanged:
                               (value) => themeProvider.toggleTheme(value),
-                          activeColor: const Color(0xFFFF3E8E),
+                          activeColor: const Color(0xFF673AB7),
                         ),
                         SwitchListTile(
                           title: Text(
                             'Private Account',
                             style: GoogleFonts.poppins(
-                              color: Theme.of(context).colorScheme.onSurface,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -444,15 +285,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
                           secondary: Icon(
-                            _isPrivate ? Icons.lock : Icons.lock_open,
+                            isPrivate ? Icons.lock : Icons.lock_open,
                             color: const Color(0xFF00C6FB),
                           ),
-                          value: _isPrivate,
+                          value: isPrivate,
                           onChanged: (value) {
-                            setModalState(() => _isPrivate = value);
+                            setModalState(() => isPrivate = value);
                             _togglePrivacy(value);
                           },
-                          activeColor: const Color(0xFFFF3E8E),
+                          activeColor: const Color(0xFF673AB7),
                         ),
                         Divider(color: Theme.of(context).dividerColor),
                         ListTile(
@@ -480,300 +321,740 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  void _handleBackNavigation() {
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    } else {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/auth-gate',
-        (route) => false,
-      );
+  // --- HELPERS ---
+
+  String _getAcronym(String name) {
+    if (name.isEmpty) return "";
+    String lowerName = name.toLowerCase();
+
+    if (lowerName.contains("mca") || lowerName.contains("application"))
+      return "MCA";
+    if (lowerName.contains("computer")) return "CSE";
+    if (lowerName.contains("mechanical")) return "ME";
+    if (lowerName.contains("electrical") && lowerName.contains("electronics"))
+      return "EEE";
+    if (lowerName.contains("electronics") &&
+        lowerName.contains("communication"))
+      return "ECE";
+    if (lowerName.contains("civil")) return "CE";
+    if (lowerName.contains("architecture")) return "B.Arch";
+
+    List<String> words = name.split(" ");
+    if (words.length > 1) {
+      return words.take(2).map((e) => e[0].toUpperCase()).join();
     }
+    return name.substring(0, 2).toUpperCase();
   }
 
-  // --- NEW SHIMMER SKELETON METHOD ---
-  Widget _buildShimmerSkeleton(bool isDark, Color bgColor) {
-    final baseColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
-    final highlightColor = isDark ? Colors.grey.shade600 : Colors.grey.shade100;
-    final blockColor = isDark ? Colors.black : Colors.white;
+  ConnectionStatus _getConnectionStatus(Map<String, dynamic> myData) {
+    if (isCurrentUser) return ConnectionStatus.none;
+    final List<dynamic> connections = myData['connections'] ?? [];
+    final List<dynamic> sentRequests = myData['sentRequests'] ?? [];
+    final List<dynamic> receivedRequests = myData['receivedRequests'] ?? [];
+
+    if (connections.contains(targetUserId)) return ConnectionStatus.connected;
+    if (sentRequests.contains(targetUserId)) return ConnectionStatus.sent;
+    if (receivedRequests.contains(targetUserId))
+      return ConnectionStatus.received;
+    return ConnectionStatus.none;
+  }
+
+  // --- UI BUILDING ---
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF1C1C22) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    if (_currentUser == null) return const Scaffold();
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: SafeArea(
-        child: Shimmer.fromColors(
-          baseColor: baseColor,
-          highlightColor: highlightColor,
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                const SizedBox(height: 60),
-                // Mock Avatar
-                CircleAvatar(radius: 55, backgroundColor: blockColor),
-                const SizedBox(height: 16),
-                // Mock Name
-                Container(
-                  height: 24,
-                  width: 160,
-                  decoration: BoxDecoration(
-                    color: blockColor,
-                    borderRadius: BorderRadius.circular(4),
+      appBar: AppBar(
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading:
+            isCurrentUser
+                ? const SizedBox.shrink()
+                : IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new,
+                    color: textColor,
+                    size: 20,
                   ),
+                  onPressed: () => Navigator.pop(context),
                 ),
-                const SizedBox(height: 8),
-                // Mock Username
-                Container(
-                  height: 16,
-                  width: 100,
-                  decoration: BoxDecoration(
-                    color: blockColor,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Mock Stats
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      height: 40,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: blockColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(width: 40),
-                    Container(
-                      height: 40,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: blockColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Mock Action Buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      height: 40,
-                      width: 140,
-                      decoration: BoxDecoration(
-                        color: blockColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Container(
-                      height: 40,
-                      width: 140,
-                      decoration: BoxDecoration(
-                        color: blockColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-                // Mock Tabs
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Container(height: 20, width: 60, color: blockColor),
-                      Container(height: 20, width: 60, color: blockColor),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Mock Grid
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(2),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                  ),
-                  itemCount: 9,
-                  itemBuilder: (_, __) => Container(color: blockColor),
-                ),
-              ],
-            ),
-          ),
+        title: StreamBuilder<DocumentSnapshot>(
+          stream:
+              FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(targetUserId)
+                  .snapshots(),
+          builder: (context, snapshot) {
+            String username = "Profile";
+            if (snapshot.hasData && snapshot.data!.exists) {
+              username = snapshot.data!.get('username') ?? 'Profile';
+            }
+            return Text(
+              username,
+              style: GoogleFonts.poppins(
+                color: textColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            );
+          },
         ),
+        actions: [
+          if (isCurrentUser)
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(_currentUser!.uid)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                bool isPrivate = false;
+                bool isAdmin = false;
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  isPrivate = snapshot.data!.get('isPrivate') ?? false;
+                  isAdmin = snapshot.data!.get('isAdmin') ?? false;
+                }
+                return Row(
+                  children: [
+                    if (isAdmin)
+                      IconButton(
+                        icon: Icon(
+                          Icons.admin_panel_settings_rounded,
+                          color: textColor,
+                        ),
+                        onPressed:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminPanelScreen(),
+                              ),
+                            ),
+                      ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.menu_rounded,
+                        color: textColor,
+                        size: 28,
+                      ),
+                      onPressed:
+                          () => _showSettingsBottomSheet(context, isPrivate),
+                    ),
+                  ],
+                );
+              },
+            ),
+        ],
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        // Main Stream for Target User Data
+        stream:
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(targetUserId)
+                .snapshots(),
+        builder: (context, targetUserSnap) {
+          if (!targetUserSnap.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF673AB7)),
+            );
+          }
+
+          final targetData =
+              targetUserSnap.data!.data() as Map<String, dynamic>? ?? {};
+          final displayName = targetData['displayName'] ?? 'User';
+          final username = targetData['username'] ?? '';
+          final bio = targetData['bio'] ?? '';
+          final department = targetData['department'] ?? '';
+          final profilePhotoUrl = targetData['profilePhotoUrl'] ?? '';
+          final connections = targetData['connections'] ?? [];
+          final isPrivate = targetData['isPrivate'] ?? false;
+          final role = targetData['role'] ?? 'student';
+          final isAdmin = targetData['isAdmin'] ?? false;
+
+          return StreamBuilder<DocumentSnapshot>(
+            // Stream for Current User Data (to check connection status)
+            stream:
+                FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(_currentUser!.uid)
+                    .snapshots(),
+            builder: (context, myUserSnap) {
+              final myData =
+                  myUserSnap.data?.data() as Map<String, dynamic>? ?? {};
+              final connectionStatus = _getConnectionStatus(myData);
+
+              return StreamBuilder<QuerySnapshot>(
+                // Stream for Posts
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .where('userId', isEqualTo: targetUserId)
+                        .orderBy('timestamp', descending: true)
+                        .snapshots(),
+                builder: (context, postsSnap) {
+                  final userPosts = postsSnap.data?.docs ?? [];
+
+                  return StreamBuilder<QuerySnapshot>(
+                    // Stream for Tagged Posts
+                    stream:
+                        FirebaseFirestore.instance
+                            .collection('posts')
+                            .where('taggedUsers', arrayContains: username)
+                            .snapshots(),
+                    builder: (context, taggedSnap) {
+                      final taggedPosts = taggedSnap.data?.docs.toList() ?? [];
+                      taggedPosts.sort((a, b) {
+                        final aTime =
+                            (a.data() as Map<String, dynamic>)['timestamp']
+                                as Timestamp?;
+                        final bTime =
+                            (b.data() as Map<String, dynamic>)['timestamp']
+                                as Timestamp?;
+                        if (aTime == null || bTime == null) return 0;
+                        return bTime.compareTo(aTime);
+                      });
+
+                      bool canViewPosts =
+                          isCurrentUser ||
+                          !isPrivate ||
+                          connectionStatus == ConnectionStatus.connected;
+                      final displayedPosts =
+                          _tabController.index == 1 ? taggedPosts : userPosts;
+
+                      return CustomScrollView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // --- TOP PROFILE CARD ---
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: cardColor,
+                                      borderRadius: BorderRadius.circular(24),
+                                      boxShadow: [
+                                        if (!isDark)
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.04,
+                                            ),
+                                            blurRadius: 15,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Avatar with Edit Badge
+                                        Stack(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: _viewStory,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(
+                                                  3,
+                                                ),
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Color(0xFF673AB7),
+                                                      Color(0xFF3F51B5),
+                                                    ],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                ),
+                                                child: CircleAvatar(
+                                                  radius: 40,
+                                                  backgroundColor:
+                                                      isDark
+                                                          ? Colors.grey.shade800
+                                                          : Colors
+                                                              .grey
+                                                              .shade200,
+                                                  backgroundImage:
+                                                      profilePhotoUrl.isNotEmpty
+                                                          ? CachedNetworkImageProvider(
+                                                            profilePhotoUrl,
+                                                          )
+                                                          : null,
+                                                  child:
+                                                      profilePhotoUrl.isEmpty
+                                                          ? Icon(
+                                                            Icons.person,
+                                                            color: mutedColor,
+                                                            size: 40,
+                                                          )
+                                                          : null,
+                                                ),
+                                              ),
+                                            ),
+                                            if (isCurrentUser)
+                                              Positioned(
+                                                bottom: 0,
+                                                right: 0,
+                                                child: GestureDetector(
+                                                  onTap:
+                                                      () => Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder:
+                                                              (_) =>
+                                                                  const EditProfileScreen(),
+                                                        ),
+                                                      ),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(
+                                                        0xFF673AB7,
+                                                      ),
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: cardColor,
+                                                        width: 2,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.edit,
+                                                      color: Colors.white,
+                                                      size: 14,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(width: 20),
+                                        // User Details
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                displayName,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: textColor,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              if (department.isNotEmpty)
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 4,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                          0xFF673AB7,
+                                                        ).withOpacity(0.15),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                      child: Text(
+                                                        _getAcronym(department),
+                                                        style:
+                                                            GoogleFonts.poppins(
+                                                              color:
+                                                                  const Color(
+                                                                    0xFF673AB7,
+                                                                  ),
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        department,
+                                                        style:
+                                                            GoogleFonts.poppins(
+                                                              fontSize: 12,
+                                                              color: mutedColor,
+                                                            ),
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow
+                                                                .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              const SizedBox(height: 12),
+                                              if (bio.isNotEmpty)
+                                                Text(
+                                                  bio,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 13,
+                                                    color: textColor
+                                                        .withOpacity(0.9),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- STATS ROW ---
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 20,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cardColor,
+                                      borderRadius: BorderRadius.circular(24),
+                                      boxShadow: [
+                                        if (!isDark)
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.04,
+                                            ),
+                                            blurRadius: 15,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        GestureDetector(
+                                          onTap: _scrollToPosts,
+                                          child: _buildStatColumn(
+                                            Icons.article_outlined,
+                                            userPosts.length.toString(),
+                                            "Posts",
+                                            textColor,
+                                            mutedColor,
+                                          ),
+                                        ),
+                                        Container(
+                                          width: 1,
+                                          height: 40,
+                                          color:
+                                              isDark
+                                                  ? Colors.white10
+                                                  : Colors.black12,
+                                        ),
+                                        GestureDetector(
+                                          onTap:
+                                              () => _viewMingles(
+                                                connections,
+                                                displayName,
+                                                connectionStatus,
+                                              ),
+                                          child: _buildStatColumn(
+                                            Icons.people_outline_rounded,
+                                            connections.length.toString(),
+                                            "Mingles",
+                                            textColor,
+                                            mutedColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- ACTION BUTTONS ---
+                                  _buildActionButtons(
+                                    connectionStatus: connectionStatus,
+                                    displayName: displayName,
+                                    username: username,
+                                    profilePhotoUrl: profilePhotoUrl,
+                                    cardColor: cardColor,
+                                    textColor: textColor,
+                                    isDark: isDark,
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // QUICK ACCESS (If Driver/Cafeteria)
+                                  if (isCurrentUser)
+                                    ProfileQuickAccess(
+                                      role: role,
+                                      isAdmin: isAdmin,
+                                      cardColor: cardColor,
+                                      textColor: textColor,
+                                    ),
+                                  const SizedBox(height: 16),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // --- TABS ---
+                          if (canViewPosts)
+                            SliverPersistentHeader(
+                              pinned: true,
+                              delegate: SliverAppBarDelegate(
+                                TabBar(
+                                  controller: _tabController,
+                                  splashFactory: NoSplash.splashFactory,
+                                  overlayColor: WidgetStateProperty.all(
+                                    Colors.transparent,
+                                  ),
+                                  labelColor: textColor,
+                                  unselectedLabelColor: mutedColor,
+                                  indicatorColor: const Color(0xFF673AB7),
+                                  indicatorSize: TabBarIndicatorSize.tab,
+                                  indicatorWeight: 3,
+                                  dividerColor:
+                                      isDark ? Colors.white10 : Colors.black12,
+                                  labelStyle: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  tabs: const [
+                                    Tab(text: "Posts"),
+                                    Tab(text: "Tagged"),
+                                  ],
+                                ),
+                                bgColor,
+                              ),
+                            ),
+
+                          // --- GRID ---
+                          ProfilePostsGrid(
+                            userPosts: displayedPosts,
+                            cardColor: cardColor,
+                            canViewPosts: canViewPosts,
+                            isTaggedTab: _tabController.index == 1,
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                        ],
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // Determine Theme upfront so Shimmer can use it
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
-    final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final mutedTextColor = isDark ? Colors.white54 : Colors.grey.shade600;
-
-    // Loading State 1: Awaiting Current User
-    if (_currentUser == null) {
-      return _buildShimmerSkeleton(isDark, bgColor);
-    }
-
-    // Loading State 2: Awaiting Initial Profile Data Load
-    if (_isLoading && _displayName == 'User') {
-      return _buildShimmerSkeleton(isDark, bgColor);
-    }
-
-    bool canViewPosts =
-        isCurrentUser ||
-        !_isPrivate ||
-        _connectionStatus == ConnectionStatus.connected;
-
-    final isTaggedTab = _tabController.index == 1;
-    final displayedPosts = isTaggedTab ? _taggedPosts : _userPosts;
-
-    return PopScope(
-      canPop: Navigator.canPop(context),
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/auth-gate',
-            (route) => false,
-          );
-        }
-      },
-      child: Scaffold(
-        backgroundColor: bgColor,
-        body: RefreshIndicator(
-          onRefresh: _loadAllData,
-          color: const Color(0xFFFF3E8E),
-          backgroundColor: cardColor,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: ProfileHeader(
-                  isCurrentUser: isCurrentUser,
-                  isAdmin: _isAdmin,
-                  profilePhotoUrl: _profilePhotoUrl,
-                  bgColor: bgColor,
-                  textColor: textColor,
-                  isDark: isDark,
-                  onBack: _handleBackNavigation,
-                  onSettings: () => _showSettingsBottomSheet(context),
-                  onAdminTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AdminPanelScreen(),
-                        ),
-                      ),
-                  onAvatarTap: _viewStory,
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 16, left: 24, right: 24),
-                  child: Column(
-                    children: [
-                      ProfileInfo(
-                        displayName: _displayName,
-                        username: _username,
-                        department: _department,
-                        bio: _bio,
-                        postCount: _userPosts.length,
-                        mingleCount: _connections.length,
-                        isCurrentUser: isCurrentUser,
-                        connectionStatus: _connectionStatus,
-                        textColor: textColor,
-                        mutedTextColor: mutedTextColor,
-                        cardColor: cardColor,
-                        onEditProfile: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const EditProfileScreen(),
-                            ),
-                          );
-                          _loadAllData();
-                        },
-                        onShareProfile: _showShareProfileSheet,
-                        onViewMingles: _viewMingles,
-                        onPostCountTap: _scrollToPosts,
-                        onConnectionAction: _handleConnectionAction,
-                        onMessage:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => ChatScreen(
-                                      receiverId: targetUserId,
-                                      receiverName: _displayName,
-                                      receiverImageUrl: _profilePhotoUrl ?? '',
-                                    ),
-                              ),
-                            ),
-                      ),
-                      const SizedBox(height: 32),
-
-                      if (isCurrentUser) ...[
-                        ProfileQuickAccess(
-                          role: _role,
-                          isAdmin: _isAdmin,
-                          cardColor: cardColor,
-                          textColor: textColor,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              if (canViewPosts)
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: SliverAppBarDelegate(
-                    TabBar(
-                      controller: _tabController,
-                      splashFactory: NoSplash.splashFactory,
-                      overlayColor: WidgetStateProperty.all(Colors.transparent),
-                      labelColor: const Color(0xFFFF3E8E),
-                      unselectedLabelColor: mutedTextColor,
-                      indicatorColor: const Color(0xFFFF3E8E),
-                      indicatorSize: TabBarIndicatorSize.label,
-                      indicatorWeight: 3,
-                      labelStyle: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                      dividerColor: Colors.transparent,
-                      tabs: const [Tab(text: "Posts"), Tab(text: "Tagged")],
-                    ),
-                    bgColor,
-                  ),
-                ),
-              ProfilePostsGrid(
-                userPosts: displayedPosts,
-                cardColor: cardColor,
-                canViewPosts: canViewPosts,
-                isTaggedTab: isTaggedTab,
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
+  Widget _buildStatColumn(
+    IconData icon,
+    String count,
+    String label,
+    Color textColor,
+    Color mutedColor,
+  ) {
+    return Container(
+      color: Colors.transparent, // Ensures tap targets work well
+      child: Column(
+        children: [
+          Icon(icon, color: const Color(0xFF673AB7), size: 24),
+          const SizedBox(height: 8),
+          Text(
+            count,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
           ),
-        ),
+          Text(
+            label,
+            style: GoogleFonts.poppins(fontSize: 12, color: mutedColor),
+          ),
+        ],
       ),
+    );
+  }
+
+  // Modern Action Buttons matching the design image
+  Widget _buildActionButtons({
+    required ConnectionStatus connectionStatus,
+    required String displayName,
+    required String username,
+    required String profilePhotoUrl,
+    required Color cardColor,
+    required Color textColor,
+    required bool isDark,
+  }) {
+    final outlinedButtonStyle = OutlinedButton.styleFrom(
+      foregroundColor: textColor,
+      backgroundColor: cardColor,
+      side: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+
+    final filledButtonStyle = ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF673AB7), // Purple brand color
+      foregroundColor: Colors.white,
+      elevation: 0,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+
+    if (isCurrentUser) {
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              style: outlinedButtonStyle,
+              icon: Icon(Icons.edit_outlined, size: 18, color: textColor),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const EditProfileScreen(),
+                    ),
+                  ),
+              label: Text(
+                "Edit Profile",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: filledButtonStyle,
+              icon: const Icon(Icons.share_outlined, size: 18),
+              onPressed:
+                  () => _showShareProfileSheet(
+                    username,
+                    displayName,
+                    profilePhotoUrl,
+                  ),
+              label: Text(
+                "Share Profile",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Viewing another user's profile
+    String primaryLabel = "Mingle";
+    IconData primaryIcon = Icons.person_add_outlined;
+    VoidCallback? primaryAction = () => _handleConnectionAction('send');
+    bool isPrimaryFilled = true;
+
+    if (connectionStatus == ConnectionStatus.connected) {
+      primaryLabel = "Message";
+      primaryIcon = Icons.chat_bubble_outline;
+      primaryAction =
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChatScreen(
+                    receiverId: targetUserId,
+                    receiverName: displayName,
+                    receiverImageUrl: profilePhotoUrl,
+                  ),
+            ),
+          );
+      isPrimaryFilled = false; // Make it outlined when already connected
+    } else if (connectionStatus == ConnectionStatus.sent) {
+      primaryLabel = "Requested";
+      primaryIcon = Icons.access_time;
+      primaryAction = () => _handleConnectionAction('cancel');
+      isPrimaryFilled = false;
+    } else if (connectionStatus == ConnectionStatus.received) {
+      primaryLabel = "Accept";
+      primaryIcon = Icons.check;
+      primaryAction = () => _handleConnectionAction('accept');
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child:
+              isPrimaryFilled
+                  ? ElevatedButton.icon(
+                    style: filledButtonStyle,
+                    onPressed: primaryAction,
+                    icon: Icon(primaryIcon, size: 18),
+                    label: Text(
+                      primaryLabel,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  )
+                  : OutlinedButton.icon(
+                    style: outlinedButtonStyle,
+                    onPressed: primaryAction,
+                    icon: Icon(primaryIcon, size: 18),
+                    label: Text(
+                      primaryLabel,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+        ),
+        if (connectionStatus == ConnectionStatus.connected) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              style: outlinedButtonStyle,
+              icon: const Icon(Icons.person_remove_outlined, size: 18),
+              onPressed: () => _handleConnectionAction('remove'),
+              label: Text(
+                "Disconnect",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

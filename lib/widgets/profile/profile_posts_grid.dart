@@ -6,26 +6,28 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../screens/profile_feed_screen.dart';
 
 class ProfilePostsGrid extends StatelessWidget {
   final List<DocumentSnapshot> userPosts;
   final Color cardColor;
   final bool canViewPosts;
-  final bool isTaggedTab; // --- NEW: For toggling UI empty state
+  final bool isTaggedTab;
 
   const ProfilePostsGrid({
     super.key,
     required this.userPosts,
     required this.cardColor,
     required this.canViewPosts,
-    this.isTaggedTab = false, // --- NEW: Optional default parameter
+    this.isTaggedTab = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (!canViewPosts) {
-      final isDark = Theme.of(context).brightness == Brightness.dark;
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 60),
@@ -81,7 +83,6 @@ class ProfilePostsGrid extends StatelessWidget {
             child: Column(
               children: [
                 Icon(
-                  // Dynamic icon based on the active tab
                   isTaggedTab
                       ? Icons.loyalty_outlined
                       : Icons.camera_alt_outlined,
@@ -90,7 +91,6 @@ class ProfilePostsGrid extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  // Dynamic message based on the active tab
                   isTaggedTab ? "No tagged posts yet" : "No posts yet",
                   style: GoogleFonts.poppins(color: Colors.grey),
                 ),
@@ -101,26 +101,40 @@ class ProfilePostsGrid extends StatelessWidget {
       );
     }
 
-    // --- 3 COLUMN INSTAGRAM STYLE GRID ---
+    // --- 2 COLUMN INSTAGRAM STYLE GRID WITH LABELS ---
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 0,
-        vertical: 2,
-      ), // Edge to edge
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 2, // Minimal spacing
-          mainAxisSpacing: 2, // Minimal spacing
-          childAspectRatio: 1.0, // Perfect Squares
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.75, // Taller to fit text at the bottom
         ),
         delegate: SliverChildBuilderDelegate((context, index) {
           final postSnapshot = userPosts[index];
           final data = postSnapshot.data() as Map<String, dynamic>;
+
           final mediaUrl =
               data['postType'] == 'video'
                   ? data['postThumbnailUrl']
                   : (data['postMediaUrl'] ?? data['postImageUrl']);
+
+          // Provide fallback values if empty
+          final caption = data['caption']?.toString().trim() ?? '';
+          final title = caption.isNotEmpty ? caption.split('\n').first : 'Post';
+
+          final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
+          final dateString =
+              timestamp != null
+                  ? DateFormat('d MMM yyyy').format(timestamp)
+                  : '';
+
+          // Check for multiple images
+          int imageCount = 1;
+          if (data['postImages'] != null) {
+            imageCount = (data['postImages'] as List).length;
+          }
 
           return GestureDetector(
             onTap:
@@ -135,38 +149,144 @@ class ProfilePostsGrid extends StatelessWidget {
                   ),
                 ),
             child: Container(
-              decoration: BoxDecoration(color: cardColor),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (mediaUrl != null)
-                    CachedNetworkImage(
-                      imageUrl: mediaUrl,
-                      fit: BoxFit.cover,
-                      placeholder:
-                          (c, u) =>
-                              Container(color: Colors.grey.withOpacity(0.1)),
-                      errorWidget: (c, u, e) => const Icon(Icons.error),
-                    )
-                  else
-                    Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFFFF3E8E), Color(0xFFFF9A44)],
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Background Image
+                    if (mediaUrl != null && mediaUrl.isNotEmpty)
+                      CachedNetworkImage(
+                        imageUrl: mediaUrl,
+                        fit: BoxFit.cover,
+                        placeholder:
+                            (c, u) => Container(
+                              color: isDark ? Colors.white10 : Colors.black12,
+                            ),
+                        errorWidget:
+                            (c, u, e) => Container(
+                              color: cardColor,
+                              child: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
+                            ),
+                      )
+                    else
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF673AB7), Color(0xFF3F51B5)],
+                          ),
+                        ),
+                      ),
+
+                    // Dark Bottom Gradient for Text Readability
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.center,
+                            colors: [
+                              Colors.black.withOpacity(0.9),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.4],
+                          ),
                         ),
                       ),
                     ),
-                  if (data['postType'] == 'video')
-                    const Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.white,
-                        size: 24,
+
+                    // Video or Multi-image Indicator (Top Right)
+                    if (data['postType'] == 'video')
+                      const Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(
+                          Icons.play_circle_fill,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      )
+                    else if (imageCount > 1)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.photo_library_outlined,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                imageCount.toString(),
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // Title and Date (Bottom Left)
+                    Positioned(
+                      bottom: 12,
+                      left: 12,
+                      right: 12,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (dateString.isNotEmpty)
+                            Text(
+                              dateString,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white70,
+                                fontSize: 10,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           );

@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: auth_gate.dart
 // FILE PATH: lib/auth/auth_gate.dart
 // ===============================
 
@@ -11,7 +12,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../screens/create_username_screen.dart';
 import '../screens/main_screen.dart';
 import '../screens/auth_screen.dart';
-import '../screens/post_card_placeholder.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -67,6 +67,8 @@ class AuthGate extends StatelessWidget {
   }
 }
 
+// --- UPDATED SKELETON LOADER ---
+// Removed the giant placeholders and replaced with a tiny spinner
 class _HomeSkeletonLoader extends StatelessWidget {
   const _HomeSkeletonLoader();
 
@@ -81,6 +83,7 @@ class _HomeSkeletonLoader extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
+            // Top Nav Bar (Ente RIT + Icons)
             Container(
               color: bgColor,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -110,11 +113,19 @@ class _HomeSkeletonLoader extends StatelessWidget {
                 ],
               ),
             ),
-            Expanded(
-              child: ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 3,
-                itemBuilder: (context, index) => const PostCardPlaceholder(),
+
+            // Tiny Rotating Spinner just below the nav bar
+            const Padding(
+              padding: EdgeInsets.only(top: 40.0),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFF9983F3), // Purple App Theme Color
+                  ),
+                ),
               ),
             ),
           ],
