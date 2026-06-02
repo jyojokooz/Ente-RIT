@@ -108,6 +108,12 @@ class _MainScreenState extends State<MainScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // --- THEME COLORS ---
+    // Background matches the main feed and profile
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
+    // Bottom Bar matches the elevated card color of the profile
+    final bottomBarColor = isDark ? const Color(0xFF1C1C22) : Colors.white;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) {
@@ -128,7 +134,7 @@ class _MainScreenState extends State<MainScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: bgColor,
         body: PageView(
           controller: _pageController,
           onPageChanged: _onPageChanged,
@@ -146,7 +152,7 @@ class _MainScreenState extends State<MainScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
+                  color: Colors.black.withOpacity(0.2),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -173,10 +179,11 @@ class _MainScreenState extends State<MainScreen> {
 
         bottomNavigationBar: BottomAppBar(
           height: 65,
-          color: theme.bottomAppBarTheme.color,
+          color: bottomBarColor, // Applied custom color
           elevation: 10,
-          shadowColor: Colors.black.withOpacity(0.2),
-          surfaceTintColor: theme.bottomAppBarTheme.color,
+          shadowColor: Colors.black.withOpacity(0.3),
+          surfaceTintColor:
+              bottomBarColor, // Ensures Material 3 uses the exact color
           shape: const CircularNotchedRectangle(),
           notchMargin: 8.0,
           child: Padding(
@@ -189,7 +196,6 @@ class _MainScreenState extends State<MainScreen> {
                   Icons.home_outlined,
                   0,
                   0,
-                  theme,
                   isDark,
                 ),
                 _buildTabIcon(
@@ -197,7 +203,6 @@ class _MainScreenState extends State<MainScreen> {
                   Icons.search_rounded,
                   1,
                   1,
-                  theme,
                   isDark,
                 ),
                 const SizedBox(width: 48), // Gap for FAB
@@ -206,7 +211,6 @@ class _MainScreenState extends State<MainScreen> {
                   Icons.grid_view_rounded,
                   2,
                   3,
-                  theme,
                   isDark,
                 ),
                 _buildTabIcon(
@@ -214,7 +218,6 @@ class _MainScreenState extends State<MainScreen> {
                   Icons.person_outline_rounded,
                   3,
                   4,
-                  theme,
                   isDark,
                   isProfile: true,
                 ),
@@ -231,14 +234,13 @@ class _MainScreenState extends State<MainScreen> {
     IconData inactiveIcon,
     int pageIndex,
     int visualIndex,
-    ThemeData theme,
     bool isDark, {
     bool isProfile = false,
   }) {
     final bool isSelected = _currentIndex == pageIndex;
 
     // Modern Accent Color matches the gradient used elsewhere
-    final Color activeColor = const Color(0xFFFF3E8E);
+    const Color activeColor = Color(0xFFFF3E8E);
     final Color inactiveColor = isDark ? Colors.white54 : Colors.grey.shade400;
 
     Widget icon = AnimatedContainer(

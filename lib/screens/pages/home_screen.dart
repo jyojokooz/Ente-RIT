@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../stories/stories_connector.dart';
 import '../../widgets/home/home_header.dart';
-import '../../widgets/home/home_banner_carousel.dart'; // <-- IMPORT CAROUSEL
+import '../../widgets/home/home_banner_carousel.dart';
 import '../../widgets/home/home_post_feed.dart';
 import '../../widgets/home/home_campus_highlights.dart';
 import '../../widgets/home/home_quick_links.dart';
@@ -38,7 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    // UPDATED: Now matches Profile Screen's background color
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
@@ -118,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // 2. RESTORED: Banner Carousel directly below the header
+                    // 2. Banner Carousel directly below the header
                     SliverToBoxAdapter(
                       child: HomeBannerCarousel(isDark: isDark),
                     ),

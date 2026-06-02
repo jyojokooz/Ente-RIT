@@ -76,12 +76,16 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // UPDATED: Now matches Profile Screen's background color
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final isSearching = _searchController.text.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: theme.appBarTheme.backgroundColor,
+        backgroundColor: bgColor,
         iconTheme: theme.iconTheme,
         title: TextField(
           controller: _searchController,
@@ -109,14 +113,14 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     if (!isSearching) {
-      return EmptyStateMessage(
+      return const EmptyStateMessage(
         icon: Icons.search,
         title: 'Find Your Peers',
         subtitle: 'Search for users by their display name or username.',
       );
     }
     if (_searchResults.isEmpty) {
-      return EmptyStateMessage(
+      return const EmptyStateMessage(
         icon: Icons.person_off_outlined,
         title: 'No Users Found',
         subtitle: 'Try a different search term.',

@@ -4,7 +4,7 @@
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <-- ADDED FOR PRIVACY FILTER
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,7 +12,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../search_screen.dart';
 import '../requests_screen.dart';
 import '../post_detail_screen.dart';
-import '../find_friends_screen.dart'; // <--- ADD THIS
+import '../find_friends_screen.dart';
 
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
@@ -22,7 +22,8 @@ class ExploreScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
+    // UPDATED: Now matches Profile Screen's background color
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.white54 : Colors.grey.shade600;
@@ -177,7 +178,6 @@ class ExploreScreen extends StatelessWidget {
               final List<dynamic> myConnections = myData['connections'] ?? [];
 
               return StreamBuilder<QuerySnapshot>(
-                // Fetch recent posts and limit slightly higher since some will be filtered out
                 stream:
                     FirebaseFirestore.instance
                         .collection('posts')
@@ -257,7 +257,6 @@ class ExploreScreen extends StatelessWidget {
                     return bLikes.compareTo(aLikes); // Descending order
                   });
 
-                  // If filtering removed everything, show empty state
                   if (visibleDocs.isEmpty) {
                     return SliverFillRemaining(
                       child: Center(
@@ -303,7 +302,6 @@ class ExploreScreen extends StatelessWidget {
                                 : (data['postMediaUrl'] ??
                                     data['postImageUrl']);
 
-                        // If a post has no image/video, just skip or show placeholder
                         if (mediaUrl == null || mediaUrl.isEmpty) {
                           return Container(color: cardColor);
                         }
@@ -403,7 +401,6 @@ class ExploreScreen extends StatelessWidget {
     );
   }
 
-  // Helper widget for the top menu items to keep the code clean
   Widget _buildMenuTile({
     required BuildContext context,
     required IconData icon,
