@@ -19,9 +19,9 @@ import 'admin/admin_manage_card_images_screen.dart';
 import 'admin/admin_manage_cafeteria_menu_screen.dart';
 import 'admin/admin_manage_buses_screen.dart';
 import 'admin/admin_view_cafeteria_orders_screen.dart';
-// NEW IMPORT
 import 'admin/admin_manage_features_screen.dart';
-import 'admin/admin_manage_home_banners_screen.dart'; // <--- ADD THIS IMPORT
+import 'admin/admin_manage_home_banners_screen.dart';
+import 'admin/admin_manage_campus_videos_screen.dart'; // <--- NEW IMPORT
 
 class AdminPanelScreen extends StatelessWidget {
   const AdminPanelScreen({super.key});
@@ -161,14 +161,21 @@ class AdminPanelScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // NEW BANNER MANAGEMENT BUTTON
           _buildManagementCard(
             context: context,
             label: 'Manage Home Banners',
             icon: Icons.view_carousel_rounded,
             color: Colors.pinkAccent,
-            screen:
-                const AdminManageHomeBannersScreen(), // <-- Route to our new screen
+            screen: const AdminManageHomeBannersScreen(),
+          ),
+          const SizedBox(height: 12),
+          // --- NEW MANAGE VIDEOS BUTTON ---
+          _buildManagementCard(
+            context: context,
+            label: 'Manage Campus Videos',
+            icon: Icons.video_library_rounded,
+            color: const Color(0xFFFF3E8E),
+            screen: const AdminManageCampusVideosScreen(),
           ),
           const SizedBox(height: 12),
           _buildManagementCard(
@@ -368,7 +375,6 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// The reusable Activity Chart Widget
 class _ActivityChartCard extends StatelessWidget {
   final String title;
   final String collectionName;
