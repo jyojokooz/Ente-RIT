@@ -6,15 +6,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/video_preload_service.dart';
 
 class HighlightVideoPlayerScreen extends StatefulWidget {
   final String videoUrl;
   final String title;
+  final String thumbnailUrl;
 
   const HighlightVideoPlayerScreen({
     super.key,
     required this.videoUrl,
     required this.title,
+    required this.thumbnailUrl,
   });
 
   @override
@@ -24,32 +28,61 @@ class HighlightVideoPlayerScreen extends StatefulWidget {
 
 class _HighlightVideoPlayerScreenState
     extends State<HighlightVideoPlayerScreen> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
-      ..initialize()
-          .then((_) {
-            setState(() {
-              _isInitialized = true;
-              _controller.setLooping(true);
-              _controller.play();
-            });
-          })
-          .catchError((e) {
-            setState(() {
-              _hasError = true;
-            });
-          });
+    _initializeVideo();
+  }
+
+  // --- NO LAG PRELOAD LOGIC ---
+  Future<void> _initializeVideo() async {
+    try {
+      // 1. Instantly take the preloaded controller if it exists
+      var ctrl = VideoPreloadService.instance.takeController(widget.videoUrl);
+
+      // 2. If it wasn't preloaded, initialize it manually
+      if (ctrl == null) {
+        ctrl = VideoPlayerController.networkUrl(
+          Uri.parse(widget.videoUrl),
+          httpHeaders: {'User-Agent': 'EnteRITApp'},
+        );
+        await ctrl.initialize();
+      }
+
+      if (!mounted) {
+        ctrl.dispose();
+        return;
+      }
+
+      if (ctrl.value.hasError) {
+        throw Exception(ctrl.value.errorDescription);
+      }
+
+      ctrl.setLooping(true);
+      ctrl.play();
+      ctrl.addListener(() {
+        if (mounted) setState(() {});
+      });
+
+      setState(() {
+        _controller = ctrl;
+        _isInitialized = true;
+      });
+    } catch (e) {
+      debugPrint("Video Player Initialization Error: $e");
+      if (mounted) {
+        setState(() => _hasError = true);
+      }
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -59,7 +92,7 @@ class _HighlightVideoPlayerScreenState
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1. Video Player
+          // 1. HERO WRAPPED VIDEO PLAYER
           Center(
             child:
                 _hasError
@@ -78,29 +111,42 @@ class _HighlightVideoPlayerScreenState
                         ),
                       ],
                     )
-                    : _isInitialized
-                    ? AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: VideoPlayer(_controller),
-                    )
-                    : const CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+                    : Hero(
+                      tag: 'campus_video_${widget.videoUrl}',
+                      // If video is ready, show it. Otherwise, show the expanded Thumbnail smoothly
+                      child:
+                          _isInitialized && _controller != null
+                              ? AspectRatio(
+                                aspectRatio: _controller!.value.aspectRatio,
+                                child: VideoPlayer(_controller!),
+                              )
+                              : AspectRatio(
+                                aspectRatio:
+                                    16 /
+                                    9, // Fallback ratio for smooth transition
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.thumbnailUrl,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                    ),
           ),
 
           // 2. Play/Pause Overlay
-          if (_isInitialized)
+          if (_isInitialized && _controller != null)
             GestureDetector(
               onTap: () {
                 setState(() {
-                  _controller.value.isPlaying
-                      ? _controller.pause()
-                      : _controller.play();
+                  _controller!.value.isPlaying
+                      ? _controller!.pause()
+                      : _controller!.play();
                 });
               },
               child: Container(
                 color: Colors.transparent,
                 child: Center(
                   child:
-                      !_controller.value.isPlaying
+                      !_controller!.value.isPlaying
                           ? Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -181,9 +227,9 @@ class _HighlightVideoPlayerScreenState
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 12),
-                  if (_isInitialized)
+                  if (_isInitialized && _controller != null)
                     VideoProgressIndicator(
-                      _controller,
+                      _controller!,
                       allowScrubbing: true,
                       colors: const VideoProgressColors(
                         playedColor: Color(0xFFFF3E8E),
