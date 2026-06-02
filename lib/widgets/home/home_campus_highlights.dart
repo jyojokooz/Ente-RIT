@@ -7,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../screens/highlight_video_player_screen.dart'; // Import the new video player
+import '../../screens/highlight_video_player_screen.dart';
 
 class HomeCampusHighlights extends StatelessWidget {
   final bool isDark;
@@ -27,7 +27,7 @@ class HomeCampusHighlights extends StatelessWidget {
           child: Text(
             'CAMPUS HIGHLIGHTS',
             style: GoogleFonts.permanentMarker(
-              fontSize: 16,
+              fontSize: 14,
               color: textColor,
               letterSpacing: 1.2,
             ),
@@ -36,13 +36,13 @@ class HomeCampusHighlights extends StatelessWidget {
 
         // --- HORIZONTAL LIST OF VIDEOS ---
         SizedBox(
-          height: 180, // Taller height for video thumbnails
+          height: 120,
           child: StreamBuilder<QuerySnapshot>(
             stream:
                 FirebaseFirestore.instance
-                    .collection('campus_videos') // Connects to new collection
+                    .collection('campus_videos')
                     .orderBy('createdAt', descending: true)
-                    .limit(10) // Get top 10 latest videos
+                    .limit(10)
                     .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -57,7 +57,7 @@ class HomeCampusHighlights extends StatelessWidget {
                     "No highlights available.",
                     style: GoogleFonts.poppins(
                       color: Colors.grey,
-                      fontSize: 13,
+                      fontSize: 12,
                     ),
                   ),
                 );
@@ -92,17 +92,17 @@ class HomeCampusHighlights extends StatelessWidget {
                       }
                     },
                     child: Container(
-                      width: 130, // Slightly wider for video format
+                      width: 90,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
                         color:
                             isDark
                                 ? const Color(0xFF1C1C22)
                                 : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
@@ -134,19 +134,7 @@ class HomeCampusHighlights extends StatelessWidget {
                                 ),
                               ),
 
-                            // 2. Play Icon Overlay (Center)
-                            Container(
-                              color: Colors.black.withOpacity(0.2), // Light dim
-                              child: const Center(
-                                child: Icon(
-                                  Icons.play_circle_fill,
-                                  color: Colors.white,
-                                  size: 40,
-                                ),
-                              ),
-                            ),
-
-                            // 3. Dark Gradient Overlay for Text Readability
+                            // 2. Dark Gradient Overlay for Text Readability
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -157,27 +145,28 @@ class HomeCampusHighlights extends StatelessWidget {
                                       Colors.black.withOpacity(0.9),
                                       Colors.transparent,
                                     ],
-                                    stops: const [0.0, 0.6],
+                                    stops: const [0.0, 0.7],
                                   ),
                                 ),
                               ),
                             ),
 
-                            // 4. Content (Bottom)
+                            // 3. Content (Bottom)
                             Positioned(
-                              bottom: 12,
-                              left: 12,
-                              right: 12,
+                              bottom: 8,
+                              left: 8,
+                              right: 8,
                               child: Text(
                                 title,
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                                  fontSize: 10,
                                   height: 1.2,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
                               ),
                             ),
                           ],
