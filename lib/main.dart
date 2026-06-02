@@ -15,19 +15,19 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'theme_provider.dart';
-import 'auth/auth_gate.dart';
-import 'screens/main_screen.dart';
-import 'screens/splash_screen.dart';
-import 'auth/forgot_password_screen.dart';
-import 'screens/create_post_screen.dart';
-import 'screens/search_screen.dart';
-import 'screens/chat_list_screen.dart';
-import 'screens/requests_screen.dart';
-import 'screens/create_username_screen.dart';
-import 'screens/pages/profile_screen.dart';
+import 'package:my_project/firebase_options.dart';
+import 'package:my_project/core/constants/theme_provider.dart';
 
-import 'firebase_options.dart';
+import 'package:my_project/features/auth/presentation/auth_gate.dart';
+import 'package:my_project/features/dashboard/presentation/main_screen.dart';
+import 'package:my_project/features/dashboard/presentation/splash_screen.dart';
+import 'package:my_project/features/auth/presentation/forgot_password_screen.dart';
+import 'package:my_project/features/posts/presentation/create_post_screen.dart';
+import 'package:my_project/features/explore/presentation/search_screen.dart';
+import 'package:my_project/features/chat/presentation/chat_list_screen.dart';
+import 'package:my_project/features/profile/presentation/requests_screen.dart';
+import 'package:my_project/features/auth/presentation/create_username_screen.dart';
+import 'package:my_project/features/profile/presentation/profile_screen.dart';
 
 // --- NEW: Custom HttpOverrides to bypass the expired SSL Certificate issue ---
 class MyHttpOverrides extends HttpOverrides {
