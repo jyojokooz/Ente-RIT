@@ -1,19 +1,11 @@
-// ===============================
-// FILE NAME: admin_manage_campus_videos_screen.dart
-// FILE PATH: lib/screens/admin/admin_manage_campus_videos_screen.dart
-// ===============================
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class AdminManageCampusVideosScreen extends StatefulWidget {
   const AdminManageCampusVideosScreen({super.key});
@@ -253,7 +245,6 @@ class _AdminManageCampusVideosScreenState
                                                     deleteOrigin: false,
                                                   );
 
-                                              // THE FIX: Extracted file properly with null checks
                                               final File? compressedVideoFile =
                                                   mediaInfo?.file;
 
@@ -263,44 +254,51 @@ class _AdminManageCampusVideosScreenState
                                                 );
                                               }
 
-                                              final cloudinary =
-                                                  CloudinaryPublic(
-                                                    cloudinaryCloudName,
-                                                    cloudinaryUploadPreset,
-                                                  );
+                                              final String timestampId =
+                                                  DateTime.now()
+                                                      .millisecondsSinceEpoch
+                                                      .toString();
 
                                               setSheetState(() {
                                                 uploadStatus =
                                                     'Uploading thumbnail...';
                                               });
 
-                                              // Upload thumbnail
-                                              CloudinaryResponse thumbRes =
-                                                  await cloudinary.uploadFile(
-                                                    CloudinaryFile.fromFile(
-                                                      thumbnailFile!.path,
-                                                      folder:
-                                                          'campus_highlights/thumbnails',
-                                                    ),
+                                              // Upload thumbnail to Firebase Storage
+                                              final thumbRef = FirebaseStorage
+                                                  .instance
+                                                  .ref()
+                                                  .child(
+                                                    'campus_highlights/thumbnails/$timestampId.jpg',
                                                   );
+                                              await thumbRef.putFile(
+                                                thumbnailFile!,
+                                              );
+                                              final thumbUrl =
+                                                  await thumbRef
+                                                      .getDownloadURL();
 
                                               setSheetState(() {
                                                 uploadStatus =
                                                     'Uploading video...';
                                               });
 
-                                              // Upload video
-                                              CloudinaryResponse videoRes =
-                                                  await cloudinary.uploadFile(
-                                                    CloudinaryFile.fromFile(
-                                                      compressedVideoFile.path,
-                                                      folder:
-                                                          'campus_highlights/videos',
-                                                      resourceType:
-                                                          CloudinaryResourceType
-                                                              .Video,
-                                                    ),
+                                              // Upload video to Firebase Storage
+                                              final videoRef = FirebaseStorage
+                                                  .instance
+                                                  .ref()
+                                                  .child(
+                                                    'campus_highlights/videos/$timestampId.mp4',
                                                   );
+                                              await videoRef.putFile(
+                                                compressedVideoFile,
+                                                SettableMetadata(
+                                                  contentType: 'video/mp4',
+                                                ),
+                                              );
+                                              final videoUrl =
+                                                  await videoRef
+                                                      .getDownloadURL();
 
                                               setSheetState(() {
                                                 uploadStatus =
@@ -314,10 +312,8 @@ class _AdminManageCampusVideosScreenState
                                                     'title':
                                                         titleController.text
                                                             .trim(),
-                                                    'videoUrl':
-                                                        videoRes.secureUrl,
-                                                    'thumbnailUrl':
-                                                        thumbRes.secureUrl,
+                                                    'videoUrl': videoUrl,
+                                                    'thumbnailUrl': thumbUrl,
                                                     'createdAt':
                                                         FieldValue.serverTimestamp(),
                                                   });

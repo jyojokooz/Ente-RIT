@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: post_card.dart
-// FILE PATH: lib/screens/post_card.dart
-// ===============================
-
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -172,13 +167,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     widget.onLikePressed(newLikeState);
   }
 
-  String getOptimizedCloudinaryUrl(String originalUrl) {
-    if (!originalUrl.contains('res.cloudinary.com')) return originalUrl;
-    const transformations = 'w_1080,q_auto:good,f_auto';
-    final parts = originalUrl.split('/upload/');
-    if (parts.length == 2) {
-      return '${parts[0]}/upload/$transformations/${parts[1]}';
-    }
+  // --- UPDATED: Firebase Storage doesn't support URL transformations natively. ---
+  // Returns original URL without Cloudinary alterations.
+  String getOptimizedUrl(String originalUrl) {
     return originalUrl;
   }
 
@@ -462,7 +453,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         child: Hero(
                           tag: 'post_${widget.postSnapshot.id}',
                           child: CachedNetworkImage(
-                            imageUrl: getOptimizedCloudinaryUrl(
+                            imageUrl: getOptimizedUrl(
                               postType == 'video'
                                   ? (originalThumbnailUrl ?? '')
                                   : mediaUrls.first,

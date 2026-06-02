@@ -1,13 +1,10 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class Story {
   final String id;
@@ -65,7 +62,7 @@ class StoriesService {
     return result == null ? null : File(result.path);
   }
 
-  // Upload multiple stories at once
+  // Upload multiple stories at once to Firebase Storage
   Future<void> uploadStories(List<File> imageFiles) async {
     final user = _auth.currentUser;
     if (user == null || imageFiles.isEmpty) return;
@@ -73,29 +70,26 @@ class StoriesService {
     try {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       final userData = userDoc.data()!;
-      final cloudinary = CloudinaryPublic(
-        cloudinaryCloudName,
-        cloudinaryUploadPreset,
-      );
-
       final batch = _firestore.batch();
 
       for (var file in imageFiles) {
         final compressedFile = await _compressImage(file) ?? file;
 
-        CloudinaryResponse response = await cloudinary.uploadFile(
-          CloudinaryFile.fromFile(
-            compressedFile.path,
-            folder: "stories/${user.uid}",
-          ),
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${file.hashCode}.jpg';
+        final ref = FirebaseStorage.instance.ref().child(
+          "stories/${user.uid}/$fileName",
         );
+
+        await ref.putFile(compressedFile);
+        final downloadUrl = await ref.getDownloadURL();
 
         final docRef = _firestore.collection('stories').doc();
         batch.set(docRef, {
           'userId': user.uid,
           'userName': userData['displayName'] ?? 'User',
           'userImage': userData['profilePhotoUrl'] ?? '',
-          'imageUrl': response.secureUrl,
+          'imageUrl': downloadUrl,
           'type': 'image',
           'timestamp': FieldValue.serverTimestamp(),
           'viewers': [],

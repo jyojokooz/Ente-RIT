@@ -1,19 +1,11 @@
-// ===============================
-// FILE NAME: admin_manage_events_screen.dart
-// FILE PATH: lib/screens/admin/admin_manage_events_screen.dart
-// ===============================
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class AdminManageEventsScreen extends StatefulWidget {
   const AdminManageEventsScreen({super.key});
@@ -287,18 +279,19 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                                             );
 
                                             try {
-                                              final cloudinary =
-                                                  CloudinaryPublic(
-                                                    cloudinaryCloudName,
-                                                    cloudinaryUploadPreset,
-                                                  );
-                                              CloudinaryResponse response =
-                                                  await cloudinary.uploadFile(
-                                                    CloudinaryFile.fromFile(
-                                                      eventImageFile!.path,
-                                                      folder: 'events',
-                                                    ),
-                                                  );
+                                              // Upload image to Firebase Storage
+                                              final fileName =
+                                                  '${DateTime.now().millisecondsSinceEpoch}_${eventImageFile!.path.split('/').last}';
+                                              final ref = FirebaseStorage
+                                                  .instance
+                                                  .ref()
+                                                  .child('events')
+                                                  .child(fileName);
+                                              await ref.putFile(
+                                                eventImageFile!,
+                                              );
+                                              final downloadUrl =
+                                                  await ref.getDownloadURL();
 
                                               final eventTimestamp =
                                                   Timestamp.fromDate(
@@ -328,8 +321,7 @@ class _AdminManageEventsScreenState extends State<AdminManageEventsScreen> {
                                                         bookingController.text
                                                             .trim(),
                                                     'eventDate': eventTimestamp,
-                                                    'imageUrl':
-                                                        response.secureUrl,
+                                                    'imageUrl': downloadUrl,
                                                     'createdAt':
                                                         FieldValue.serverTimestamp(),
                                                   });

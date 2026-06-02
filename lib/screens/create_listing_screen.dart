@@ -1,8 +1,7 @@
 import 'dart:io';
-import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,10 +38,6 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     'Tutoring & Skills',
     'Other',
   ];
-
-  final String _cloudinaryCloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
-  final String _cloudinaryUploadPreset =
-      dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
 
   @override
   void initState() {
@@ -82,28 +77,16 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     }
   }
 
-  Future<String?> _uploadImageToCloudinary(File image) async {
-    if (_cloudinaryCloudName.isEmpty || _cloudinaryUploadPreset.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Cloudinary credentials are not set.")),
-        );
-      }
-      return null;
-    }
-    final cloudinary = CloudinaryPublic(
-      _cloudinaryCloudName,
-      _cloudinaryUploadPreset,
-      cache: false,
-    );
+  Future<String?> _uploadImageToFirebase(File image) async {
     try {
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          image.path,
-          resourceType: CloudinaryResourceType.Image,
-        ),
-      );
-      return response.secureUrl;
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${image.path.split('/').last}';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('marketplace_images')
+          .child(fileName);
+      await ref.putFile(image);
+      return await ref.getDownloadURL();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -120,7 +103,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         _selectedCategory != null) {
       setState(() => _isSubmitting = true);
 
-      final imageUrl = await _uploadImageToCloudinary(_imageFile!);
+      final imageUrl = await _uploadImageToFirebase(_imageFile!);
       if (imageUrl == null) {
         setState(() => _isSubmitting = false);
         return;
@@ -271,15 +254,14 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                             controller: _priceController,
                             style: const TextStyle(color: Colors.white),
                             decoration: const InputDecoration(
-                              labelText: 'Price (\$)',
+                              labelText: 'Price (₹)',
                               border: OutlineInputBorder(),
-                              prefixText: '\$',
+                              prefixText: '₹',
                             ),
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             validator: (value) {
-                              // --- FIX: Added curly braces to both if statements ---
                               if (value == null || value.trim().isEmpty) {
                                 return 'Price cannot be empty';
                               }

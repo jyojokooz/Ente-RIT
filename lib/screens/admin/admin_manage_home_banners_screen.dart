@@ -1,13 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 class AdminManageHomeBannersScreen extends StatefulWidget {
   const AdminManageHomeBannersScreen({super.key});
@@ -42,7 +39,7 @@ class _AdminManageHomeBannersScreenState
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'Enter an optional link to redirect users when they tap the banner.',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
@@ -96,16 +93,20 @@ class _AdminManageHomeBannersScreenState
     setState(() => _isUploading = true);
 
     try {
-      final cloudinary = CloudinaryPublic(
-        cloudinaryCloudName,
-        cloudinaryUploadPreset,
-      );
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(image.path, folder: 'home_banners'),
-      );
+      // Generate a unique filename and upload to Firebase Storage
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${image.path.split('/').last}';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('home_banners')
+          .child(fileName);
 
+      await ref.putFile(File(image.path));
+      final downloadUrl = await ref.getDownloadURL();
+
+      // Save the banner data to Firestore
       await FirebaseFirestore.instance.collection('home_banners').add({
-        'imageUrl': response.secureUrl,
+        'imageUrl': downloadUrl,
         'linkUrl': _linkController.text.trim(), // Save the attached link
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,

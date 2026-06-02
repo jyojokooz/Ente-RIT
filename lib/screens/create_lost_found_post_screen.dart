@@ -1,15 +1,10 @@
-// ===============================
-// FILE NAME: create_lost_found_post_screen.dart
-// FILE PATH: lib/screens/create_lost_found_post_screen.dart
-// ===============================
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
 
 class CreateLostFoundPostScreen extends StatefulWidget {
   const CreateLostFoundPostScreen({super.key});
@@ -29,11 +24,6 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
   bool _isLoading = false;
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
-  final cloudinary = CloudinaryPublic(
-    "dcboqibnx",
-    "flutter_profile_uploads",
-    cache: false,
-  );
 
   @override
   void dispose() {
@@ -49,7 +39,9 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
       imageQuality: 70,
       maxWidth: 800,
     );
-    if (pickedFile != null) setState(() => _imageFile = File(pickedFile.path));
+    if (pickedFile != null) {
+      setState(() => _imageFile = File(pickedFile.path));
+    }
   }
 
   Future<void> _submitPost() async {
@@ -62,14 +54,17 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
     try {
       String? imageUrl;
       if (_imageFile != null) {
-        CloudinaryResponse response = await cloudinary.uploadFile(
-          CloudinaryFile.fromFile(
-            _imageFile!.path,
-            resourceType: CloudinaryResourceType.Image,
-          ),
-        );
-        imageUrl = response.secureUrl;
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${_imageFile!.path.split('/').last}';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('lost_and_found')
+            .child(fileName);
+
+        await ref.putFile(_imageFile!);
+        imageUrl = await ref.getDownloadURL();
       }
+
       if (!mounted) return;
 
       final String userName = user.displayName ?? user.email ?? 'Anonymous';
@@ -89,10 +84,11 @@ class _CreateLostFoundPostScreenState extends State<CreateLostFoundPostScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

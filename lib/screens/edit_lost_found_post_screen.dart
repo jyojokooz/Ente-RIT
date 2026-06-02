@@ -1,14 +1,9 @@
-// ===============================
-// FILE NAME: edit_lost_found_post_screen.dart
-// FILE PATH: lib/screens/edit_lost_found_post_screen.dart
-// ===============================
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class EditLostFoundPostScreen extends StatefulWidget {
@@ -31,11 +26,6 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
 
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
-  final cloudinary = CloudinaryPublic(
-    "dcboqibnx",
-    "flutter_profile_uploads",
-    cache: false,
-  );
 
   @override
   void initState() {
@@ -77,18 +67,21 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
 
     setState(() => _isLoading = true);
 
-    String? finalImageUrl = widget.itemDoc['imageUrl'];
+    String? finalImageUrl = _currentImageUrl;
 
     try {
       if (_imageFile != null) {
-        final response = await cloudinary.uploadFile(
-          CloudinaryFile.fromFile(
-            _imageFile!.path,
-            resourceType: CloudinaryResourceType.Image,
-          ),
-        );
-        finalImageUrl = response.secureUrl;
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${_imageFile!.path.split('/').last}';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('lost_and_found')
+            .child(fileName);
+
+        await ref.putFile(_imageFile!);
+        finalImageUrl = await ref.getDownloadURL();
       }
+
       if (!mounted) return;
 
       await FirebaseFirestore.instance
@@ -111,10 +104,11 @@ class _EditLostFoundPostScreenState extends State<EditLostFoundPostScreen> {
         ),
       );
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,14 +1,11 @@
-// ===============================
-// FILE PATH: lib/screens/edit_profile_screen.dart
-// ===============================
-
+import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloudinary_public/cloudinary_public.dart';
 
 // Import sub-components through the newly created connector file
 import '../widgets/edit_profile/edit_profile_components.dart';
@@ -42,9 +39,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _departmentOptions = [];
   String? _selectedDepartment;
 
-  // Cloudinary credentials
-  final String cloudinaryCloudName = "dcboqibnx";
-  final String cloudinaryUploadPreset = "flutter_profile_uploads";
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -128,7 +122,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // --- IMAGE UPLOAD LOGIC ---
+  // --- IMAGE UPLOAD LOGIC TO FIREBASE STORAGE ---
   Future<void> _pickAndUploadImage() async {
     if (_isUploadingImage) return;
 
@@ -143,30 +137,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       setState(() => _isUploadingImage = true);
 
-      final cloudinary = CloudinaryPublic(
-        cloudinaryCloudName,
-        cloudinaryUploadPreset,
-        cache: false,
-      );
-
-      CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          pickedFile.path,
-          folder: 'users/${user.uid}',
-          resourceType: CloudinaryResourceType.Image,
-        ),
-      );
+      final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('users/${user.uid}')
+          .child(fileName);
+      await ref.putFile(File(pickedFile.path));
+      final downloadUrl = await ref.getDownloadURL();
 
       // Immediately save the new URL to Firestore so it reflects everywhere
       await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'profilePhotoUrl': response.secureUrl},
+        {'profilePhotoUrl': downloadUrl},
       );
 
-      // Fix: Automatically update all existing posts/comments with the new photo
-      await _updateDenormalizedData(null, response.secureUrl);
+      // Automatically update all existing posts/comments with the new photo
+      await _updateDenormalizedData(null, downloadUrl);
 
       setState(() {
-        _profilePhotoUrl = response.secureUrl;
+        _profilePhotoUrl = downloadUrl;
       });
 
       if (mounted) {
@@ -258,7 +246,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       await userDocRef.set(userData, SetOptions(merge: true));
 
-      // Fix: Automatically update all existing posts/comments with the new name
+      // Automatically update all existing posts/comments with the new name
       await _updateDenormalizedData(newDisplayName, null);
 
       scaffoldMessenger.showSnackBar(
@@ -276,8 +264,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // --- NEW: BATCH UPDATER FUNCTION ---
-  // This updates your name/photo across ALL your past posts, comments, etc.
+  // BATCH UPDATER FUNCTION
   Future<void> _updateDenormalizedData(
     String? newName,
     String? newPhotoUrl,

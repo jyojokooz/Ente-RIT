@@ -1,12 +1,7 @@
-// ===============================
-// FILE NAME: create_post_screen.dart
-// FILE PATH: lib/screens/create_post_screen.dart
-// ===============================
-
 import 'dart:io';
-import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_compress/video_compress.dart';
@@ -18,9 +13,6 @@ import 'package:path/path.dart' as p;
 import 'create_post/step1_media_picker.dart';
 import 'create_post/step2_media_editor.dart';
 import 'create_post/step3_post_details.dart';
-
-const String cloudinaryCloudName = "dcboqibnx";
-const String cloudinaryUploadPreset = "flutter_profile_uploads";
 
 // Define the enum here so all steps can access it
 enum PostType { image, video, none }
@@ -46,7 +38,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String _location = '';
   List<String> _taggedUsers = [];
   bool _disableComments = false;
-  String _selectedCloudinaryFilter = ''; // Saves the filter applied
+  String _selectedFilter =
+      ''; // Saves the filter applied (Ignored unless baked locally)
 
   bool _isUploading = false;
   String _uploadStatus = '';
@@ -91,10 +84,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _isUploading = true);
 
     try {
-      final cloudinary = CloudinaryPublic(
-        cloudinaryCloudName,
-        cloudinaryUploadPreset,
-      );
       List<String> mediaUrls = [];
       String? thumbnailUrl;
       String postTypeString = _postType == PostType.video ? 'video' : 'image';
@@ -108,24 +97,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
         if (_thumbnailFile != null) {
           setState(() => _uploadStatus = 'Uploading thumbnail...');
-          CloudinaryResponse thumbResponse = await cloudinary.uploadFile(
-            CloudinaryFile.fromFile(
-              _thumbnailFile!.path,
-              folder: 'thumbnails/${_user.uid}',
-            ),
+          final thumbRef = FirebaseStorage.instance.ref().child(
+            'thumbnails/${_user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg',
           );
-          thumbnailUrl = thumbResponse.secureUrl;
+          await thumbRef.putFile(_thumbnailFile!);
+          thumbnailUrl = await thumbRef.getDownloadURL();
         }
 
         setState(() => _uploadStatus = 'Uploading video...');
-        CloudinaryResponse videoResponse = await cloudinary.uploadFile(
-          CloudinaryFile.fromFile(
-            compressedVideo.path,
-            folder: 'posts/${_user.uid}',
-            resourceType: CloudinaryResourceType.Video,
-          ),
+        final videoRef = FirebaseStorage.instance.ref().child(
+          'posts/${_user.uid}/${DateTime.now().millisecondsSinceEpoch}.mp4',
         );
-        mediaUrls.add(videoResponse.secureUrl);
+        await videoRef.putFile(
+          compressedVideo,
+          SettableMetadata(contentType: 'video/mp4'),
+        );
+        mediaUrls.add(await videoRef.getDownloadURL());
       }
       // 2. Upload Images
       else if (_mediaFiles.isNotEmpty) {
@@ -137,24 +124,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           );
           final compressedImage = await _compressImage(_mediaFiles[i]);
           if (compressedImage != null) {
-            CloudinaryResponse imageResponse = await cloudinary.uploadFile(
-              CloudinaryFile.fromFile(
-                compressedImage.path,
-                folder: 'posts/${_user.uid}',
-                resourceType: CloudinaryResourceType.Image,
-              ),
+            final imgRef = FirebaseStorage.instance.ref().child(
+              'posts/${_user.uid}/${DateTime.now().millisecondsSinceEpoch}_$i.jpg',
             );
-
-            // Apply the chosen filter to the URL directly via Cloudinary Transformations!
-            String finalUrl = imageResponse.secureUrl;
-            if (_selectedCloudinaryFilter.isNotEmpty) {
-              final parts = finalUrl.split('/upload/');
-              if (parts.length == 2) {
-                finalUrl =
-                    '${parts[0]}/upload/$_selectedCloudinaryFilter/${parts[1]}';
-              }
-            }
-            mediaUrls.add(finalUrl);
+            await imgRef.putFile(compressedImage);
+            // Note: Visual filters from Step 2 are not currently baked into the file here.
+            // If baking is implemented in Step 2, the passed `compressedImage` will already contain the edits.
+            mediaUrls.add(await imgRef.getDownloadURL());
           }
         }
       }
@@ -185,7 +161,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'taggedUsers': _taggedUsers,
         'commentsDisabled': _disableComments,
         if (_selectedMusic != null) 'music': _selectedMusic,
-        // 👇 NEW: Save the author's current privacy status to the post
+        // Save the author's current privacy status to the post
         'isAuthorPrivate': userData['isPrivate'] ?? false,
       };
 
@@ -255,7 +231,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 onNext: (editedFiles, filterEffect) {
                   setState(() {
                     _mediaFiles = editedFiles;
-                    _selectedCloudinaryFilter = filterEffect;
+                    _selectedFilter = filterEffect;
                     _currentStep = 2; // Go to Details
                   });
                 },
