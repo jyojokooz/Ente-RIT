@@ -6,7 +6,7 @@
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
-// NEW IMPORTS FOR EMAIL OTP
+// IMPORTS FOR EMAIL OTP
 const nodemailer = require("nodemailer");
 const cors = require("cors")({ origin: true });
 
@@ -183,6 +183,16 @@ exports.sendOtpEmail = functions
       if (!email || !otp) {
         return res.status(400).send({ error: "Email and OTP are required" });
       }
+
+      // --- PRODUCTION SECURITY: BLOCK NON-INSTITUTION EMAILS ---
+      // This prevents API abuse by rejecting non-rit.ac.in emails at the cloud function level
+      if (!email.toLowerCase().endsWith("@rit.ac.in")) {
+        console.warn(`Blocked OTP request for unauthorized domain: ${email}`);
+        return res
+          .status(403)
+          .send({ error: "Unauthorized domain. Only @rit.ac.in allowed." });
+      }
+      // ------------------------------------------------------------
 
       // Read secrets securely
       const senderEmail = process.env.SMTP_EMAIL;

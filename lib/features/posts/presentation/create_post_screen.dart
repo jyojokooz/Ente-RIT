@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: create_post_screen.dart
+// FILE PATH: lib/features/posts/presentation/create_post_screen.dart
+// ===============================
+
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -38,8 +43,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String _location = '';
   List<String> _taggedUsers = [];
   bool _disableComments = false;
-  String _selectedFilter =
-      ''; // Saves the filter applied (Ignored unless baked locally)
+
+  // FIX: This variable is now saved to Firestore in _createPost
+  String _selectedFilter = '';
 
   bool _isUploading = false;
   String _uploadStatus = '';
@@ -160,6 +166,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         'location': _location,
         'taggedUsers': _taggedUsers,
         'commentsDisabled': _disableComments,
+        'filter': _selectedFilter, // <-- FIX: Using the variable here
         if (_selectedMusic != null) 'music': _selectedMusic,
         // Save the author's current privacy status to the post
         'isAuthorPrivate': userData['isPrivate'] ?? false,
@@ -231,7 +238,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 onNext: (editedFiles, filterEffect) {
                   setState(() {
                     _mediaFiles = editedFiles;
-                    _selectedFilter = filterEffect;
+                    _selectedFilter =
+                        filterEffect; // Capturing the selected filter
                     _currentStep = 2; // Go to Details
                   });
                 },

@@ -3,6 +3,8 @@
 // FILE PATH: lib/widgets/chat/chat_bubble.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';

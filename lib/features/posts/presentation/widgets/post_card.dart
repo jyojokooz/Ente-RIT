@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: post_card.dart
 // FILE PATH: lib/features/posts/presentation/widgets/post_card.dart
 // ===============================
 
@@ -370,21 +371,46 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-                    // --- GOOGLE PLAY REQUIREMENT: REPORT BUTTON ---
+                    // --- UGC REQUIREMENT: REPORT BUTTON ---
                     PopupMenuButton<String>(
                       color: theme.colorScheme.surface,
-                      onSelected: (val) {
+                      onSelected: (val) async {
                         if (val == 'edit') widget.onEditPressed();
                         if (val == 'delete') widget.onDeletePressed();
                         if (val == 'report') {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                "Post reported. Admins will review it shortly.",
-                              ),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
+                          // ACTUAL DATABASE REPORT LOGIC
+                          try {
+                            await FirebaseFirestore.instance
+                                .collection('reported_content')
+                                .add({
+                                  'postId': widget.postSnapshot.id,
+                                  'reportedBy':
+                                      FirebaseAuth.instance.currentUser!.uid,
+                                  'authorId': postAuthorId,
+                                  'timestamp': FieldValue.serverTimestamp(),
+                                  'status': 'pending_review',
+                                });
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Post reported. Admins will review it shortly.",
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Failed to report post."),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
                         }
                       },
                       icon: Icon(
