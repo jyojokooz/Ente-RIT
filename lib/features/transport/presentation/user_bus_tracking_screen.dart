@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/user_bus_tracking_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 import 'dart:ui';
 import 'package:firebase_database/firebase_database.dart';

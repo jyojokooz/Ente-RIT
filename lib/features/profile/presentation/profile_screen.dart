@@ -1,5 +1,5 @@
 // ===============================
-// FILE PATH: lib/screens/pages/profile_screen.dart
+// FILE PATH: lib/features/profile/presentation/profile_screen.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -297,17 +297,92 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         Divider(color: Theme.of(context).dividerColor),
                         ListTile(
-                          leading: const Icon(Icons.logout, color: Colors.red),
+                          leading: const Icon(
+                            Icons.logout,
+                            color: Colors.orange,
+                          ),
                           title: Text(
                             'Log Out',
                             style: GoogleFonts.poppins(
-                              color: Colors.red,
+                              color: Colors.orange,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           onTap: () {
                             Navigator.pop(context);
                             _logout();
+                          },
+                        ),
+                        // --- PLAY STORE REQUIREMENT: DELETE ACCOUNT BUTTON ---
+                        ListTile(
+                          leading: const Icon(
+                            Icons.delete_forever,
+                            color: Colors.red,
+                          ),
+                          title: Text(
+                            'Delete Account',
+                            style: GoogleFonts.poppins(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onTap: () async {
+                            Navigator.pop(context); // close sheet
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder:
+                                  (ctx) => AlertDialog(
+                                    backgroundColor:
+                                        Theme.of(context).colorScheme.surface,
+                                    title: const Text(
+                                      "Delete Account?",
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                    content: const Text(
+                                      "This action is permanent and cannot be undone. All your data will be erased.",
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed:
+                                            () => Navigator.pop(ctx, false),
+                                        child: const Text("Cancel"),
+                                      ),
+                                      TextButton(
+                                        onPressed:
+                                            () => Navigator.pop(ctx, true),
+                                        child: const Text(
+                                          "Delete Forever",
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                            );
+
+                            if (confirm == true) {
+                              try {
+                                // This triggers Firebase Auth Deletion. Database hooks should handle the rest.
+                                await FirebaseAuth.instance.currentUser
+                                    ?.delete();
+                                if (context.mounted) {
+                                  Navigator.pushNamedAndRemoveUntil(
+                                    context,
+                                    '/auth-gate',
+                                    (route) => false,
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        "Please log out and log back in to verify your identity before deleting.",
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            }
                           },
                         ),
                         const SizedBox(height: 20),
@@ -462,7 +537,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        // Main Stream for Target User Data
         stream:
             FirebaseFirestore.instance
                 .collection('users')
@@ -488,7 +562,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           final isAdmin = targetData['isAdmin'] ?? false;
 
           return StreamBuilder<DocumentSnapshot>(
-            // Stream for Current User Data (to check connection status)
             stream:
                 FirebaseFirestore.instance
                     .collection('users')
@@ -500,7 +573,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               final connectionStatus = _getConnectionStatus(myData);
 
               return StreamBuilder<QuerySnapshot>(
-                // Stream for Posts
                 stream:
                     FirebaseFirestore.instance
                         .collection('posts')
@@ -511,7 +583,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   final userPosts = postsSnap.data?.docs ?? [];
 
                   return StreamBuilder<QuerySnapshot>(
-                    // Stream for Tagged Posts
                     stream:
                         FirebaseFirestore.instance
                             .collection('posts')
@@ -570,7 +641,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        // Avatar with Edit Badge
                                         Stack(
                                           children: [
                                             GestureDetector(
@@ -590,28 +660,40 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                     end: Alignment.bottomRight,
                                                   ),
                                                 ),
-                                                child: CircleAvatar(
-                                                  radius: 40,
-                                                  backgroundColor:
-                                                      isDark
-                                                          ? Colors.grey.shade800
-                                                          : Colors
-                                                              .grey
-                                                              .shade200,
-                                                  backgroundImage:
-                                                      profilePhotoUrl.isNotEmpty
-                                                          ? CachedNetworkImageProvider(
-                                                            profilePhotoUrl,
-                                                          )
-                                                          : null,
-                                                  child:
-                                                      profilePhotoUrl.isEmpty
-                                                          ? Icon(
-                                                            Icons.person,
-                                                            color: mutedColor,
-                                                            size: 40,
-                                                          )
-                                                          : null,
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(
+                                                    2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: cardColor,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: CircleAvatar(
+                                                    radius: 40,
+                                                    backgroundColor:
+                                                        isDark
+                                                            ? Colors
+                                                                .grey
+                                                                .shade800
+                                                            : Colors
+                                                                .grey
+                                                                .shade200,
+                                                    backgroundImage:
+                                                        profilePhotoUrl
+                                                                .isNotEmpty
+                                                            ? CachedNetworkImageProvider(
+                                                              profilePhotoUrl,
+                                                            )
+                                                            : null,
+                                                    child:
+                                                        profilePhotoUrl.isEmpty
+                                                            ? Icon(
+                                                              Icons.person,
+                                                              color: mutedColor,
+                                                              size: 40,
+                                                            )
+                                                            : null,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -653,7 +735,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           ],
                                         ),
                                         const SizedBox(width: 20),
-                                        // User Details
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
@@ -809,7 +890,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                   const SizedBox(height: 16),
 
-                                  // QUICK ACCESS (If Driver/Cafeteria)
                                   if (isCurrentUser)
                                     ProfileQuickAccess(
                                       role: role,
@@ -823,7 +903,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
 
-                          // --- TABS ---
                           if (canViewPosts)
                             SliverPersistentHeader(
                               pinned: true,
@@ -854,7 +933,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
 
-                          // --- GRID ---
                           ProfilePostsGrid(
                             userPosts: displayedPosts,
                             cardColor: cardColor,
@@ -883,7 +961,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     Color mutedColor,
   ) {
     return Container(
-      color: Colors.transparent, // Ensures tap targets work well
+      color: Colors.transparent,
       child: Column(
         children: [
           Icon(icon, color: const Color(0xFF673AB7), size: 24),
@@ -905,7 +983,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // Modern Action Buttons matching the design image
   Widget _buildActionButtons({
     required ConnectionStatus connectionStatus,
     required String displayName,
@@ -924,7 +1001,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
 
     final filledButtonStyle = ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF673AB7), // Purple brand color
+      backgroundColor: const Color(0xFF673AB7),
       foregroundColor: Colors.white,
       elevation: 0,
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -978,7 +1055,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
     }
 
-    // Viewing another user's profile
     String primaryLabel = "Mingle";
     IconData primaryIcon = Icons.person_add_outlined;
     VoidCallback? primaryAction = () => _handleConnectionAction('send');
@@ -999,7 +1075,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
             ),
           );
-      isPrimaryFilled = false; // Make it outlined when already connected
+      isPrimaryFilled = false;
     } else if (connectionStatus == ConnectionStatus.sent) {
       primaryLabel = "Requested";
       primaryIcon = Icons.access_time;

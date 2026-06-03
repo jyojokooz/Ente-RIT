@@ -3,9 +3,12 @@
 // FILE PATH: functions/index.js
 // ===============================
 
-// --- KEY FIX: Explicitly require v1 to avoid version conflicts ---
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
+
+// NEW IMPORTS FOR EMAIL OTP
+const nodemailer = require("nodemailer");
+const cors = require("cors")({ origin: true });
 
 // Initialize Admin SDK once
 if (admin.apps.length === 0) {
@@ -161,4 +164,68 @@ exports.sendEventReminder = functions.firestore
       console.error("Error sending event broadcast:", error);
       return snapshot.ref.update({ status: "error", error: error.message });
     }
+  });
+
+/**
+ * 4. SECURE OTP EMAIL SENDER (V1 - HTTP API)
+ */
+exports.sendOtpEmail = functions
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] }) // Injects secrets safely at runtime
+  .https.onRequest((req, res) => {
+    // Wrap with CORS to allow Flutter Web/App to call this URL
+    cors(req, res, async () => {
+      if (req.method !== "POST") {
+        return res.status(405).send({ error: "Only POST requests accepted" });
+      }
+
+      const { email, name, otp } = req.body;
+
+      if (!email || !otp) {
+        return res.status(400).send({ error: "Email and OTP are required" });
+      }
+
+      // Read secrets securely
+      const senderEmail = process.env.SMTP_EMAIL;
+      const senderPassword = process.env.SMTP_PASSWORD;
+
+      // Configure NodeMailer
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: senderEmail,
+          pass: senderPassword,
+        },
+      });
+
+      const mailOptions = {
+        from: `Ente RIT Support <${senderEmail}>`,
+        to: email,
+        subject: "Your Verification Code for Ente RIT",
+        html: `
+          <div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
+              <h2 style="color: #9983F3; margin-top: 0;">Welcome to Ente RIT!</h2>
+              <p style="color: #333333; font-size: 16px;">Hi ${name || "there"},</p>
+              <p style="color: #555555; font-size: 15px; line-height: 1.5;">
+                Thank you for registering. To complete your secure sign-up process, please use the 6-digit verification code below:
+              </p>
+              <div style="background-color: #f4f4f4; padding: 20px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 8px; text-align: center; color: #222; margin: 30px 0;">
+                ${otp}
+              </div>
+              <p style="color: #555555; font-size: 14px;">
+                Please note: This code will expire in 10 minutes. Do not share this code with anyone.
+              </p>
+            </div>
+          </div>
+        `,
+      };
+
+      try {
+        await transporter.sendMail(mailOptions);
+        return res.status(200).send({ success: true });
+      } catch (error) {
+        console.error("Email Error:", error);
+        return res.status(500).send({ error: "Failed to send email" });
+      }
+    });
   });

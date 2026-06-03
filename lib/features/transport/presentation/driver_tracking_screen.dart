@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/driver_tracking_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';

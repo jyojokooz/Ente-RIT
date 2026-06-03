@@ -9,6 +9,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:my_project/features/admin/data/image_upload_service.dart';
 
 // This list MUST match the IDs used in your ClassifyScreen.
+// REPLACE the old featureList at the top of the file with this:
+
 const List<Map<String, String>> featureList = [
   {'id': 'department_notes', 'label': 'Department Notes'},
   {'id': 'events', 'label': 'Events'},
@@ -16,18 +18,11 @@ const List<Map<String, String>> featureList = [
   {'id': 'marketplace', 'label': 'Marketplace'},
   {'id': 'cafeteria', 'label': 'Cafeteria'},
   {'id': 'bus_tracker', 'label': 'Bus Tracker'},
-  {'id': 'connect_ai', 'label': 'Connect AI'},
   {'id': 'peer_rooms', 'label': 'Peer Rooms'},
   {'id': 'nonote', 'label': 'No-Note'},
   {'id': 'digital_id', 'label': 'Digital ID'},
   {'id': 'code_playground', 'label': 'Code Playground'},
   {'id': 'dev_community', 'label': 'Stack Overflow'},
-  {'id': 'quiz', 'label': 'Programming Quiz'},
-  {'id': 'pdf_buddy', 'label': 'PDF Study Buddy'},
-  // --- UPDATED: Replaced LinkedIn with Resume Analyzer ---
-  {'id': 'resume_analyzer', 'label': 'AI Resume Analyzer'},
-  {'id': 'youtube_summarizer', 'label': 'YouTube Summarizer'},
-  {'id': 'tech_news', 'label': 'Tech News'},
   {'id': 'games', 'label': 'Games'},
   {'id': 'etlab', 'label': 'RIT ETLab'},
 ];

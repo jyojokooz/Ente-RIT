@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: feature_config.dart
-// FILE PATH: lib/config/feature_config.dart
+// FILE PATH: lib/core/config/feature_config.dart
 // ===============================
 
 import 'package:flutter/material.dart';
@@ -11,22 +11,14 @@ import 'package:my_project/features/lost_and_found/presentation/lost_and_found_s
 import 'package:my_project/features/marketplace/presentation/marketplace_screen.dart';
 import 'package:my_project/features/cafeteria/presentation/cafeteria_screen.dart';
 import 'package:my_project/features/transport/presentation/bus_list_screen.dart';
-import 'package:my_project/features/ai_chat/presentation/ai_chat_history_screen.dart';
 import 'package:my_project/features/chat/presentation/peer_rooms_screen.dart';
 import 'package:my_project/features/campus/presentation/id_card_screen.dart';
 import 'package:my_project/features/tools/code_playground/code_playground_screen.dart';
 import 'package:my_project/features/tools/community/dev_community_screen.dart';
-import 'package:my_project/features/tools/quiz/quiz_categories_screen.dart';
-import 'package:my_project/features/tools/pdf_buddy/pdf_buddy_screen.dart';
-import 'package:my_project/features/tools/resume_analyzer/resume_analyzer_screen.dart';
-import 'package:my_project/features/tools/youtube_summarizer/youtube_summarizer_screen.dart';
-import 'package:my_project/features/tools/tech_news/tech_news_screen.dart';
 import 'package:my_project/features/tools/games/game_view_screen.dart';
 import 'package:my_project/features/campus/presentation/etlab_webview_screen.dart';
 
 class FeatureConfig {
-  // This map links a unique String ID to the visual and functional aspects of the feature.
-  // The 'screen' property is used for navigation.
   static final Map<String, dynamic> featureMap = {
     'departments': {
       'label': 'Departments',
@@ -64,12 +56,6 @@ class FeatureConfig {
       'color': const Color(0xFF30CFD0),
       'screen': const BusListScreen(),
     },
-    'connect_ai': {
-      'label': 'Connect AI',
-      'icon': Icons.auto_awesome_rounded,
-      'color': const Color(0xFF667EEA),
-      'screen': const AiChatHistoryScreen(),
-    },
     'peer_rooms': {
       'label': 'Peer Rooms',
       'icon': Icons.groups_rounded,
@@ -93,36 +79,6 @@ class FeatureConfig {
       'icon': Icons.forum_rounded,
       'color': const Color(0xFFF83600),
       'screen': const DevCommunityScreen(),
-    },
-    'quiz': {
-      'label': 'Quiz',
-      'icon': Icons.quiz_rounded,
-      'color': const Color(0xFFB721FF),
-      'screen': const QuizCategoriesScreen(),
-    },
-    'pdf_buddy': {
-      'label': 'PDF Buddy',
-      'icon': Icons.picture_as_pdf_rounded,
-      'color': const Color(0xFFF5576C),
-      'screen': const PdfBuddyScreen(),
-    },
-    'resume_ai': {
-      'label': 'Resume AI',
-      'icon': Icons.description_rounded,
-      'color': const Color(0xFF0BA360),
-      'screen': const ResumeAnalyzerScreen(),
-    },
-    'yt_summary': {
-      'label': 'YT Summary',
-      'icon': Icons.play_circle_filled_rounded,
-      'color': const Color(0xFFFF0844),
-      'screen': const YouTubeSummarizerScreen(),
-    },
-    'tech_news': {
-      'label': 'Tech News',
-      'icon': Icons.newspaper_rounded,
-      'color': const Color(0xFF203A43),
-      'screen': const TechNewsScreen(),
     },
     'games': {
       'label': 'Games',

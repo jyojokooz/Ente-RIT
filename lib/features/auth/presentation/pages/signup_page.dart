@@ -1,18 +1,20 @@
 // ===============================
 // FILE NAME: signup_page.dart
-// FILE PATH: lib/screens/pages/signup_page.dart
+// FILE PATH: lib/features/auth/presentation/pages/signup_page.dart
 // ===============================
+
+// ignore_for_file: deprecated_member_use
 
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pinput/pinput.dart';
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:my_project/features/auth/data/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -179,7 +181,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     });
   }
 
-  // --- STEP 1: GENERATE AND SEND OTP USING MAILER ---
+  // --- STEP 1: REQUEST BACKEND TO SEND OTP ---
   Future<void> _handleSignupStep() async {
     // Prevent sending if email is taken or still being checked
     if (_isEmailAvailable == false || _isCheckingEmail) {
@@ -198,54 +200,37 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       // Generate a random 6-digit OTP
       _generatedOtp = (100000 + Random().nextInt(900000)).toString();
 
-      // Retrieve credentials from .env
-      String senderEmail = dotenv.env['SMTP_EMAIL'] ?? '';
-      String senderPassword = dotenv.env['SMTP_PASSWORD'] ?? '';
-
-      if (senderEmail.isEmpty || senderPassword.isEmpty) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("SMTP credentials are not configured in .env"),
-          ),
-        );
-        return;
-      }
-
-      final smtpServer = gmail(senderEmail, senderPassword);
-
-      final message =
-          Message()
-            ..from = Address(senderEmail, 'Ente RIT Support')
-            ..recipients.add(_emailController.text.trim())
-            ..subject = 'Your Verification Code for Ente RIT'
-            ..html = '''
-          <!DOCTYPE html>
-          <html>
-          <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
-              <h2 style="color: #9983F3; margin-top: 0;">Welcome to Ente RIT!</h2>
-              <p style="color: #333333; font-size: 16px;">Hi ${_nameController.text.trim()},</p>
-              <p style="color: #555555; font-size: 15px; line-height: 1.5;">
-                Thank you for registering. To complete your secure sign-up process, please use the 6-digit verification code below:
-              </p>
-              <div style="background-color: #f4f4f4; padding: 20px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 8px; text-align: center; color: #222; margin: 30px 0;">
-                $_generatedOtp
-              </div>
-              <p style="color: #555555; font-size: 14px;">
-                Please note: This code will expire in 10 minutes. Do not share this code with anyone.
-              </p>
-            </div>
-          </body>
-          </html>
-        ''';
+      // Your live Firebase Cloud Function URL
+      final String cloudFunctionUrl =
+          'https://us-central1-fir-auth-bfed9.cloudfunctions.net/sendOtpEmail';
 
       try {
-        await send(message, smtpServer);
+        // Send request securely to Firebase Cloud Function
+        final response = await http.post(
+          Uri.parse(cloudFunctionUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': _emailController.text.trim(),
+            'name': _nameController.text.trim(),
+            'otp': _generatedOtp,
+          }),
+        );
 
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _showOtpDialog();
+        if (response.statusCode == 200) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showOtpDialog();
+          }
+        } else {
+          // Attempt to decode the error from the server
+          String errorMsg =
+              "Failed to send email. Status: ${response.statusCode}";
+          try {
+            final errorData = jsonDecode(response.body);
+            if (errorData['error'] != null) errorMsg = errorData['error'];
+          } catch (_) {}
+
+          throw Exception(errorMsg);
         }
       } catch (e) {
         if (mounted) {

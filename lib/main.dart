@@ -4,8 +4,6 @@
 
 // ignore_for_file: unnecessary_import
 
-import 'dart:io'; // <-- ADDED: Required for HttpOverrides
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -29,17 +27,6 @@ import 'package:my_project/features/profile/presentation/requests_screen.dart';
 import 'package:my_project/features/auth/presentation/create_username_screen.dart';
 import 'package:my_project/features/profile/presentation/profile_screen.dart';
 
-// --- NEW: Custom HttpOverrides to bypass the expired SSL Certificate issue ---
-class MyHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
-  }
-}
-// ----------------------------------------------------------------------------
-
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -48,10 +35,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // --- NEW: Apply the global HttpOverrides here BEFORE initializing Firebase ---
-  HttpOverrides.global = MyHttpOverrides();
-  // ----------------------------------------------------------------------------
 
   final futures = await Future.wait([
     dotenv.load(fileName: ".env"),

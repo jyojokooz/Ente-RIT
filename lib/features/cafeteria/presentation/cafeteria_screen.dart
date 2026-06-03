@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/cafeteria_screen.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';

@@ -3,6 +3,8 @@
 // FILE PATH: lib/screens/department_sub_screens.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';

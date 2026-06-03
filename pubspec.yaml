@@ -57,14 +57,13 @@ dependencies:
   qr_flutter: ^4.1.0
   flip_card: ^0.7.0
   barcode_widget: ^2.0.4
-  http: ^1.2.1
+  http: ^1.6.0
   flutter_dotenv: ^5.1.0
   google_maps_flutter: ^2.6.1
   location: ^6.0.2
   firebase_database: ^10.4.9
   share_plus: ^9.0.0
   flutter_markdown: ^0.7.1
-  google_generative_ai: ^0.4.0
   code_text_field: ^1.1.0 # For the code editor widget
   flutter_highlight: ^0.7.0 # For syntax highlighting styles
   highlight: ^0.7.0
@@ -75,9 +74,6 @@ dependencies:
   video_thumbnail: ^0.5.3
   fl_chart: ^0.64.0
   file_picker: ^8.0.0
-  syncfusion_flutter_pdf: ^24.1.41 # For extracting text from PDF documents
-  flutter_tts: ^3.8.5 # For text-to-speech audio playback
-  youtube_explode_dart: ^2.1.0
   transparent_image: ^2.0.1
   shimmer: ^3.0.0
   animations: ^2.0.11
@@ -103,7 +99,6 @@ dependencies:
   camera: ^0.12.0+1
   flutter_cache_manager: ^3.4.1
   cached_video_player_plus: ^4.1.0
-  mailer: ^7.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

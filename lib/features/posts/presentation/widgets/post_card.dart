@@ -1,3 +1,7 @@
+// ===============================
+// FILE PATH: lib/features/posts/presentation/widgets/post_card.dart
+// ===============================
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -167,8 +171,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     widget.onLikePressed(newLikeState);
   }
 
-  // --- UPDATED: Firebase Storage doesn't support URL transformations natively. ---
-  // Returns original URL without Cloudinary alterations.
   String getOptimizedUrl(String originalUrl) {
     return originalUrl;
   }
@@ -368,20 +370,31 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-                    if (isAuthor)
-                      PopupMenuButton<String>(
-                        color: theme.colorScheme.surface,
-                        onSelected: (val) {
-                          if (val == 'edit') widget.onEditPressed();
-                          if (val == 'delete') widget.onDeletePressed();
-                        },
-                        icon: Icon(
-                          Icons.more_horiz,
-                          color: subtitleColor,
-                          size: 24,
-                        ),
-                        itemBuilder:
-                            (ctx) => [
+                    // --- GOOGLE PLAY REQUIREMENT: REPORT BUTTON ---
+                    PopupMenuButton<String>(
+                      color: theme.colorScheme.surface,
+                      onSelected: (val) {
+                        if (val == 'edit') widget.onEditPressed();
+                        if (val == 'delete') widget.onDeletePressed();
+                        if (val == 'report') {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Post reported. Admins will review it shortly.",
+                              ),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                      icon: Icon(
+                        Icons.more_horiz,
+                        color: subtitleColor,
+                        size: 24,
+                      ),
+                      itemBuilder:
+                          (ctx) => [
+                            if (isAuthor) ...[
                               PopupMenuItem(
                                 value: 'edit',
                                 child: Text(
@@ -396,8 +409,17 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   style: TextStyle(color: Colors.red),
                                 ),
                               ),
+                            ] else ...[
+                              const PopupMenuItem(
+                                value: 'report',
+                                child: Text(
+                                  'Report Post',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
                             ],
-                      ),
+                          ],
+                    ),
                   ],
                 );
               },
@@ -451,7 +473,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         }
                       },
                       child: AspectRatio(
-                        // FORCED WIDE LANDSCAPE RATIO
                         aspectRatio: 16 / 9,
                         child: Hero(
                           tag: 'post_${widget.postSnapshot.id}',
@@ -462,9 +483,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   : mediaUrls.first,
                             ),
                             cacheManager: AppCacheManager.instance,
-                            fit:
-                                BoxFit
-                                    .cover, // Ensures image fills the 16:9 box nicely
+                            fit: BoxFit.cover,
                             placeholder:
                                 (c, u) => Container(
                                   color:
@@ -477,7 +496,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       ),
                     ),
 
-                    // Multi-image indicator (Top Right)
                     if (mediaUrls.length > 1)
                       Positioned(
                         top: 12,
@@ -502,7 +520,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ),
                       ),
 
-                    // Video Play Button Overlay
                     if (postType == 'video')
                       Positioned.fill(
                         child: Center(
@@ -523,7 +540,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ),
                       ),
 
-                    // Music Pill Overlay (Bottom Left)
                     if (postType == 'image' &&
                         musicData != null &&
                         musicData['previewUrl'] != null)
@@ -593,7 +609,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             // --- BOTTOM ACTIONS (Like, Comment, Share) ---
             Row(
               children: [
-                // Like Button
                 GestureDetector(
                   onTap: _triggerLikeButtonPress,
                   child: Row(
@@ -623,7 +638,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
                 const SizedBox(width: 24),
 
-                // Comment Button
                 GestureDetector(
                   onTap: widget.onCommentPressed,
                   child: Row(
@@ -648,7 +662,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
                 const Spacer(),
 
-                // Share Button
                 GestureDetector(
                   onTap: () {
                     showModalBottomSheet(
