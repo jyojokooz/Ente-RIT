@@ -204,20 +204,25 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
 
       _generatedOtp = (100000 + Random().nextInt(900000)).toString();
 
+      // !!! REPLACE THIS URL WITH YOUR ACTUAL FIREBASE PROJECT URL !!!
       final String cloudFunctionUrl =
           'https://us-central1-fir-auth-bfed9.cloudfunctions.net/sendOtpEmail';
 
       try {
+        debugPrint("Sending OTP request to: $cloudFunctionUrl");
+
         final response = await http.post(
           Uri.parse(cloudFunctionUrl),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'email':
-                _emailController.text.trim().toLowerCase(), // ensure lowercase
+            'email': _emailController.text.trim().toLowerCase(),
             'name': _nameController.text.trim(),
             'otp': _generatedOtp,
           }),
         );
+
+        debugPrint("Server Response Code: ${response.statusCode}");
+        debugPrint("Server Response Body: ${response.body}");
 
         if (response.statusCode == 200) {
           if (mounted) {
@@ -225,26 +230,33 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
             _showOtpDialog();
           }
         } else {
+          // Attempt to parse the exact error from Node.js
           String errorMsg =
               "Failed to send email. Status: ${response.statusCode}";
           try {
             final errorData = jsonDecode(response.body);
-            if (errorData['error'] != null) errorMsg = errorData['error'];
+            if (errorData['error'] != null) {
+              errorMsg = errorData['error'];
+            }
           } catch (_) {}
 
           throw Exception(errorMsg);
         }
       } catch (e) {
+        debugPrint("OTP Catch Error: $e");
         if (mounted) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Failed to send email: $e"),
+              content: Text(
+                e.toString().replaceAll("Exception: ", ""),
+              ), // Cleaner error
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              duration: const Duration(seconds: 4),
             ),
           );
         }

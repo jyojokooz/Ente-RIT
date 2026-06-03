@@ -170,9 +170,8 @@ exports.sendEventReminder = functions.firestore
  * 4. SECURE OTP EMAIL SENDER (V1 - HTTP API)
  */
 exports.sendOtpEmail = functions
-  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] }) // Injects secrets safely at runtime
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] })
   .https.onRequest((req, res) => {
-    // Wrap with CORS to allow Flutter Web/App to call this URL
     cors(req, res, async () => {
       if (req.method !== "POST") {
         return res.status(405).send({ error: "Only POST requests accepted" });
@@ -184,15 +183,9 @@ exports.sendOtpEmail = functions
         return res.status(400).send({ error: "Email and OTP are required" });
       }
 
-      // --- PRODUCTION SECURITY: BLOCK NON-INSTITUTION EMAILS ---
-      // This prevents API abuse by rejecting non-rit.ac.in emails at the cloud function level
       if (!email.toLowerCase().endsWith("@rit.ac.in")) {
-        console.warn(`Blocked OTP request for unauthorized domain: ${email}`);
-        return res
-          .status(403)
-          .send({ error: "Unauthorized domain. Only @rit.ac.in allowed." });
+        return res.status(403).send({ error: "Unauthorized domain." });
       }
-      // ------------------------------------------------------------
 
       // Read secrets securely
       const senderEmail = process.env.SMTP_EMAIL;
@@ -203,39 +196,36 @@ exports.sendOtpEmail = functions
         service: "gmail",
         auth: {
           user: senderEmail,
-          pass: senderPassword,
+          pass: senderPassword, // This MUST be the 16-character App Password
         },
       });
 
       const mailOptions = {
-        from: `Ente RIT Support <${senderEmail}>`,
+        from: `"Ente RIT Support" <${senderEmail}>`,
         to: email,
         subject: "Your Verification Code for Ente RIT",
         html: `
-          <div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
-              <h2 style="color: #9983F3; margin-top: 0;">Welcome to Ente RIT!</h2>
-              <p style="color: #333333; font-size: 16px;">Hi ${name || "there"},</p>
-              <p style="color: #555555; font-size: 15px; line-height: 1.5;">
-                Thank you for registering. To complete your secure sign-up process, please use the 6-digit verification code below:
-              </p>
-              <div style="background-color: #f4f4f4; padding: 20px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 8px; text-align: center; color: #222; margin: 30px 0;">
-                ${otp}
-              </div>
-              <p style="color: #555555; font-size: 14px;">
-                Please note: This code will expire in 10 minutes. Do not share this code with anyone.
-              </p>
-            </div>
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Welcome to Ente RIT!</h2>
+            <p>Hi ${name || "there"},</p>
+            <p>Your verification code is:</p>
+            <h1 style="letter-spacing: 5px;">${otp}</h1>
+            <p>This code expires in 10 minutes.</p>
           </div>
         `,
       };
 
       try {
         await transporter.sendMail(mailOptions);
+        console.log("Email sent successfully to:", email);
         return res.status(200).send({ success: true });
       } catch (error) {
-        console.error("Email Error:", error);
-        return res.status(500).send({ error: "Failed to send email" });
+        // THIS LOG IS CRITICAL: View this in Firebase Console > Functions > Logs
+        console.error("DETAILED SMTP ERROR:", error);
+        return res.status(500).send({
+          error: "Failed to send email",
+          details: error.message, // Temporarily send detail to Flutter to see the error
+        });
       }
     });
   });
