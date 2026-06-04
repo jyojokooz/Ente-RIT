@@ -1,5 +1,6 @@
 // ===============================
-// FILE PATH: lib/widgets/profile/profile_posts_grid.dart
+// FILE NAME: profile_posts_grid.dart
+// FILE PATH: lib/features/profile/presentation/widgets/profile_posts_grid.dart
 // ===============================
 
 import 'package:flutter/material.dart';
@@ -7,7 +8,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:my_project/features/posts/presentation/profile_feed_screen.dart';
+
+// --- NEW IMPORTS: Direct Full Screen Viewers ---
+import 'package:my_project/core/widgets/full_screen_video_player.dart';
+import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
 
 class ProfilePostsGrid extends StatelessWidget {
   final List<DocumentSnapshot> userPosts;
@@ -115,10 +119,16 @@ class ProfilePostsGrid extends StatelessWidget {
           final postSnapshot = userPosts[index];
           final data = postSnapshot.data() as Map<String, dynamic>;
 
-          final mediaUrl =
-              data['postType'] == 'video'
+          final isVideo = data['postType'] == 'video';
+
+          // Thumbnail for Grid Display
+          final thumbnailUrl =
+              isVideo
                   ? data['postThumbnailUrl']
                   : (data['postMediaUrl'] ?? data['postImageUrl']);
+
+          // Actual Media URL for Full Screen Playback/Viewing
+          final actualMediaUrl = data['postMediaUrl'] ?? data['postImageUrl'];
 
           // Provide fallback values if empty
           final caption = data['caption']?.toString().trim() ?? '';
@@ -136,18 +146,38 @@ class ProfilePostsGrid extends StatelessWidget {
             imageCount = (data['postImages'] as List).length;
           }
 
+          final heroTag = 'profile_post_${postSnapshot.id}';
+
           return GestureDetector(
-            onTap:
-                () => Navigator.push(
+            onTap: () {
+              if (actualMediaUrl == null || actualMediaUrl.isEmpty) return;
+
+              // --- DIRECT FULL SCREEN NAVIGATION ---
+              if (isVideo) {
+                Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder:
-                        (_) => ProfileFeedScreen(
-                          posts: userPosts,
-                          initialIndex: index,
+                        (_) => FullScreenVideoPlayer(
+                          videoUrl: actualMediaUrl,
+                          postId: postSnapshot.id,
                         ),
                   ),
-                ),
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (_) => FullScreenImageViewer(
+                          imageUrl: actualMediaUrl,
+                          heroTag: heroTag,
+                          postId: postSnapshot.id,
+                        ),
+                  ),
+                );
+              }
+            },
             child: Container(
               decoration: BoxDecoration(
                 color: cardColor,
@@ -166,23 +196,26 @@ class ProfilePostsGrid extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Background Image
-                    if (mediaUrl != null && mediaUrl.isNotEmpty)
-                      CachedNetworkImage(
-                        imageUrl: mediaUrl,
-                        fit: BoxFit.cover,
-                        placeholder:
-                            (c, u) => Container(
-                              color: isDark ? Colors.white10 : Colors.black12,
-                            ),
-                        errorWidget:
-                            (c, u, e) => Container(
-                              color: cardColor,
-                              child: const Icon(
-                                Icons.broken_image,
-                                color: Colors.grey,
+                    // Background Image (Wrapped in Hero for smooth opening transition)
+                    if (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
+                      Hero(
+                        tag: heroTag,
+                        child: CachedNetworkImage(
+                          imageUrl: thumbnailUrl,
+                          fit: BoxFit.cover,
+                          placeholder:
+                              (c, u) => Container(
+                                color: isDark ? Colors.white10 : Colors.black12,
                               ),
-                            ),
+                          errorWidget:
+                              (c, u, e) => Container(
+                                color: cardColor,
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                        ),
                       )
                     else
                       Container(
@@ -211,7 +244,7 @@ class ProfilePostsGrid extends StatelessWidget {
                     ),
 
                     // Video or Multi-image Indicator (Top Right)
-                    if (data['postType'] == 'video')
+                    if (isVideo)
                       const Positioned(
                         top: 8,
                         right: 8,

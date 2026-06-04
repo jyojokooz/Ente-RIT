@@ -7,21 +7,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
-import 'package:my_project/features/profile/presentation/connections_screen.dart';
-import 'package:my_project/features/profile/presentation/edit_profile_screen.dart';
-import 'package:my_project/features/profile/presentation/settings_screen.dart'; // <-- IMPORT NEW SETTINGS
-import 'package:my_project/features/chat/presentation/chat_screen.dart';
 import 'package:my_project/features/admin/presentation/admin_panel_screen.dart';
-
 import 'package:my_project/features/stories/presentation/stories_connector.dart';
-import 'package:my_project/features/profile/domain/connection_status.dart';
+import 'package:my_project/features/chat/presentation/chat_screen.dart';
 
-import 'package:my_project/features/profile/presentation/widgets/profile_quick_access.dart';
-import 'package:my_project/features/profile/presentation/widgets/profile_posts_grid.dart';
-import 'package:my_project/features/profile/presentation/widgets/share_profile_sheet.dart';
-import 'package:my_project/features/profile/presentation/widgets/sliver_app_bar_delegate.dart';
+// Unified Profile Connector Import
+import 'package:my_project/features/profile/presentation/profile_connector.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -179,52 +171,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     await batch.commit();
   }
 
-  void _showShareProfileSheet(
-    String username,
-    String displayName,
-    String? profilePhotoUrl,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder:
-          (context) => ShareProfileSheet(
-            userId: targetUserId,
-            username: username,
-            displayName: displayName,
-            profilePhotoUrl: profilePhotoUrl,
-          ),
-    );
-  }
-
-  // --- HELPERS ---
-  String _getAcronym(String name) {
-    if (name.isEmpty) return "";
-    String lowerName = name.toLowerCase();
-
-    if (lowerName.contains("mca") || lowerName.contains("application")) {
-      return "MCA";
-    }
-    if (lowerName.contains("computer")) return "CSE";
-    if (lowerName.contains("mechanical")) return "ME";
-    if (lowerName.contains("electrical") && lowerName.contains("electronics")) {
-      return "EEE";
-    }
-    if (lowerName.contains("electronics") &&
-        lowerName.contains("communication")) {
-      return "ECE";
-    }
-    if (lowerName.contains("civil")) return "CE";
-    if (lowerName.contains("architecture")) return "B.Arch";
-
-    List<String> words = name.split(" ");
-    if (words.length > 1) {
-      return words.take(2).map((e) => e[0].toUpperCase()).join();
-    }
-    return name.substring(0, 2).toUpperCase();
-  }
-
   ConnectionStatus _getConnectionStatus(Map<String, dynamic> myData) {
     if (isCurrentUser) return ConnectionStatus.none;
     final List<dynamic> connections = myData['connections'] ?? [];
@@ -233,13 +179,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (connections.contains(targetUserId)) return ConnectionStatus.connected;
     if (sentRequests.contains(targetUserId)) return ConnectionStatus.sent;
-    if (receivedRequests.contains(targetUserId)) {
+    if (receivedRequests.contains(targetUserId))
       return ConnectionStatus.received;
-    }
     return ConnectionStatus.none;
   }
 
-  // --- UI BUILDING ---
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -322,8 +266,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
                       ),
-
-                    // --- NEW SETTINGS BUTTON NAVIGATION ---
                     IconButton(
                       icon: Icon(
                         Icons.menu_rounded,
@@ -351,23 +293,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                 .doc(targetUserId)
                 .snapshots(),
         builder: (context, targetUserSnap) {
-          if (!targetUserSnap.hasData) {
+          if (!targetUserSnap.hasData)
             return const Center(
               child: CircularProgressIndicator(color: Color(0xFF673AB7)),
             );
-          }
 
           final targetData =
               targetUserSnap.data!.data() as Map<String, dynamic>? ?? {};
           final displayName = targetData['displayName'] ?? 'User';
           final username = targetData['username'] ?? '';
-          final bio = targetData['bio'] ?? '';
-          final department = targetData['department'] ?? '';
           final profilePhotoUrl = targetData['profilePhotoUrl'] ?? '';
           final connections = targetData['connections'] ?? [];
           final isPrivate = targetData['isPrivate'] ?? false;
-          final role = targetData['role'] ?? 'student';
-          final isAdmin = targetData['isAdmin'] ?? false;
 
           return StreamBuilder<DocumentSnapshot>(
             stream:
@@ -398,17 +335,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             .snapshots(),
                     builder: (context, taggedSnap) {
                       final taggedPosts = taggedSnap.data?.docs.toList() ?? [];
-                      taggedPosts.sort((a, b) {
-                        final aTime =
-                            (a.data() as Map<String, dynamic>)['timestamp']
-                                as Timestamp?;
-                        final bTime =
-                            (b.data() as Map<String, dynamic>)['timestamp']
-                                as Timestamp?;
-                        if (aTime == null || bTime == null) return 0;
-                        return bTime.compareTo(aTime);
-                      });
-
                       bool canViewPosts =
                           isCurrentUser ||
                           !isPrivate ||
@@ -428,280 +354,99 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // --- TOP PROFILE CARD ---
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: cardColor,
-                                      borderRadius: BorderRadius.circular(24),
-                                      boxShadow: [
-                                        if (!isDark)
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.04,
-                                            ),
-                                            blurRadius: 15,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Stack(
-                                          children: [
-                                            GestureDetector(
-                                              onTap: _viewStory,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  3,
-                                                ),
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  gradient: LinearGradient(
-                                                    colors: [
-                                                      Color(0xFF673AB7),
-                                                      Color(0xFF3F51B5),
-                                                    ],
-                                                    begin: Alignment.topLeft,
-                                                    end: Alignment.bottomRight,
-                                                  ),
-                                                ),
-                                                child: Container(
-                                                  padding: const EdgeInsets.all(
-                                                    2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: cardColor,
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                  child: CircleAvatar(
-                                                    radius: 40,
-                                                    backgroundColor:
-                                                        isDark
-                                                            ? Colors
-                                                                .grey
-                                                                .shade800
-                                                            : Colors
-                                                                .grey
-                                                                .shade200,
-                                                    backgroundImage:
-                                                        profilePhotoUrl
-                                                                .isNotEmpty
-                                                            ? CachedNetworkImageProvider(
-                                                              profilePhotoUrl,
-                                                            )
-                                                            : null,
-                                                    child:
-                                                        profilePhotoUrl.isEmpty
-                                                            ? Icon(
-                                                              Icons.person,
-                                                              color: mutedColor,
-                                                              size: 40,
-                                                            )
-                                                            : null,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            if (isCurrentUser)
-                                              Positioned(
-                                                bottom: 0,
-                                                right: 0,
-                                                child: GestureDetector(
-                                                  onTap:
-                                                      () => Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder:
-                                                              (_) =>
-                                                                  const EditProfileScreen(),
-                                                        ),
-                                                      ),
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(6),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFF673AB7,
-                                                      ),
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: cardColor,
-                                                        width: 2,
-                                                      ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.edit,
-                                                      color: Colors.white,
-                                                      size: 14,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(width: 20),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                displayName,
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: textColor,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              if (department.isNotEmpty)
-                                                Row(
-                                                  children: [
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 8,
-                                                            vertical: 4,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(
-                                                          0xFF673AB7,
-                                                        ).withOpacity(0.15),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                      ),
-                                                      child: Text(
-                                                        _getAcronym(department),
-                                                        style:
-                                                            GoogleFonts.poppins(
-                                                              color:
-                                                                  const Color(
-                                                                    0xFF673AB7,
-                                                                  ),
-                                                              fontSize: 10,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                            ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        department,
-                                                        style:
-                                                            GoogleFonts.poppins(
-                                                              fontSize: 12,
-                                                              color: mutedColor,
-                                                            ),
-                                                        maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              const SizedBox(height: 12),
-                                              if (bio.isNotEmpty)
-                                                Text(
-                                                  bio,
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 13,
-                                                    color: textColor
-                                                        .withOpacity(0.9),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // --- STATS ROW ---
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: cardColor,
-                                      borderRadius: BorderRadius.circular(24),
-                                      boxShadow: [
-                                        if (!isDark)
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.04,
-                                            ),
-                                            blurRadius: 15,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceEvenly,
-                                      children: [
-                                        GestureDetector(
-                                          onTap: _scrollToPosts,
-                                          child: _buildStatColumn(
-                                            Icons.article_outlined,
-                                            userPosts.length.toString(),
-                                            "Posts",
-                                            textColor,
-                                            mutedColor,
-                                          ),
-                                        ),
-                                        Container(
-                                          width: 1,
-                                          height: 40,
-                                          color:
-                                              isDark
-                                                  ? Colors.white10
-                                                  : Colors.black12,
-                                        ),
-                                        GestureDetector(
-                                          onTap:
-                                              () => _viewMingles(
-                                                connections,
-                                                displayName,
-                                                connectionStatus,
-                                              ),
-                                          child: _buildStatColumn(
-                                            Icons.people_outline_rounded,
-                                            connections.length.toString(),
-                                            "Mingles",
-                                            textColor,
-                                            mutedColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // --- ACTION BUTTONS ---
-                                  _buildActionButtons(
-                                    connectionStatus: connectionStatus,
-                                    displayName: displayName,
-                                    username: username,
+                                  // --- SUB-COMPONENT: Top Card ---
+                                  ProfileTopCard(
                                     profilePhotoUrl: profilePhotoUrl,
+                                    displayName: displayName,
+                                    department: targetData['department'] ?? '',
+                                    bio: targetData['bio'] ?? '',
+                                    isCurrentUser: isCurrentUser,
+                                    isDark: isDark,
                                     cardColor: cardColor,
                                     textColor: textColor,
+                                    mutedColor: mutedColor,
+                                    onViewStory: _viewStory,
+                                    onEditProfile:
+                                        () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) =>
+                                                    const EditProfileScreen(),
+                                          ),
+                                        ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- SUB-COMPONENT: Stats Row ---
+                                  ProfileStatsBar(
+                                    postCount: userPosts.length,
+                                    mingleCount: connections.length,
                                     isDark: isDark,
+                                    cardColor: cardColor,
+                                    textColor: textColor,
+                                    mutedColor: mutedColor,
+                                    onScrollToPosts: _scrollToPosts,
+                                    onViewMingles:
+                                        () => _viewMingles(
+                                          connections,
+                                          displayName,
+                                          connectionStatus,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // --- SUB-COMPONENT: Action Buttons ---
+                                  ProfileActionBar(
+                                    isCurrentUser: isCurrentUser,
+                                    connectionStatus: connectionStatus,
+                                    isDark: isDark,
+                                    cardColor: cardColor,
+                                    textColor: textColor,
+                                    onEditProfile:
+                                        () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) =>
+                                                    const EditProfileScreen(),
+                                          ),
+                                        ),
+                                    onShareProfile:
+                                        () => showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.transparent,
+                                          builder:
+                                              (context) => ShareProfileSheet(
+                                                userId: targetUserId,
+                                                username: username,
+                                                displayName: displayName,
+                                                profilePhotoUrl:
+                                                    profilePhotoUrl,
+                                              ),
+                                        ),
+                                    onConnectionAction: _handleConnectionAction,
+                                    onMessage:
+                                        () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => ChatScreen(
+                                                  receiverId: targetUserId,
+                                                  receiverName: displayName,
+                                                  receiverImageUrl:
+                                                      profilePhotoUrl,
+                                                ),
+                                          ),
+                                        ),
                                   ),
                                   const SizedBox(height: 16),
 
                                   if (isCurrentUser)
                                     ProfileQuickAccess(
-                                      role: role,
-                                      isAdmin: isAdmin,
+                                      role: targetData['role'] ?? 'student',
+                                      isAdmin: targetData['isAdmin'] ?? false,
                                       cardColor: cardColor,
                                       textColor: textColor,
                                     ),
@@ -758,191 +503,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         },
       ),
-    );
-  }
-
-  Widget _buildStatColumn(
-    IconData icon,
-    String count,
-    String label,
-    Color textColor,
-    Color mutedColor,
-  ) {
-    return Container(
-      color: Colors.transparent,
-      child: Column(
-        children: [
-          Icon(icon, color: const Color(0xFF673AB7), size: 24),
-          const SizedBox(height: 8),
-          Text(
-            count,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.poppins(fontSize: 12, color: mutedColor),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons({
-    required ConnectionStatus connectionStatus,
-    required String displayName,
-    required String username,
-    required String profilePhotoUrl,
-    required Color cardColor,
-    required Color textColor,
-    required bool isDark,
-  }) {
-    final outlinedButtonStyle = OutlinedButton.styleFrom(
-      foregroundColor: textColor,
-      backgroundColor: cardColor,
-      side: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    );
-
-    final filledButtonStyle = ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFF673AB7),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    );
-
-    if (isCurrentUser) {
-      return Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              style: outlinedButtonStyle,
-              icon: Icon(Icons.edit_outlined, size: 18, color: textColor),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const EditProfileScreen(),
-                    ),
-                  ),
-              label: Text(
-                "Edit Profile",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              style: filledButtonStyle,
-              icon: const Icon(Icons.share_outlined, size: 18),
-              onPressed:
-                  () => _showShareProfileSheet(
-                    username,
-                    displayName,
-                    profilePhotoUrl,
-                  ),
-              label: Text(
-                "Share Profile",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    String primaryLabel = "Mingle";
-    IconData primaryIcon = Icons.person_add_outlined;
-    VoidCallback? primaryAction = () => _handleConnectionAction('send');
-    bool isPrimaryFilled = true;
-
-    if (connectionStatus == ConnectionStatus.connected) {
-      primaryLabel = "Message";
-      primaryIcon = Icons.chat_bubble_outline;
-      primaryAction =
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (_) => ChatScreen(
-                    receiverId: targetUserId,
-                    receiverName: displayName,
-                    receiverImageUrl: profilePhotoUrl,
-                  ),
-            ),
-          );
-      isPrimaryFilled = false;
-    } else if (connectionStatus == ConnectionStatus.sent) {
-      primaryLabel = "Requested";
-      primaryIcon = Icons.access_time;
-      primaryAction = () => _handleConnectionAction('cancel');
-      isPrimaryFilled = false;
-    } else if (connectionStatus == ConnectionStatus.received) {
-      primaryLabel = "Accept";
-      primaryIcon = Icons.check;
-      primaryAction = () => _handleConnectionAction('accept');
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child:
-              isPrimaryFilled
-                  ? ElevatedButton.icon(
-                    style: filledButtonStyle,
-                    onPressed: primaryAction,
-                    icon: Icon(primaryIcon, size: 18),
-                    label: Text(
-                      primaryLabel,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  )
-                  : OutlinedButton.icon(
-                    style: outlinedButtonStyle,
-                    onPressed: primaryAction,
-                    icon: Icon(primaryIcon, size: 18),
-                    label: Text(
-                      primaryLabel,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-        ),
-        if (connectionStatus == ConnectionStatus.connected) ...[
-          const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              style: outlinedButtonStyle,
-              icon: const Icon(Icons.person_remove_outlined, size: 18),
-              onPressed: () => _handleConnectionAction('remove'),
-              label: Text(
-                "Disconnect",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 }
