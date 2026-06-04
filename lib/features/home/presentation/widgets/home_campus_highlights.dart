@@ -1,9 +1,7 @@
 // ===============================
 // FILE NAME: home_campus_highlights.dart
-// FILE PATH: lib/widgets/home/home_campus_highlights.dart
+// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\features\home\presentation\widgets\home_campus_highlights.dart
 // ===============================
-
-// ignore_for_file: deprecated_member_use
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -26,7 +24,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
   List<String> _currentPreloadedUrls = [];
 
   void _managePreloading(List<String> videoUrls) {
-    // Only trigger preload if the list of URLs has changed to save bandwidth
     if (_currentPreloadedUrls.toString() != videoUrls.toString()) {
       _currentPreloadedUrls = videoUrls;
       VideoPreloadService.instance.preloadVideos(_currentPreloadedUrls);
@@ -40,16 +37,39 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- HEADER ROW ---
+        // --- HEADER ROW WITH "SEE ALL" ---
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-          child: Text(
-            'CAMPUS HIGHLIGHTS',
-            style: GoogleFonts.permanentMarker(
-              fontSize: 14,
-              color: textColor,
-              letterSpacing: 1.2,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'CAMPUS HIGHLIGHTS',
+                style: GoogleFonts.permanentMarker(
+                  fontSize: 14,
+                  color: textColor,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AllCampusHighlightsScreen(),
+                    ),
+                  );
+                },
+                child: Text(
+                  'See all',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFFFF3E8E), // Brand Pink
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
 
@@ -64,7 +84,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                     .limit(10)
                     .snapshots(),
             builder: (context, snapshot) {
-              // 1. SLEEK SHIMMER EFFECT
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return ListView.builder(
                   scrollDirection: Axis.horizontal,
@@ -108,7 +127,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
 
               final videos = snapshot.data!.docs;
 
-              // 2. BACKGROUND PRELOADING LOGIC
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 final videoUrls =
                     videos
@@ -119,9 +137,8 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                         )
                         .where((url) => url != null && url.isNotEmpty)
                         .cast<String>()
-                        .take(5) // Preload the first 5 videos
+                        .take(5)
                         .toList();
-
                 _managePreloading(videoUrls);
               });
 
@@ -156,8 +173,7 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                               return HighlightVideoPlayerScreen(
                                 videoUrl: videoUrl,
                                 title: title,
-                                thumbnailUrl:
-                                    thumbnailUrl, // Pass thumbnail for Hero
+                                thumbnailUrl: thumbnailUrl,
                               );
                             },
                             transitionsBuilder: (
@@ -173,7 +189,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                             },
                           ),
                         ).then((_) {
-                          // Re-preload the video immediately when the user comes back to the feed
                           VideoPreloadService.instance.preloadVideos(
                             _currentPreloadedUrls,
                           );
@@ -195,7 +210,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            // 3. HERO ANIMATED THUMBNAIL
                             Hero(
                               tag: 'campus_video_$videoUrl',
                               child:
@@ -239,8 +253,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                                         ),
                                       ),
                             ),
-
-                            // Dark Gradient Overlay for Text Readability
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -256,8 +268,6 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
                                 ),
                               ),
                             ),
-
-                            // Content (Bottom)
                             Positioned(
                               bottom: 8,
                               left: 8,
@@ -287,6 +297,197 @@ class _HomeCampusHighlightsState extends State<HomeCampusHighlights> {
         ),
         const SizedBox(height: 12),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// NEW SCREEN: ALL CAMPUS HIGHLIGHTS GRID
+// ============================================================================
+class AllCampusHighlightsScreen extends StatelessWidget {
+  const AllCampusHighlightsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    return Scaffold(
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        title: Text(
+          "All Highlights",
+          style: GoogleFonts.poppins(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: bgColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: textColor),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('campus_videos')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
+            );
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Text(
+                "No highlights available.",
+                style: GoogleFonts.poppins(color: Colors.grey, fontSize: 16),
+              ),
+            );
+          }
+
+          final videos = snapshot.data!.docs;
+
+          return GridView.builder(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 9 / 16, // Stories/Shorts Ratio
+            ),
+            itemCount: videos.length,
+            itemBuilder: (context, index) {
+              final data = videos[index].data() as Map<String, dynamic>;
+              final title = data['title'] ?? 'Video';
+              final thumbnailUrl = data['thumbnailUrl'] ?? '';
+              final videoUrl = data['videoUrl'] ?? '';
+
+              return GestureDetector(
+                onTap: () {
+                  if (videoUrl.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        transitionDuration: const Duration(milliseconds: 350),
+                        reverseTransitionDuration: const Duration(
+                          milliseconds: 300,
+                        ),
+                        pageBuilder: (context, animation, secondaryAnimation) {
+                          return HighlightVideoPlayerScreen(
+                            videoUrl: videoUrl,
+                            title: title,
+                            thumbnailUrl: thumbnailUrl,
+                          );
+                        },
+                        transitionsBuilder: (
+                          context,
+                          animation,
+                          secondaryAnimation,
+                          child,
+                        ) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          );
+                        },
+                      ),
+                    );
+                  }
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Hero(
+                        tag: 'campus_video_$videoUrl',
+                        child:
+                            thumbnailUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                  imageUrl: thumbnailUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder:
+                                      (context, url) => Container(
+                                        color:
+                                            isDark
+                                                ? Colors.white10
+                                                : Colors.black12,
+                                      ),
+                                  errorWidget:
+                                      (context, url, error) => const Icon(
+                                        Icons.error,
+                                        color: Colors.grey,
+                                      ),
+                                )
+                                : Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Color(0xFF3B2667),
+                                        Color(0xFFBC78EC),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                ),
+                      ),
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.center,
+                              colors: [
+                                Colors.black.withOpacity(0.9),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.5],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(
+                          Icons.play_circle_outline_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
+                        child: Text(
+                          title,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            height: 1.2,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

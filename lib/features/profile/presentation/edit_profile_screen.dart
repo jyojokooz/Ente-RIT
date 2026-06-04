@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: edit_profile_screen.dart
-// FILE PATH: lib/features/profile/presentation/edit_profile_screen.dart
+// FILE PATH: C:\Ente-RITEEE\Ente-RIT\lib\features\profile\presentation\edit_profile_screen.dart
 // ===============================
 
 import 'dart:io';
@@ -11,6 +11,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart'; // <-- ADDED FOR CROPPING
 
 // Import sub-components through the newly created connector file
 import 'package:my_project/features/profile/presentation/widgets/edit_profile_components.dart';
@@ -39,6 +40,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isUploadingImage = false;
 
   String _initialUsername = '';
+  DateTime?
+  _lastUsernameChange; // <-- Tracks when the username was last changed
   String? _profilePhotoUrl;
 
   List<String> _departmentOptions = [];
@@ -96,6 +99,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _portfolioController.text = data['portfolioUrl'] ?? '';
           _profilePhotoUrl = data['profilePhotoUrl'];
 
+          // Get the last username change date
+          _lastUsernameChange =
+              (data['lastUsernameChange'] as Timestamp?)?.toDate();
+
           final currentDept = data['department'];
           if (currentDept != null && _departmentOptions.contains(currentDept)) {
             _selectedDepartment = currentDept;
@@ -127,7 +134,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // --- IMAGE UPLOAD LOGIC TO FIREBASE STORAGE ---
+  // --- IMAGE UPLOAD & CROP LOGIC ---
   Future<void> _pickAndUploadImage() async {
     if (_isUploadingImage) return;
 
@@ -140,19 +147,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (pickedFile == null) return;
 
+      // 1. Crop the Image
+      final CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: pickedFile.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Picture',
+            toolbarColor: Colors.black,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: const Color(0xFFFF4B72), // Brand Pink
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true, // Lock to 1:1 for profile pictures
+            hideBottomControls: false,
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Picture',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+          ),
+        ],
+      );
+
+      if (croppedFile == null) return; // User cancelled cropping
+
       setState(() => _isUploadingImage = true);
 
+      // 2. Upload the Cropped Image
       final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final ref = FirebaseStorage.instance
           .ref()
           .child('users/${user.uid}')
           .child(fileName);
 
-      // ---> FIX: Added SettableMetadata <---
       await ref.putFile(
-        File(pickedFile.path),
+        File(croppedFile.path),
         SettableMetadata(contentType: 'image/jpeg'),
       );
+
       final downloadUrl = await ref.getDownloadURL();
 
       // Immediately save the new URL to Firestore so it reflects everywhere
@@ -201,18 +233,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final newUsername = _usernameController.text.trim();
     final newDisplayName = _nameController.text.trim();
 
-    // Username uniqueness check
-    if (newUsername.toLowerCase() != _initialUsername.toLowerCase()) {
+    final bool usernameChanged =
+        newUsername.toLowerCase() != _initialUsername.toLowerCase();
+
+    // Username checks: 30 days restriction and uniqueness
+    if (usernameChanged) {
+      // 1. Enforce 30 days rule
+      if (_lastUsernameChange != null) {
+        final difference = DateTime.now().difference(_lastUsernameChange!);
+        if (difference.inDays < 30) {
+          final daysLeft = 30 - difference.inDays;
+          setState(() => _isSaving = false);
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'You can change your username again in $daysLeft days.',
+              ),
+              backgroundColor: Colors.redAccent,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return;
+        }
+      }
+
+      // 2. Uniqueness Check (Only fails if another active user owns it)
       final querySnapshot =
           await FirebaseFirestore.instance
               .collection('users')
               .where('searchableUsername', isEqualTo: newUsername.toLowerCase())
               .get();
+
       if (querySnapshot.docs.isNotEmpty) {
         setState(() => _isSaving = false);
         scaffoldMessenger.showSnackBar(
           const SnackBar(
-            content: Text('Username taken. Please choose another.'),
+            content: Text(
+              'Username taken by an active user. Please choose another.',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -252,6 +310,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'linkedinUrl': _linkedinController.text.trim(),
         'githubUrl': _githubController.text.trim(),
         'portfolioUrl': _portfolioController.text.trim(),
+        // Update the timestamp only if the username actually changed
+        if (usernameChanged) 'lastUsernameChange': FieldValue.serverTimestamp(),
       };
 
       await userDocRef.set(userData, SetOptions(merge: true));
