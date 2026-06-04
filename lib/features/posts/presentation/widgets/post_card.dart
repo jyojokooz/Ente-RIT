@@ -99,6 +99,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
+  bool _isMuted = true; // Videos mute by default like Instagram
 
   final TransformationController _transformController =
       TransformationController();
@@ -115,14 +116,17 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+
+    // Like Button Bounce Animation
     _likeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+    _likeScaleAnimation = Tween<double>(begin: 1.0, end: 1.25).animate(
       CurvedAnimation(parent: _likeController!, curve: Curves.elasticOut),
     );
 
+    // Pinch-to-Zoom Snapback Animation
     _zoomAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -132,6 +136,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     _initializeLikeState();
 
+    // Initialize Video if Post is a Video
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData != null && postData['postType'] == 'video') {
       String url = postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
@@ -141,7 +146,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 Uri.parse(url),
                 httpHeaders: {'User-Agent': 'EnteRITApp'},
               )
-              ..setVolume(0) // Muted inline autoplay
+              ..setVolume(0.0) // Start muted
               ..setLooping(true)
               ..initialize()
                   .then((_) {
@@ -191,6 +196,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // Snaps the image back to original size when pinch is released
   void _resetZoom() {
     _zoomAnimation = Matrix4Tween(
       begin: _transformController.value,
@@ -204,6 +210,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _zoomAnimationController!.forward(from: 0);
   }
 
+  // Play/Pause Video based on scroll visibility
   void _onVisibilityChanged(VisibilityInfo info) {
     if (info.visibleFraction > 0.6) {
       if (_videoController != null && !_videoController!.value.isPlaying) {
@@ -220,10 +227,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
+  // Large Double Tap Heart Animation
   void _triggerDoubleTapLike() {
-    setState(() {
-      _showHeartOverlay = true;
-    });
+    setState(() => _showHeartOverlay = true);
 
     Timer(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _showHeartOverlay = false);
@@ -234,6 +240,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
+  // Small Like Button Press
   void _triggerLikeButtonPress() {
     final bool newLikeState = !_isLiked;
 
@@ -266,7 +273,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Set exactly to your home screen's background color so it seamlessly blends edge-to-edge
     final cardBgColor =
         isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -292,227 +298,205 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final Map<String, dynamic>? musicData = postData['music'];
     final String location = postData['location'] ?? '';
 
+    // Directly use stored names to prevent disappearing text
+    final String displayName = postData['userName'] ?? 'Unknown';
+    final String profilePic = postData['userImageUrl'] ?? '';
+
+    String formattedTime = timestamp != null ? _formatTime(timestamp) : '';
+    String subText = '';
+    if (musicData != null && musicData['trackName'] != null) {
+      subText = "${musicData['artistName']} • ${musicData['trackName']}";
+    } else if (location.isNotEmpty) {
+      subText = location;
+    }
+
     return VisibilityDetector(
       key: Key('post-vis-${widget.postSnapshot.id}'),
       onVisibilityChanged: _onVisibilityChanged,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 24),
         color: cardBgColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
-            StreamBuilder<DocumentSnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(postAuthorId)
-                      .snapshots(),
-              builder: (context, authorSnap) {
-                String currentDisplayName = postData['userName'] ?? 'Unknown';
-                String currentProfilePic = postData['userImageUrl'] ?? '';
-
-                if (authorSnap.hasData && authorSnap.data!.exists) {
-                  final authorDocData =
-                      authorSnap.data!.data() as Map<String, dynamic>;
-                  currentDisplayName =
-                      authorDocData['displayName'] ?? currentDisplayName;
-                  currentProfilePic =
-                      authorDocData['profilePhotoUrl'] ?? currentProfilePic;
-                }
-
-                String formattedTime =
-                    timestamp != null ? _formatTime(timestamp) : '';
-
-                String subText = '';
-                if (musicData != null && musicData['trackName'] != null) {
-                  subText =
-                      "${musicData['artistName']} • ${musicData['trackName']}";
-                } else if (location.isNotEmpty) {
-                  subText = location;
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      // Profile Click Area
-                      GestureDetector(
-                        onTap: widget.onProfileTapped,
-                        child: Row(
+            // ==========================================
+            // 1. INSTAGRAM STYLE HEADER
+            // ==========================================
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: widget.onProfileTapped,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor:
+                              isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade300,
+                          backgroundImage:
+                              profilePic.isNotEmpty
+                                  ? CachedNetworkImageProvider(
+                                    profilePic,
+                                    cacheManager: AppCacheManager.instance,
+                                  )
+                                  : null,
+                          child:
+                              profilePic.isEmpty
+                                  ? Icon(
+                                    Icons.person,
+                                    color: subtitleColor,
+                                    size: 20,
+                                  )
+                                  : null,
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Color(0xFF9983F3),
-                                    Color(0xFFFF4B72),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                              child: CircleAvatar(
-                                radius: 16,
-                                backgroundColor:
-                                    isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade200,
-                                backgroundImage:
-                                    currentProfilePic.isNotEmpty
-                                        ? CachedNetworkImageProvider(
-                                          currentProfilePic,
-                                          cacheManager:
-                                              AppCacheManager.instance,
-                                        )
-                                        : null,
-                                child:
-                                    currentProfilePic.isEmpty
-                                        ? Icon(
-                                          Icons.person,
-                                          color: subtitleColor,
-                                          size: 20,
-                                        )
-                                        : null,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
                               children: [
-                                Row(
+                                Text(
+                                  displayName,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '• $formattedTime',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: subtitleColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (subText.isNotEmpty)
+                              GestureDetector(
+                                onTap: () {
+                                  if (musicData != null &&
+                                      musicData['previewUrl'] != null) {
+                                    GlobalAudioHandler.playOrPause(
+                                      widget.postSnapshot.id,
+                                      musicData['previewUrl'],
+                                      (isPlaying) {
+                                        if (mounted)
+                                          setState(
+                                            () => _isPlayingMusic = isPlaying,
+                                          );
+                                      },
+                                    );
+                                  }
+                                },
+                                child: Row(
                                   children: [
+                                    if (musicData != null)
+                                      Icon(
+                                        _isPlayingMusic
+                                            ? Icons.graphic_eq
+                                            : Icons.music_note_rounded,
+                                        size: 12,
+                                        color: textColor,
+                                      ),
+                                    if (musicData != null)
+                                      const SizedBox(width: 4),
                                     Text(
-                                      currentDisplayName,
+                                      subText,
                                       style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
                                         color: textColor,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '• $formattedTime',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 13,
-                                        color: subtitleColor,
-                                      ),
-                                    ),
                                   ],
                                 ),
-                                if (subText.isNotEmpty)
-                                  Row(
-                                    children: [
-                                      if (musicData != null)
-                                        Icon(
-                                          _isPlayingMusic
-                                              ? Icons.graphic_eq
-                                              : Icons.music_note_rounded,
-                                          size: 12,
-                                          color: textColor,
-                                        ),
-                                      if (musicData != null)
-                                        const SizedBox(width: 4),
-                                      Text(
-                                        subText,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 11,
-                                          color: textColor,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                              ],
-                            ),
+                              ),
                           ],
                         ),
-                      ),
-                      const Spacer(),
-                      PopupMenuButton<String>(
-                        color: theme.colorScheme.surface,
-                        onSelected: (val) async {
-                          if (val == 'edit') widget.onEditPressed();
-                          if (val == 'delete') widget.onDeletePressed();
-                          if (val == 'report') {
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('reported_content')
-                                  .add({
-                                    'postId': widget.postSnapshot.id,
-                                    'reportedBy': currentUserId,
-                                    'authorId': postAuthorId,
-                                    'timestamp': FieldValue.serverTimestamp(),
-                                    'status': 'pending_review',
-                                  });
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Post reported."),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Failed to report."),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                          }
-                        },
-                        icon: Icon(
-                          Icons.more_horiz,
-                          color: textColor,
-                          size: 24,
-                        ),
-                        itemBuilder:
-                            (ctx) => [
-                              if (isAuthor) ...[
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text(
-                                    'Edit',
-                                    style: TextStyle(color: textColor),
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ] else ...[
-                                const PopupMenuItem(
-                                  value: 'report',
-                                  child: Text(
-                                    'Report',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                            ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                );
-              },
+                  const Spacer(),
+                  PopupMenuButton<String>(
+                    color: theme.colorScheme.surface,
+                    onSelected: (val) async {
+                      if (val == 'edit') widget.onEditPressed();
+                      if (val == 'delete') widget.onDeletePressed();
+                      if (val == 'report') {
+                        try {
+                          await FirebaseFirestore.instance
+                              .collection('reported_content')
+                              .add({
+                                'postId': widget.postSnapshot.id,
+                                'reportedBy': currentUserId,
+                                'authorId': postAuthorId,
+                                'timestamp': FieldValue.serverTimestamp(),
+                                'status': 'pending_review',
+                              });
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Post reported."),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Failed to report."),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    icon: Icon(Icons.more_horiz, color: textColor, size: 24),
+                    itemBuilder:
+                        (ctx) => [
+                          if (isAuthor) ...[
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text(
+                                'Edit',
+                                style: TextStyle(color: textColor),
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ] else ...[
+                            const PopupMenuItem(
+                              value: 'report',
+                              child: Text(
+                                'Report',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ],
+                        ],
+                  ),
+                ],
+              ),
             ),
 
-            // --- MEDIA (EDGE TO EDGE) ---
+            // ==========================================
+            // 2. EDGE-TO-EDGE MEDIA RENDERING
+            // ==========================================
             if (mediaUrls.isNotEmpty)
               GestureDetector(
                 onDoubleTap: _triggerDoubleTapLike,
@@ -530,38 +514,97 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     );
                   }
                 },
-                child: AspectRatio(
-                  aspectRatio: 4 / 5, // Standard modern portrait feed ratio
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    // Stops vertical images from being ridiculously long, but allows natural width filling
+                    maxHeight: MediaQuery.of(context).size.height * 0.75,
+                    minWidth: double.infinity,
+                  ),
                   child: Stack(
+                    alignment: Alignment.center,
                     children: [
+                      // --- MEDIA DISPLAYER ---
                       postType == 'video'
                           ? (_isVideoInitialized && _videoController != null
-                              ? SizedBox.expand(
-                                child: FittedBox(
-                                  fit: BoxFit.cover,
-                                  child: SizedBox(
-                                    width: _videoController!.value.size.width,
-                                    height: _videoController!.value.size.height,
-                                    child: VideoPlayer(_videoController!),
-                                  ),
-                                ),
+                              ? AspectRatio(
+                                aspectRatio:
+                                    _videoController!.value.aspectRatio,
+                                child: VideoPlayer(_videoController!),
                               )
-                              : _buildNetworkImage(
-                                originalThumbnailUrl ?? '',
-                                isDark,
+                              : CachedNetworkImage(
+                                imageUrl: originalThumbnailUrl ?? '',
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                placeholder:
+                                    (c, u) => Container(
+                                      color:
+                                          isDark
+                                              ? Colors.white10
+                                              : Colors.black12,
+                                    ),
                               ))
                           : InteractiveViewer(
                             transformationController: _transformController,
-                            panEnabled: true,
+                            panEnabled: false, // Prevents panning unless zoomed
                             scaleEnabled: true,
                             minScale: 1.0,
                             maxScale: 4.0,
                             clipBehavior: Clip.none,
                             onInteractionEnd: (_) => _resetZoom(),
-                            child: _buildNetworkImage(mediaUrls.first, isDark),
+                            child: CachedNetworkImage(
+                              imageUrl: mediaUrls.first,
+                              width: double.infinity,
+                              fit:
+                                  BoxFit
+                                      .cover, // Fills width smoothly without gaps
+                              placeholder:
+                                  (c, u) => Container(
+                                    color:
+                                        isDark
+                                            ? Colors.white10
+                                            : Colors.black12,
+                                  ),
+                              errorWidget:
+                                  (c, u, e) => Container(
+                                    color: isDark ? Colors.black : Colors.white,
+                                    child: const Icon(
+                                      Icons.error,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                            ),
                           ),
 
-                      // Multi Image Badge
+                      // --- VIDEO MUTE TOGGLE ---
+                      if (postType == 'video')
+                        Positioned(
+                          bottom: 12,
+                          right: 12,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isMuted = !_isMuted;
+                                _videoController?.setVolume(
+                                  _isMuted ? 0.0 : 1.0,
+                                );
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _isMuted ? Icons.volume_off : Icons.volume_up,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // --- MULTI IMAGE BADGE ---
                       if (mediaUrls.length > 1)
                         Positioned(
                           top: 12,
@@ -586,33 +629,33 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           ),
                         ),
 
-                      // Fast Pop-up Heart Animation Overlay
+                      // --- DOUBLE TAP HEART OVERLAY ---
                       if (_showHeartOverlay)
-                        Center(
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.5, end: 1.2),
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.elasticOut,
-                            builder: (context, scale, child) {
-                              return Transform.scale(
-                                scale: scale,
-                                child: Icon(
-                                  Icons.favorite,
-                                  color: Colors.white.withOpacity(0.9),
-                                  size: 100,
-                                ),
-                              );
-                            },
-                          ),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.5, end: 1.2),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.elasticOut,
+                          builder: (context, scale, child) {
+                            return Transform.scale(
+                              scale: scale,
+                              child: Icon(
+                                Icons.favorite,
+                                color: Colors.white.withOpacity(0.9),
+                                size: 100,
+                              ),
+                            );
+                          },
                         ),
                     ],
                   ),
                 ),
               ),
 
-            // --- BOTTOM ACTIONS ---
+            // ==========================================
+            // 3. ACTION BAR
+            // ==========================================
             Padding(
-              padding: const EdgeInsets.only(left: 4, right: 12, top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Row(
                 children: [
                   IconButton(
@@ -622,7 +665,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       child: Icon(
                         _isLiked ? Icons.favorite : Icons.favorite_border,
                         color: _isLiked ? const Color(0xFFFF4B72) : textColor,
-                        size: 26,
+                        size: 28,
                       ),
                     ),
                   ),
@@ -631,7 +674,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     icon: Icon(
                       Icons.chat_bubble_outline_rounded,
                       color: textColor,
-                      size: 24,
+                      size: 26,
                     ),
                   ),
                   IconButton(
@@ -650,16 +693,15 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                 SharePostSheet(postId: widget.postSnapshot.id),
                       );
                     },
-                    icon: Icon(Icons.send_outlined, color: textColor, size: 24),
+                    icon: Icon(Icons.send_outlined, color: textColor, size: 26),
                   ),
-                  const Spacer(),
-                  // Visual Bookmark Button (non-functional right align like IG)
-                  Icon(Icons.bookmark_border, color: textColor, size: 26),
                 ],
               ),
             ),
 
-            // --- LIKES COUNT ---
+            // ==========================================
+            // 4. LIKES & CAPTION
+            // ==========================================
             if (_likesCount > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -668,12 +710,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   style: GoogleFonts.poppins(
                     color: textColor,
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 14,
                   ),
                 ),
               ),
 
-            // --- CAPTION ---
             if (caption.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -682,10 +723,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
                 child: RichText(
                   text: TextSpan(
-                    style: GoogleFonts.poppins(color: textColor, fontSize: 13),
+                    style: GoogleFonts.poppins(color: textColor, fontSize: 14),
                     children: [
                       TextSpan(
-                        text: "${postData['userName'] ?? 'User'} ",
+                        text: "$displayName ",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       TextSpan(
@@ -710,7 +751,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
               ),
 
-            // --- COMMENTS TRIGGER ---
+            // ==========================================
+            // 5. COMMENTS TRIGGER
+            // ==========================================
             if (commentsCount > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -723,35 +766,16 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     "View all $commentsCount comments",
                     style: GoogleFonts.poppins(
                       color: subtitleColor,
-                      fontSize: 13,
+                      fontSize: 14,
                     ),
                   ),
                 ),
               ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildNetworkImage(String url, bool isDark) {
-    if (url.isEmpty) {
-      return Container(color: isDark ? Colors.white10 : Colors.grey.shade200);
-    }
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      cacheManager: AppCacheManager.instance,
-      placeholder:
-          (c, u) =>
-              Container(color: isDark ? Colors.white10 : Colors.grey.shade200),
-      errorWidget:
-          (c, u, e) => Container(
-            color: isDark ? Colors.black : Colors.white,
-            child: const Icon(Icons.error, color: Colors.grey),
-          ),
     );
   }
 }
