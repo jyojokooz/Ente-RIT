@@ -11,9 +11,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:my_project/features/profile/presentation/connections_screen.dart';
 import 'package:my_project/features/profile/presentation/edit_profile_screen.dart';
+import 'package:my_project/features/profile/presentation/settings_screen.dart'; // <-- IMPORT NEW SETTINGS
 import 'package:my_project/features/chat/presentation/chat_screen.dart';
 import 'package:my_project/features/admin/presentation/admin_panel_screen.dart';
-import 'package:my_project/core/constants/theme_provider.dart';
 
 import 'package:my_project/features/stories/presentation/stories_connector.dart';
 import 'package:my_project/features/profile/domain/connection_status.dart';
@@ -114,12 +114,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Future<void> _logout() async {
-    await FirebaseAuth.instance.signOut();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/auth-gate', (route) => false);
-  }
-
   void _viewMingles(
     List<dynamic> connections,
     String displayName,
@@ -185,27 +179,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     await batch.commit();
   }
 
-  Future<void> _togglePrivacy(bool isPrivate) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser!.uid)
-          .update({'isPrivate': isPrivate});
-      final postsQuery =
-          await FirebaseFirestore.instance
-              .collection('posts')
-              .where('userId', isEqualTo: _currentUser!.uid)
-              .get();
-      final batch = FirebaseFirestore.instance.batch();
-      for (var doc in postsQuery.docs) {
-        batch.update(doc.reference, {'isAuthorPrivate': isPrivate});
-      }
-      await batch.commit();
-    } catch (e) {
-      debugPrint("Failed to update privacy: $e");
-    }
-  }
-
   void _showShareProfileSheet(
     String username,
     String displayName,
@@ -221,175 +194,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             username: username,
             displayName: displayName,
             profilePhotoUrl: profilePhotoUrl,
-          ),
-    );
-  }
-
-  void _showSettingsBottomSheet(BuildContext context, bool isPrivate) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (context) => SafeArea(
-            child: StatefulBuilder(
-              builder: (BuildContext context, StateSetter setModalState) {
-                return AnimatedBuilder(
-                  animation: themeProvider,
-                  builder: (context, child) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(vertical: 12),
-                          height: 4,
-                          width: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[400],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        SwitchListTile(
-                          title: Text(
-                            'Dark Mode',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          secondary: Icon(
-                            themeProvider.isDarkMode
-                                ? Icons.dark_mode
-                                : Icons.light_mode,
-                            color: const Color(0xFF673AB7),
-                          ),
-                          value: themeProvider.isDarkMode,
-                          onChanged:
-                              (value) => themeProvider.toggleTheme(value),
-                          activeThumbColor: const Color(0xFF673AB7),
-                        ),
-                        SwitchListTile(
-                          title: Text(
-                            'Private Account',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Only mingles can see your posts.',
-                            style: GoogleFonts.poppins(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
-                          secondary: Icon(
-                            isPrivate ? Icons.lock : Icons.lock_open,
-                            color: const Color(0xFF00C6FB),
-                          ),
-                          value: isPrivate,
-                          onChanged: (value) {
-                            setModalState(() => isPrivate = value);
-                            _togglePrivacy(value);
-                          },
-                          activeThumbColor: const Color(0xFF673AB7),
-                        ),
-                        Divider(color: Theme.of(context).dividerColor),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.logout,
-                            color: Colors.orange,
-                          ),
-                          title: Text(
-                            'Log Out',
-                            style: GoogleFonts.poppins(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _logout();
-                          },
-                        ),
-                        // --- PLAY STORE REQUIREMENT: DELETE ACCOUNT BUTTON ---
-                        ListTile(
-                          leading: const Icon(
-                            Icons.delete_forever,
-                            color: Colors.red,
-                          ),
-                          title: Text(
-                            'Delete Account',
-                            style: GoogleFonts.poppins(
-                              color: Colors.red,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onTap: () async {
-                            Navigator.pop(context); // close sheet
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder:
-                                  (ctx) => AlertDialog(
-                                    backgroundColor:
-                                        Theme.of(context).colorScheme.surface,
-                                    title: const Text(
-                                      "Delete Account?",
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                    content: const Text(
-                                      "This action is permanent and cannot be undone. All your data will be erased.",
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed:
-                                            () => Navigator.pop(ctx, false),
-                                        child: const Text("Cancel"),
-                                      ),
-                                      TextButton(
-                                        onPressed:
-                                            () => Navigator.pop(ctx, true),
-                                        child: const Text(
-                                          "Delete Forever",
-                                          style: TextStyle(color: Colors.red),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                            );
-
-                            if (confirm == true) {
-                              try {
-                                await FirebaseAuth.instance.currentUser
-                                    ?.delete();
-                                if (context.mounted) {
-                                  Navigator.pushNamedAndRemoveUntil(
-                                    context,
-                                    '/auth-gate',
-                                    (route) => false,
-                                  );
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        "Please log out and log back in to verify your identity before deleting.",
-                                      ),
-                                    ),
-                                  );
-                                }
-                              }
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
           ),
     );
   }
@@ -473,7 +277,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   .snapshots(),
           builder: (context, snapshot) {
             String username = "Profile";
-            // --- FIX: Read as map to prevent missing field crashes ---
             if (snapshot.hasData && snapshot.data!.exists) {
               final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
               username = data['username'] ?? 'Profile';
@@ -497,13 +300,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                       .doc(_currentUser!.uid)
                       .snapshots(),
               builder: (context, snapshot) {
-                bool isPrivate = false;
                 bool isAdmin = false;
-                // --- FIX: Read as map to prevent missing field crashes ---
                 if (snapshot.hasData && snapshot.data!.exists) {
                   final data =
                       snapshot.data!.data() as Map<String, dynamic>? ?? {};
-                  isPrivate = data['isPrivate'] ?? false;
                   isAdmin = data['isAdmin'] ?? false;
                 }
                 return Row(
@@ -522,6 +322,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
                       ),
+
+                    // --- NEW SETTINGS BUTTON NAVIGATION ---
                     IconButton(
                       icon: Icon(
                         Icons.menu_rounded,
@@ -529,7 +331,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                         size: 28,
                       ),
                       onPressed:
-                          () => _showSettingsBottomSheet(context, isPrivate),
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          ),
                     ),
                   ],
                 );
