@@ -1,9 +1,7 @@
 // ===============================
 // FILE NAME: classify_screen.dart
-// FILE PATH: lib/screens/pages/classify_screen.dart
+// FILE PATH: lib/features/campus/presentation/classify_screen.dart
 // ===============================
-
-// ignore_for_file: deprecated_member_use
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +41,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // UPDATED: Now matches Profile Screen's background color
     final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtitleColor = isDark ? Colors.white54 : Colors.black54;
@@ -106,18 +103,25 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                     return const Center(
                       child: CircularProgressIndicator(
                         color: Color(0xFFFF3E8E),
-                      ), // Pink loading indicator
+                      ),
                     );
                   }
 
                   final allDocs = snapshot.data!.docs;
-                  final visibleDocs =
+
+                  // --- THE FIX IS HERE ---
+                  // We strictly filter the list to only include features that are BOTH
+                  // visible in the DB AND actually exist in the local code configuration.
+                  final validDocs =
                       allDocs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
-                        return data['isVisible'] == true;
+                        final isVisible = data['isVisible'] == true;
+                        final existsInCode = FeatureConfig.featureMap
+                            .containsKey(doc.id);
+                        return isVisible && existsInCode;
                       }).toList();
 
-                  if (visibleDocs.isEmpty) {
+                  if (validDocs.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -153,38 +157,36 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                       ),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.8,
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.85,
                           ),
-                      itemCount: visibleDocs.length,
+                      itemCount: validDocs.length,
                       itemBuilder: (context, index) {
-                        final id = visibleDocs[index].id;
-                        final config = FeatureConfig.featureMap[id];
+                        final id = validDocs[index].id;
+                        final config =
+                            FeatureConfig
+                                .featureMap[id]!; // Guaranteed to exist now
 
-                        if (config != null) {
-                          return _ModernFeatureCard(
-                            label: config['label'],
-                            icon: config['icon'],
-                            color: config['color'],
-                            isDark: isDark,
-                            onTap: () {
-                              if (config.containsKey('url')) {
-                                _launchURL(config['url']);
-                              } else if (config.containsKey('screen')) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => config['screen'],
-                                  ),
-                                );
-                              }
-                            },
-                          );
-                        } else {
-                          return const SizedBox.shrink();
-                        }
+                        return _ModernFeatureCard(
+                          label: config['label'],
+                          icon: config['icon'],
+                          color: config['color'],
+                          isDark: isDark,
+                          onTap: () {
+                            if (config.containsKey('url')) {
+                              _launchURL(config['url']);
+                            } else if (config.containsKey('screen')) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => config['screen'],
+                                ),
+                              );
+                            }
+                          },
+                        );
                       },
                     ),
                   );
@@ -257,14 +259,14 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
+          padding: const EdgeInsets.all(8), // Keeps text from touching edges
           decoration: BoxDecoration(
             color: cardColor,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               if (!widget.isDark)
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
-                  spreadRadius: 1,
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -272,30 +274,30 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                height: 48,
-                width: 48,
+                height: 50,
+                width: 50,
                 decoration: BoxDecoration(
                   color: widget.color.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(widget.icon, color: widget.color, size: 24),
+                child: Icon(widget.icon, color: widget.color, size: 26),
               ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Center(
                   child: Text(
                     widget.label,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                       color: textColor,
-                      height: 1.2,
+                      height: 1.1, // Fixed line height to prevent text clipping
                     ),
                   ),
                 ),
