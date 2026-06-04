@@ -1,5 +1,6 @@
 // ===============================
-// FILE PATH: lib/screens/create_post/step1_media_picker.dart
+// FILE NAME: step1_media_picker.dart
+// FILE PATH: lib/features/posts/presentation/widgets/step1_media_picker.dart
 // ===============================
 
 import 'dart:io';
@@ -8,7 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:video_thumbnail/video_thumbnail.dart'
+    as vt; // Aliased to prevent conflicts
 import 'package:path_provider/path_provider.dart';
 import 'package:my_project/features/posts/presentation/create_post_screen.dart';
 
@@ -73,6 +75,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
   Future<void> _fetchAlbums() async {
     final PermissionState ps = await PhotoManager.requestPermissionExtend();
 
+    if (!mounted) return; // Check if user left screen during permission prompt
+
     if (ps.isAuth || ps.hasAccess) {
       setState(() => _hasPermission = true);
 
@@ -90,6 +94,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
         filterOption: filterOptionGroup,
       );
 
+      if (!mounted) return; // Guard against unmounted state
+
       if (albums.isNotEmpty) {
         setState(() {
           _albums = albums;
@@ -100,6 +106,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
         setState(() => _isLoading = false);
       }
     } else {
+      if (!mounted) return;
       setState(() {
         _hasPermission = false;
         _isLoading = false;
@@ -119,6 +126,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
       page: _currentPage,
       size: _pageSize,
     );
+
+    if (!mounted) return; // Guard against unmounted state
 
     setState(() {
       _mediaList = media;
@@ -143,6 +152,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
       size: _pageSize,
     );
 
+    if (!mounted) return; // Guard against unmounted state
+
     setState(() {
       _mediaList.addAll(moreMedia);
       _hasMore = moreMedia.length == _pageSize;
@@ -154,7 +165,7 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     final pickedFile = await ImagePicker().pickImage(
       source: ImageSource.camera,
     );
-    if (pickedFile != null) {
+    if (pickedFile != null && mounted) {
       widget.onMediaPicked([File(pickedFile.path)], PostType.image, null);
     }
   }
@@ -165,6 +176,8 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     setState(() => _isProcessingNext = true);
     final File? file = await _selectedMedia!.file;
 
+    if (!mounted) return; // Guard against unmounted state
+
     if (file == null) {
       setState(() => _isProcessingNext = false);
       return;
@@ -173,12 +186,14 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
     if (_selectedMedia!.type == AssetType.video) {
       try {
         final tempDir = await getTemporaryDirectory();
-        final thumbPath = await VideoThumbnail.thumbnailFile(
+        final thumbPath = await vt.VideoThumbnail.thumbnailFile(
           video: file.path,
           thumbnailPath: tempDir.path,
-          imageFormat: ImageFormat.JPEG,
+          imageFormat: vt.ImageFormat.JPEG,
           quality: 75,
         );
+
+        if (!mounted) return; // Guard against unmounted state
 
         widget.onMediaPicked(
           [file],
@@ -186,12 +201,11 @@ class _Step1MediaPickerState extends State<Step1MediaPicker> {
           thumbPath != null ? File(thumbPath) : null,
         );
       } catch (e) {
+        if (!mounted) return;
         setState(() => _isProcessingNext = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed to process video: $e")),
-          );
-        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to process video: $e")));
       }
     } else {
       widget.onMediaPicked([file], PostType.image, null);
