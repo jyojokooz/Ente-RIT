@@ -163,6 +163,7 @@ flutter:
     - assets/ente_rit.png
     - assets/default_avatar.png
     - assets/enterit_logo.png
+    - assets/enterit_logo_light.png
 
 flutter_native_splash:
   color: "#000000" # Forces the absolute first native frame to be black

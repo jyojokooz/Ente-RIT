@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: home_header.dart
-// FILE PATH: lib/widgets/home/home_header.dart
+// FILE PATH: lib/features/home/presentation/widgets/home_header.dart
 // ===============================
 
 // ignore_for_file: deprecated_member_use
@@ -80,8 +80,11 @@ class HomeHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // --- DYNAMIC LOGO BASED ON THEME ---
           Image.asset(
-            'assets/enterit_logo.png', // Ensure this matches your filename in the assets folder
+            isDark
+                ? 'assets/enterit_logo.png'
+                : 'assets/enterit_logo_light.png',
             height: 38,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
