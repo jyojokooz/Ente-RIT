@@ -8,14 +8,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:video_player/video_player.dart';
 
-// --- FIXED IMPORT: Pointing to the new media_viewers connector ---
 import 'package:my_project/core/widgets/media_viewers/media_viewers_connector.dart';
-
 import 'package:my_project/features/posts/presentation/widgets/share_post_sheet.dart';
 import 'package:my_project/core/utils/app_cache_manager.dart';
 
@@ -99,9 +97,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   AnimationController? _likeController;
   late Animation<double> _likeScaleAnimation;
 
+  VideoPlayerController? _videoController;
+  bool _isVideoInitialized = false;
+
+  final TransformationController _transformController =
+      TransformationController();
+  AnimationController? _zoomAnimationController;
+  Animation<Matrix4>? _zoomAnimation;
+
+  bool _isCaptionExpanded = false;
+
   // Optimistic UI State
   late bool _isLiked;
   late int _likesCount;
+  bool _showHeartOverlay = false;
 
   @override
   void initState() {
@@ -114,7 +123,35 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       CurvedAnimation(parent: _likeController!, curve: Curves.elasticOut),
     );
 
+    _zoomAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    )..addListener(() {
+      _transformController.value = _zoomAnimation!.value;
+    });
+
     _initializeLikeState();
+
+    final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
+    if (postData != null && postData['postType'] == 'video') {
+      String url = postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
+      if (url.isNotEmpty) {
+        _videoController =
+            VideoPlayerController.networkUrl(
+                Uri.parse(url),
+                httpHeaders: {'User-Agent': 'EnteRITApp'},
+              )
+              ..setVolume(0) // Muted inline autoplay
+              ..setLooping(true)
+              ..initialize()
+                  .then((_) {
+                    if (mounted) setState(() => _isVideoInitialized = true);
+                  })
+                  .catchError((e) {
+                    debugPrint('PostCard Video Init Error: $e');
+                  });
+      }
+    }
   }
 
   void _initializeLikeState() {
@@ -138,6 +175,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
       _isPlayingMusic = false;
     }
+    _videoController?.pause();
     super.deactivate();
   }
 
@@ -146,14 +184,53 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     if (_isPlayingMusic) {
       GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
     }
+    _videoController?.dispose();
+    _transformController.dispose();
+    _zoomAnimationController?.dispose();
     _likeController?.dispose();
     super.dispose();
   }
 
+  void _resetZoom() {
+    _zoomAnimation = Matrix4Tween(
+      begin: _transformController.value,
+      end: Matrix4.identity(),
+    ).animate(
+      CurvedAnimation(
+        parent: _zoomAnimationController!,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _zoomAnimationController!.forward(from: 0);
+  }
+
   void _onVisibilityChanged(VisibilityInfo info) {
-    if (info.visibleFraction < 0.5 && _isPlayingMusic) {
-      GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
-      if (mounted) setState(() => _isPlayingMusic = false);
+    if (info.visibleFraction > 0.6) {
+      if (_videoController != null && !_videoController!.value.isPlaying) {
+        _videoController!.play();
+      }
+    } else {
+      if (_videoController != null && _videoController!.value.isPlaying) {
+        _videoController!.pause();
+      }
+      if (info.visibleFraction < 0.2 && _isPlayingMusic) {
+        GlobalAudioHandler.stopIfPlaying(widget.postSnapshot.id);
+        if (mounted) setState(() => _isPlayingMusic = false);
+      }
+    }
+  }
+
+  void _triggerDoubleTapLike() {
+    setState(() {
+      _showHeartOverlay = true;
+    });
+
+    Timer(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _showHeartOverlay = false);
+    });
+
+    if (!_isLiked) {
+      _triggerLikeButtonPress();
     }
   }
 
@@ -172,34 +249,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     widget.onLikePressed(newLikeState);
   }
 
-  String getOptimizedUrl(String originalUrl) {
-    return originalUrl;
-  }
-
-  String _getAcronym(String name) {
-    if (name.isEmpty) return "";
-    String lowerName = name.toLowerCase();
-
-    if (lowerName.contains("mca") || lowerName.contains("application")) {
-      return "MCA";
-    }
-    if (lowerName.contains("computer")) return "CSE";
-    if (lowerName.contains("mechanical")) return "ME";
-    if (lowerName.contains("electrical") && lowerName.contains("electronics")) {
-      return "EEE";
-    }
-    if (lowerName.contains("electronics") &&
-        lowerName.contains("communication")) {
-      return "ECE";
-    }
-    if (lowerName.contains("civil")) return "CE";
-    if (lowerName.contains("architecture")) return "B.Arch";
-
-    List<String> words = name.split(" ");
-    if (words.length > 1) {
-      return words.take(2).map((e) => e[0].toUpperCase()).join();
-    }
-    return name.substring(0, 2).toUpperCase();
+  String _formatTime(DateTime timestamp) {
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inDays > 0) return '${diff.inDays}d';
+    if (diff.inHours > 0) return '${diff.inHours}h';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
+    return 'Now';
   }
 
   @override
@@ -211,9 +266,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final cardBgColor = isDark ? const Color(0xFF121215) : Colors.white;
+    // Set exactly to your home screen's background color so it seamlessly blends edge-to-edge
+    final cardBgColor =
+        isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subtitleColor = isDark ? Colors.white60 : Colors.black54;
+    final subtitleColor = isDark ? Colors.white54 : Colors.black54;
 
     final String postAuthorId = postData['userId'] ?? '';
     final String postType = postData['postType'] ?? 'image';
@@ -233,25 +290,18 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final timestamp = (postData['timestamp'] as Timestamp?)?.toDate();
     final int commentsCount = postData['comments'] ?? 0;
     final Map<String, dynamic>? musicData = postData['music'];
+    final String location = postData['location'] ?? '';
 
     return VisibilityDetector(
       key: Key('post-vis-${widget.postSnapshot.id}'),
       onVisibilityChanged: _onVisibilityChanged,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cardBgColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark ? Colors.white10 : Colors.black12,
-            width: 1,
-          ),
-        ),
+        margin: const EdgeInsets.only(bottom: 16),
+        color: cardBgColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER (Avatar, Name, Dept, Time) ---
+            // --- HEADER ---
             StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -261,7 +311,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               builder: (context, authorSnap) {
                 String currentDisplayName = postData['userName'] ?? 'Unknown';
                 String currentProfilePic = postData['userImageUrl'] ?? '';
-                String department = '';
 
                 if (authorSnap.hasData && authorSnap.data!.exists) {
                   final authorDocData =
@@ -270,451 +319,439 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       authorDocData['displayName'] ?? currentDisplayName;
                   currentProfilePic =
                       authorDocData['profilePhotoUrl'] ?? currentProfilePic;
-                  department = authorDocData['department'] ?? '';
                 }
 
-                String deptAcronym = _getAcronym(department);
                 String formattedTime =
-                    timestamp != null
-                        ? DateFormat("MMM d 'at' h:mm a").format(timestamp)
-                        : '';
+                    timestamp != null ? _formatTime(timestamp) : '';
 
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: widget.onProfileTapped,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF9983F3), Color(0xFFFF4B72)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: cardBgColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: CircleAvatar(
-                            radius: 20,
-                            backgroundColor:
-                                isDark
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade200,
-                            backgroundImage:
-                                currentProfilePic.isNotEmpty
-                                    ? CachedNetworkImageProvider(
-                                      currentProfilePic,
-                                      cacheManager: AppCacheManager.instance,
-                                    )
-                                    : null,
-                            child:
-                                currentProfilePic.isEmpty
-                                    ? Icon(Icons.person, color: subtitleColor)
-                                    : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            currentDisplayName,
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                              letterSpacing: 0.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Text(
-                                formattedTime,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: subtitleColor,
+                String subText = '';
+                if (musicData != null && musicData['trackName'] != null) {
+                  subText =
+                      "${musicData['artistName']} • ${musicData['trackName']}";
+                } else if (location.isNotEmpty) {
+                  subText = location;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      // Profile Click Area
+                      GestureDetector(
+                        onTap: widget.onProfileTapped,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFF9983F3),
+                                    Color(0xFFFF4B72),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
                               ),
-                              if (deptAcronym.isNotEmpty) ...[
-                                Text(
-                                  ' • ',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: subtitleColor,
+                              child: CircleAvatar(
+                                radius: 16,
+                                backgroundColor:
+                                    isDark
+                                        ? Colors.grey.shade800
+                                        : Colors.grey.shade200,
+                                backgroundImage:
+                                    currentProfilePic.isNotEmpty
+                                        ? CachedNetworkImageProvider(
+                                          currentProfilePic,
+                                          cacheManager:
+                                              AppCacheManager.instance,
+                                        )
+                                        : null,
+                                child:
+                                    currentProfilePic.isEmpty
+                                        ? Icon(
+                                          Icons.person,
+                                          color: subtitleColor,
+                                          size: 20,
+                                        )
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      currentDisplayName,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColor,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '• $formattedTime',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        color: subtitleColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (subText.isNotEmpty)
+                                  Row(
+                                    children: [
+                                      if (musicData != null)
+                                        Icon(
+                                          _isPlayingMusic
+                                              ? Icons.graphic_eq
+                                              : Icons.music_note_rounded,
+                                          size: 12,
+                                          color: textColor,
+                                        ),
+                                      if (musicData != null)
+                                        const SizedBox(width: 4),
+                                      Text(
+                                        subText,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          color: textColor,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      PopupMenuButton<String>(
+                        color: theme.colorScheme.surface,
+                        onSelected: (val) async {
+                          if (val == 'edit') widget.onEditPressed();
+                          if (val == 'delete') widget.onDeletePressed();
+                          if (val == 'report') {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('reported_content')
+                                  .add({
+                                    'postId': widget.postSnapshot.id,
+                                    'reportedBy': currentUserId,
+                                    'authorId': postAuthorId,
+                                    'timestamp': FieldValue.serverTimestamp(),
+                                    'status': 'pending_review',
+                                  });
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Post reported."),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Failed to report."),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                        icon: Icon(
+                          Icons.more_horiz,
+                          color: textColor,
+                          size: 24,
+                        ),
+                        itemBuilder:
+                            (ctx) => [
+                              if (isAuthor) ...[
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text(
+                                    'Edit',
+                                    style: TextStyle(color: textColor),
                                   ),
                                 ),
-                                Text(
-                                  deptAcronym,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: const Color(
-                                      0xFF9983F3,
-                                    ), // Accent Purple
-                                    fontWeight: FontWeight.w600,
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ] else ...[
+                                const PopupMenuItem(
+                                  value: 'report',
+                                  child: Text(
+                                    'Report',
+                                    style: TextStyle(color: Colors.red),
                                   ),
                                 ),
                               ],
                             ],
-                          ),
-                        ],
                       ),
-                    ),
-                    // --- UGC REQUIREMENT: REPORT BUTTON ---
-                    PopupMenuButton<String>(
-                      color: theme.colorScheme.surface,
-                      onSelected: (val) async {
-                        if (val == 'edit') widget.onEditPressed();
-                        if (val == 'delete') widget.onDeletePressed();
-                        if (val == 'report') {
-                          // ACTUAL DATABASE REPORT LOGIC
-                          try {
-                            await FirebaseFirestore.instance
-                                .collection('reported_content')
-                                .add({
-                                  'postId': widget.postSnapshot.id,
-                                  'reportedBy':
-                                      FirebaseAuth.instance.currentUser!.uid,
-                                  'authorId': postAuthorId,
-                                  'timestamp': FieldValue.serverTimestamp(),
-                                  'status': 'pending_review',
-                                });
-
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Post reported. Admins will review it shortly.",
-                                  ),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Failed to report post."),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        }
-                      },
-                      icon: Icon(
-                        Icons.more_horiz,
-                        color: subtitleColor,
-                        size: 24,
-                      ),
-                      itemBuilder:
-                          (ctx) => [
-                            if (isAuthor) ...[
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text(
-                                  'Edit',
-                                  style: TextStyle(color: textColor),
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ] else ...[
-                              const PopupMenuItem(
-                                value: 'report',
-                                child: Text(
-                                  'Report Post',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ],
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
-            const SizedBox(height: 12),
 
-            // --- CAPTION / TEXT CONTENT ---
-            if (caption.isNotEmpty) ...[
-              Text(
-                caption,
-                style: GoogleFonts.poppins(
-                  color: textColor,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // --- MEDIA DISPLAY (FORCED LANDSCAPE 16:9) ---
+            // --- MEDIA (EDGE TO EDGE) ---
             if (mediaUrls.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        if (postType == 'video') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => FullScreenVideoPlayer(
-                                    videoUrl: mediaUrls.first,
-                                    postId: widget.postSnapshot.id,
+              GestureDetector(
+                onDoubleTap: _triggerDoubleTapLike,
+                onTap: () {
+                  if (postType == 'video' && mediaUrls.first.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => FullScreenVideoPlayer(
+                              videoUrl: mediaUrls.first,
+                              postId: widget.postSnapshot.id,
+                            ),
+                      ),
+                    );
+                  }
+                },
+                child: AspectRatio(
+                  aspectRatio: 4 / 5, // Standard modern portrait feed ratio
+                  child: Stack(
+                    children: [
+                      postType == 'video'
+                          ? (_isVideoInitialized && _videoController != null
+                              ? SizedBox.expand(
+                                child: FittedBox(
+                                  fit: BoxFit.cover,
+                                  child: SizedBox(
+                                    width: _videoController!.value.size.width,
+                                    height: _videoController!.value.size.height,
+                                    child: VideoPlayer(_videoController!),
                                   ),
-                            ),
-                          );
-                        } else {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (_) => FullScreenImageViewer(
-                                    imageUrl: mediaUrls.first,
-                                    heroTag: 'post_${widget.postSnapshot.id}',
-                                    postId: widget.postSnapshot.id,
-                                  ),
-                            ),
-                          );
-                        }
-                      },
-                      child: AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: Hero(
-                          tag: 'post_${widget.postSnapshot.id}',
-                          child: CachedNetworkImage(
-                            imageUrl: getOptimizedUrl(
-                              postType == 'video'
-                                  ? (originalThumbnailUrl ?? '')
-                                  : mediaUrls.first,
-                            ),
-                            cacheManager: AppCacheManager.instance,
-                            fit: BoxFit.cover,
-                            placeholder:
-                                (c, u) => Container(
-                                  color:
-                                      isDark
-                                          ? Colors.white10
-                                          : Colors.grey.shade200,
                                 ),
+                              )
+                              : _buildNetworkImage(
+                                originalThumbnailUrl ?? '',
+                                isDark,
+                              ))
+                          : InteractiveViewer(
+                            transformationController: _transformController,
+                            panEnabled: true,
+                            scaleEnabled: true,
+                            minScale: 1.0,
+                            maxScale: 4.0,
+                            clipBehavior: Clip.none,
+                            onInteractionEnd: (_) => _resetZoom(),
+                            child: _buildNetworkImage(mediaUrls.first, isDark),
                           ),
-                        ),
-                      ),
-                    ),
 
-                    if (mediaUrls.length > 1)
-                      Positioned(
-                        top: 12,
-                        right: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            "1/${mediaUrls.length}",
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    if (postType == 'video')
-                      Positioned.fill(
-                        child: Center(
-                          child: IgnorePointer(
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 36,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    if (postType == 'image' &&
-                        musicData != null &&
-                        musicData['previewUrl'] != null)
-                      Positioned(
-                        bottom: 12,
-                        left: 12,
-                        child: GestureDetector(
-                          onTap: () {
-                            GlobalAudioHandler.playOrPause(
-                              widget.postSnapshot.id,
-                              musicData['previewUrl'],
-                              (isPlaying) {
-                                if (mounted) {
-                                  setState(() => _isPlayingMusic = isPlaying);
-                                }
-                              },
-                            );
-                          },
+                      // Multi Image Badge
+                      if (mediaUrls.length > 1)
+                        Positioned(
+                          top: 12,
+                          right: 12,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
+                              horizontal: 8,
+                              vertical: 4,
                             ),
-                            constraints: const BoxConstraints(maxWidth: 160),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white24),
+                              color: Colors.black.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _isPlayingMusic
-                                      ? Icons.graphic_eq
-                                      : Icons.music_note_rounded,
-                                  color:
-                                      _isPlayingMusic
-                                          ? const Color(0xFF00C6FB)
-                                          : Colors.white,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    musicData['trackName'] ?? 'Music',
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              "1/${mediaUrls.length}",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+
+                      // Fast Pop-up Heart Animation Overlay
+                      if (_showHeartOverlay)
+                        Center(
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.5, end: 1.2),
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.elasticOut,
+                            builder: (context, scale, child) {
+                              return Transform.scale(
+                                scale: scale,
+                                child: Icon(
+                                  Icons.favorite,
+                                  color: Colors.white.withOpacity(0.9),
+                                  size: 100,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
 
-            if (mediaUrls.isNotEmpty) const SizedBox(height: 16),
-
-            // --- BOTTOM ACTIONS (Like, Comment, Share) ---
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: _triggerLikeButtonPress,
-                  child: Row(
-                    children: [
-                      ScaleTransition(
-                        scale: _likeScaleAnimation,
-                        child: Icon(
-                          _isLiked ? Icons.favorite : Icons.favorite_border,
-                          color:
-                              _isLiked
-                                  ? const Color(0xFFFF4B72)
-                                  : subtitleColor,
-                          size: 24,
-                        ),
+            // --- BOTTOM ACTIONS ---
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 12, top: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: _triggerLikeButtonPress,
+                    icon: ScaleTransition(
+                      scale: _likeScaleAnimation,
+                      child: Icon(
+                        _isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: _isLiked ? const Color(0xFFFF4B72) : textColor,
+                        size: 26,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        "$_likesCount",
-                        style: GoogleFonts.poppins(
-                          color: subtitleColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 24),
-
-                GestureDetector(
-                  onTap: widget.onCommentPressed,
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        color: subtitleColor,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        "$commentsCount",
-                        style: GoogleFonts.poppins(
-                          color: subtitleColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    onPressed: widget.onCommentPressed,
+                    icon: Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: textColor,
+                      size: 24,
+                    ),
                   ),
-                ),
-
-                const Spacer(),
-
-                GestureDetector(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: theme.colorScheme.surface,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(20),
+                  IconButton(
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: theme.colorScheme.surface,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
                         ),
-                      ),
-                      builder:
-                          (context) =>
-                              SharePostSheet(postId: widget.postSnapshot.id),
-                    );
-                  },
-                  child: Icon(
-                    Icons.near_me_outlined,
-                    color: subtitleColor,
-                    size: 24,
+                        builder:
+                            (context) =>
+                                SharePostSheet(postId: widget.postSnapshot.id),
+                      );
+                    },
+                    icon: Icon(Icons.send_outlined, color: textColor, size: 24),
                   ),
-                ),
-              ],
+                  const Spacer(),
+                  // Visual Bookmark Button (non-functional right align like IG)
+                  Icon(Icons.bookmark_border, color: textColor, size: 26),
+                ],
+              ),
             ),
+
+            // --- LIKES COUNT ---
+            if (_likesCount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  "$_likesCount likes",
+                  style: GoogleFonts.poppins(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+
+            // --- CAPTION ---
+            if (caption.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.poppins(color: textColor, fontSize: 13),
+                    children: [
+                      TextSpan(
+                        text: "${postData['userName'] ?? 'User'} ",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            _isCaptionExpanded || caption.length <= 100
+                                ? caption
+                                : "${caption.substring(0, 100)}...",
+                      ),
+                      if (!_isCaptionExpanded && caption.length > 100)
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap:
+                                () => setState(() => _isCaptionExpanded = true),
+                            child: Text(
+                              " more",
+                              style: TextStyle(color: subtitleColor),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // --- COMMENTS TRIGGER ---
+            if (commentsCount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: GestureDetector(
+                  onTap: widget.onCommentPressed,
+                  child: Text(
+                    "View all $commentsCount comments",
+                    style: GoogleFonts.poppins(
+                      color: subtitleColor,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 12),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNetworkImage(String url, bool isDark) {
+    if (url.isEmpty) {
+      return Container(color: isDark ? Colors.white10 : Colors.grey.shade200);
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      cacheManager: AppCacheManager.instance,
+      placeholder:
+          (c, u) =>
+              Container(color: isDark ? Colors.white10 : Colors.grey.shade200),
+      errorWidget:
+          (c, u, e) => Container(
+            color: isDark ? Colors.black : Colors.white,
+            child: const Icon(Icons.error, color: Colors.grey),
+          ),
     );
   }
 }
