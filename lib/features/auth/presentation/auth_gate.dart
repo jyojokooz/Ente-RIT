@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: auth_gate.dart
-// FILE PATH: lib/auth/auth_gate.dart
+// FILE PATH: lib/features/auth/presentation/auth_gate.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// --- RELATIVE IMPORTS ---
 import 'package:my_project/features/auth/presentation/create_username_screen.dart';
 import 'package:my_project/features/dashboard/presentation/main_screen.dart';
 import 'package:my_project/features/auth/presentation/auth_screen.dart';
@@ -29,6 +28,11 @@ class AuthGate extends StatelessWidget {
 
           if (authSnapshot.hasData) {
             final user = authSnapshot.data!;
+
+            // --- PRODUCTION FIX: REQUIRE EMAIL VERIFICATION ---
+            if (!user.emailVerified) {
+              return const AuthScreen(); // Deny access to app
+            }
 
             return StreamBuilder<DocumentSnapshot>(
               stream:
@@ -58,7 +62,6 @@ class AuthGate extends StatelessWidget {
               },
             );
           } else {
-            // This safely returns the AuthScreen class imported from ../screens/auth_screen.dart
             return const AuthScreen();
           }
         },
@@ -67,8 +70,6 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// --- UPDATED SKELETON LOADER ---
-// Removed the giant placeholders and replaced with a tiny spinner
 class _HomeSkeletonLoader extends StatelessWidget {
   const _HomeSkeletonLoader();
 
@@ -83,7 +84,6 @@ class _HomeSkeletonLoader extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Top Nav Bar (Ente RIT + Icons)
             Container(
               color: bgColor,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -113,8 +113,6 @@ class _HomeSkeletonLoader extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Tiny Rotating Spinner just below the nav bar
             const Padding(
               padding: EdgeInsets.only(top: 40.0),
               child: Center(
@@ -123,7 +121,7 @@ class _HomeSkeletonLoader extends StatelessWidget {
                   height: 24,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.5,
-                    color: Color(0xFF9983F3), // Purple App Theme Color
+                    color: Color(0xFF9983F3),
                   ),
                 ),
               ),

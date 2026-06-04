@@ -106,7 +106,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           final thumbRef = FirebaseStorage.instance.ref().child(
             'thumbnails/${_user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg',
           );
-          await thumbRef.putFile(_thumbnailFile!);
+
+          // ---> FIX: Added SettableMetadata <---
+          await thumbRef.putFile(
+            _thumbnailFile!,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
           thumbnailUrl = await thumbRef.getDownloadURL();
         }
 
@@ -133,7 +138,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             final imgRef = FirebaseStorage.instance.ref().child(
               'posts/${_user.uid}/${DateTime.now().millisecondsSinceEpoch}_$i.jpg',
             );
-            await imgRef.putFile(compressedImage);
+
+            // ---> FIX: Added SettableMetadata <---
+            await imgRef.putFile(
+              compressedImage,
+              SettableMetadata(contentType: 'image/jpeg'),
+            );
+
             // Note: Visual filters from Step 2 are not currently baked into the file here.
             // If baking is implemented in Step 2, the passed `compressedImage` will already contain the edits.
             mediaUrls.add(await imgRef.getDownloadURL());

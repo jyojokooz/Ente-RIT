@@ -3,6 +3,8 @@
 // FILE PATH: lib/widgets/home/home_quick_links.dart
 // ===============================
 
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:my_project/core/config/feature_config.dart';

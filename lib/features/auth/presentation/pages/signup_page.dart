@@ -3,18 +3,14 @@
 // FILE PATH: lib/features/auth/presentation/pages/signup_page.dart
 // ===============================
 
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:math';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pinput/pinput.dart';
 import 'package:my_project/features/auth/data/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -39,13 +35,10 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _otpController = TextEditingController();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
-  String? _generatedOtp;
 
-  // --- Real-Time Email Checking State ---
   Timer? _debounce;
   bool _isCheckingEmail = false;
   bool? _isEmailAvailable;
@@ -88,26 +81,15 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _otpController.dispose();
     _entranceController.dispose();
     super.dispose();
   }
 
-  void _checkAuthAndNavigate() {
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil('/auth-gate', (route) => false);
-    }
-  }
-
-  // --- REAL-TIME EMAIL CHECK LOGIC WITH RIT DOMAIN ENFORCEMENT ---
   void _onEmailChanged(String email) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     final cleanEmail = email.trim().toLowerCase();
 
-    // 1. Initial Format & Domain Check
     if (cleanEmail.isEmpty ||
         !cleanEmail.contains('@') ||
         !cleanEmail.contains('.')) {
@@ -128,7 +110,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       return;
     }
 
-    // Start checking state for database existence
     setState(() {
       _isCheckingEmail = true;
       _isEmailAvailable = null;
@@ -185,7 +166,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
   }
 
   Future<void> _handleSignupStep() async {
-    // Prevent sending if email is taken, invalid domain, or still being checked
     if (_isEmailAvailable == false || _isCheckingEmail) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -199,124 +179,44 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
       return;
     }
 
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+    if (!_formKey.currentState!.validate()) return;
 
-      _generatedOtp = (100000 + Random().nextInt(900000)).toString();
+    setState(() => _isLoading = true);
 
-      // !!! REPLACE THIS URL WITH YOUR ACTUAL FIREBASE PROJECT URL !!!
-      final String cloudFunctionUrl =
-          'https://us-central1-fir-auth-bfed9.cloudfunctions.net/sendOtpEmail';
+    try {
+      await _authService.signUpWithEmailAndPassword(
+        _emailController.text.trim().toLowerCase(),
+        _passwordController.text.trim(),
+        _usernameController.text.trim(),
+        _nameController.text.trim(),
+      );
 
-      try {
-        debugPrint("Sending OTP request to: $cloudFunctionUrl");
+      // --- AUTOFILL SAVE: Ask Google/OS to save the new password ---
+      TextInput.finishAutofillContext();
 
-        final response = await http.post(
-          Uri.parse(cloudFunctionUrl),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'email': _emailController.text.trim().toLowerCase(),
-            'name': _nameController.text.trim(),
-            'otp': _generatedOtp,
-          }),
-        );
+      await FirebaseAuth.instance.signOut();
 
-        debugPrint("Server Response Code: ${response.statusCode}");
-        debugPrint("Server Response Body: ${response.body}");
-
-        if (response.statusCode == 200) {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showOtpDialog();
-          }
-        } else {
-          // Attempt to parse the exact error from Node.js
-          String errorMsg =
-              "Failed to send email. Status: ${response.statusCode}";
-          try {
-            final errorData = jsonDecode(response.body);
-            if (errorData['error'] != null) {
-              errorMsg = errorData['error'];
-            }
-          } catch (_) {}
-
-          throw Exception(errorMsg);
-        }
-      } catch (e) {
-        debugPrint("OTP Catch Error: $e");
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                e.toString().replaceAll("Exception: ", ""),
-              ), // Cleaner error
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _verifyAndCreateAccount(String pin) async {
-    if (pin == _generatedOtp) {
-      Navigator.of(context).pop();
-      setState(() => _isLoading = true);
-
-      try {
-        await _authService.signUpWithEmailAndPassword(
-          _emailController.text.trim().toLowerCase(),
-          _passwordController.text.trim(),
-          _usernameController.text.trim(),
-          _nameController.text.trim(),
-        );
-        _checkAuthAndNavigate();
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            if (e.toString().contains('email-already-in-use') ||
-                e.toString().contains('already in use')) {
-              _isEmailAvailable = false;
-              _emailErrorMessage =
-                  'The email address is already in use by another account.';
-            }
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceFirst("Exception: ", "")),
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
-        }
-      }
-    } else {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showVerificationSentDialog();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Invalid Code. Please try again."),
+          content: Text(e.toString().replaceAll("Exception: ", "")),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
+          duration: const Duration(seconds: 4),
         ),
       );
-      _otpController.clear();
     }
   }
 
-  void _showOtpDialog() {
-    _otpController.clear();
+  void _showVerificationSentDialog() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -331,30 +231,6 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         );
       },
       pageBuilder: (context, animation, secondaryAnimation) {
-        final defaultPinTheme = PinTheme(
-          width: 50,
-          height: 55,
-          textStyle: GoogleFonts.poppins(
-            fontSize: 22,
-            color: isDark ? Colors.white : Colors.black,
-            fontWeight: FontWeight.w600,
-          ),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161618) : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
-          ),
-        );
-
-        final focusedPinTheme = defaultPinTheme.copyDecorationWith(
-          border: Border.all(
-            color: const Color(0xFF00C6FB),
-            width: 2,
-          ), // Brand Blue
-          borderRadius: BorderRadius.circular(12),
-          color: isDark ? const Color(0xFF252528) : Colors.white,
-        );
-
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF252528) : Colors.white,
           shape: RoundedRectangleBorder(
@@ -378,16 +254,17 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 24),
               Text(
-                "Check your email",
+                "Verify Your Email",
                 style: GoogleFonts.poppins(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black,
                 ),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                "We sent a 6-digit code to\n${_emailController.text}",
+                "We've sent a verification link to\n${_emailController.text.trim()}.\n\nPlease check your inbox and click the link to verify your account before logging in.",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 13,
@@ -395,44 +272,32 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                 ),
               ),
               const SizedBox(height: 32),
-
-              Pinput(
-                controller: _otpController,
-                length: 6,
-                defaultPinTheme: defaultPinTheme,
-                focusedPinTheme: focusedPinTheme,
-                onCompleted: (pin) => _verifyAndCreateAccount(pin),
-                cursor: Container(
-                  width: 2,
-                  height: 24,
-                  color: const Color(0xFF00C6FB),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    widget.onLoginTapped(); // Switch back to login page
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00C6FB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    "Back to Login",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 32),
-              _OtpTimer(
-                isDark: isDark,
-                onResend: () {
-                  Navigator.pop(context);
-                  _handleSignupStep();
-                },
               ),
             ],
           ),
-          actionsAlignment: MainAxisAlignment.center,
-          actionsPadding: const EdgeInsets.only(bottom: 24),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                "Cancel",
-                style: GoogleFonts.poppins(
-                  color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
         );
       },
     );
@@ -483,234 +348,253 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
                 position: _slideAnimation,
                 child: Form(
                   key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        "Create Account",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Use your institution email (@rit.ac.in)",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          color: subtitleColor,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-
-                      _buildTextField(
-                        controller: _nameController,
-                        hint: "Full Name",
-                        icon: Icons.person_outline,
-                        keyboardType: TextInputType.name,
-                        bgColor: inputBgColor,
-                        textColor: textColor,
-                        isDark: isDark,
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty)
-                            return 'Name is required';
-                          if (val.trim().length < 2)
-                            return 'Name must be at least 2 characters';
-                          if (!RegExp(r"^[a-zA-Z\s]+$").hasMatch(val))
-                            return 'Only letters and spaces are allowed';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildTextField(
-                        controller: _usernameController,
-                        hint: "Username",
-                        icon: Icons.alternate_email,
-                        keyboardType: TextInputType.text,
-                        bgColor: inputBgColor,
-                        textColor: textColor,
-                        isDark: isDark,
-                        validator: (val) {
-                          if (val == null || val.isEmpty)
-                            return 'Username is required';
-                          if (val.length < 3) return 'Min 3 characters';
-                          if (!RegExp(r"^[a-zA-Z0-9_.]+$").hasMatch(val))
-                            return 'Only letters, numbers, _ and . allowed';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildTextField(
-                        controller: _emailController,
-                        hint: "Institution Email (@rit.ac.in)",
-                        icon: Icons.email_outlined,
-                        keyboardType: TextInputType.emailAddress,
-                        bgColor: inputBgColor,
-                        textColor: textColor,
-                        isDark: isDark,
-                        onChanged: _onEmailChanged,
-                        errorText: _emailErrorMessage,
-                        suffixIcon:
-                            _isCheckingEmail
-                                ? const Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF00C6FB),
-                                    ),
-                                  ),
-                                )
-                                : _isEmailAvailable == true
-                                ? const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                )
-                                : _isEmailAvailable == false
-                                ? const Icon(Icons.cancel, color: Colors.red)
-                                : null,
-                        validator: (val) {
-                          if (val == null || val.isEmpty)
-                            return 'Email is required';
-                          if (!val.toLowerCase().endsWith('@rit.ac.in'))
-                            return 'Must end with @rit.ac.in';
-                          if (_isEmailAvailable == false)
-                            return 'Email already in use';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildTextField(
-                        controller: _passwordController,
-                        hint: "Create Password",
-                        icon: Icons.lock_outline,
-                        obscureText: _obscurePassword,
-                        bgColor: inputBgColor,
-                        textColor: textColor,
-                        isDark: isDark,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: isDark ? Colors.white30 : Colors.black38,
-                            size: 20,
-                          ),
-                          onPressed:
-                              () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.isEmpty)
-                            return 'Password is required';
-                          if (val.length < 6) return 'Min 6 characters';
-                          if (!RegExp(r'^[\x21-\x7E]+$').hasMatch(val))
-                            return 'Spaces and emojis are not allowed';
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // --- FIX B: TERMS & PRIVACY POLICY DISCLAIMER (UGC REQUIREMENT) ---
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Text(
-                          "By signing up, you agree to our Terms of Service and Privacy Policy. Objectionable content or abusive behavior is strictly prohibited and will result in account termination.",
+                  child: AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          "Create Account",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
-                            color:
-                                isDark ? Colors.white54 : Colors.grey.shade600,
-                            fontSize: 10,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Use your institution email (@rit.ac.in)",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        const SizedBox(height: 40),
 
-                      Container(
-                        height: 56,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF005BEA).withOpacity(0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
+                        _buildTextField(
+                          controller: _nameController,
+                          hint: "Full Name",
+                          icon: Icons.person_outline,
+                          keyboardType: TextInputType.name,
+                          autofillHints: const [AutofillHints.name],
+                          bgColor: inputBgColor,
+                          textColor: textColor,
+                          isDark: isDark,
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Name is required';
+                            }
+                            if (val.trim().length < 2) {
+                              return 'Name must be at least 2 characters';
+                            }
+                            if (!RegExp(r"^[a-zA-Z\s]+$").hasMatch(val)) {
+                              return 'Only letters and spaces are allowed';
+                            }
+                            return null;
+                          },
                         ),
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleSignupStep,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child:
-                              _isLoading
-                                  ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2.5,
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _usernameController,
+                          hint: "Username",
+                          icon: Icons.alternate_email,
+                          keyboardType: TextInputType.text,
+                          bgColor: inputBgColor,
+                          textColor: textColor,
+                          isDark: isDark,
+                          validator: (val) {
+                            if (val == null || val.isEmpty) {
+                              return 'Username is required';
+                            }
+                            if (val.length < 3) return 'Min 3 characters';
+                            if (!RegExp(r"^[a-zA-Z0-9_.]+$").hasMatch(val)) {
+                              return 'Only letters, numbers, _ and . allowed';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _emailController,
+                          hint: "Institution Email (@rit.ac.in)",
+                          icon: Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [
+                            AutofillHints.email,
+                            AutofillHints.newUsername,
+                          ],
+                          bgColor: inputBgColor,
+                          textColor: textColor,
+                          isDark: isDark,
+                          onChanged: _onEmailChanged,
+                          errorText: _emailErrorMessage,
+                          suffixIcon:
+                              _isCheckingEmail
+                                  ? const Padding(
+                                    padding: EdgeInsets.all(12.0),
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFF00C6FB),
+                                      ),
                                     ),
                                   )
-                                  : Text(
-                                    "Verify & Create Account",
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
+                                  : _isEmailAvailable == true
+                                  ? const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green,
+                                  )
+                                  : _isEmailAvailable == false
+                                  ? const Icon(Icons.cancel, color: Colors.red)
+                                  : null,
+                          validator: (val) {
+                            if (val == null || val.isEmpty) {
+                              return 'Email is required';
+                            }
+                            if (!val.toLowerCase().endsWith('@rit.ac.in')) {
+                              return 'Must end with @rit.ac.in';
+                            }
+                            if (_isEmailAvailable == false) {
+                              return 'Email already in use';
+                            }
+                            return null;
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 40),
+                        const SizedBox(height: 16),
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Already have an account? ",
+                        _buildTextField(
+                          controller: _passwordController,
+                          hint: "Create Password",
+                          icon: Icons.lock_outline,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.newPassword],
+                          bgColor: inputBgColor,
+                          textColor: textColor,
+                          isDark: isDark,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: isDark ? Colors.white30 : Colors.black38,
+                              size: 20,
+                            ),
+                            onPressed:
+                                () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                          ),
+                          validator: (val) {
+                            if (val == null || val.isEmpty) {
+                              return 'Password is required';
+                            }
+                            if (val.length < 6) return 'Min 6 characters';
+                            if (!RegExp(r'^[\x21-\x7E]+$').hasMatch(val)) {
+                              return 'Spaces and emojis are not allowed';
+                            }
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text(
+                            "By signing up, you agree to our Terms of Service and Privacy Policy. Objectionable content or abusive behavior is strictly prohibited and will result in account termination.",
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
-                              color: subtitleColor,
-                              fontSize: 14,
+                              color:
+                                  isDark
+                                      ? Colors.white54
+                                      : Colors.grey.shade600,
+                              fontSize: 10,
                             ),
                           ),
-                          GestureDetector(
-                            onTap: widget.onLoginTapped,
-                            child: Text(
-                              "Log In",
+                        ),
+                        const SizedBox(height: 20),
+
+                        Container(
+                          height: 56,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF005BEA).withOpacity(0.4),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleSignupStep,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child:
+                                _isLoading
+                                    ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                    : Text(
+                                      "Verify & Create Account",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Already have an account? ",
                               style: GoogleFonts.poppins(
-                                color: const Color(0xFF00C6FB),
-                                fontWeight: FontWeight.bold,
+                                color: subtitleColor,
                                 fontSize: 14,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                    ],
+                            GestureDetector(
+                              onTap: widget.onLoginTapped,
+                              child: Text(
+                                "Log In",
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFF00C6FB),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -728,6 +612,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
     required Color bgColor,
     required Color textColor,
     required bool isDark,
+    Iterable<String>? autofillHints,
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
     Widget? suffixIcon,
@@ -750,6 +635,7 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
+        autofillHints: autofillHints,
         onChanged: onChanged,
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.w500,
@@ -786,65 +672,5 @@ class _SignupPageState extends State<SignupPage> with TickerProviderStateMixin {
         validator: validator,
       ),
     );
-  }
-}
-
-class _OtpTimer extends StatefulWidget {
-  final VoidCallback onResend;
-  final bool isDark;
-
-  const _OtpTimer({required this.onResend, required this.isDark});
-
-  @override
-  State<_OtpTimer> createState() => _OtpTimerState();
-}
-
-class _OtpTimerState extends State<_OtpTimer> {
-  int _start = 60;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
-      if (_start == 0) {
-        setState(() => timer.cancel());
-      } else {
-        setState(() => _start--);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_start > 0) {
-      return Text(
-        "Resend code in 00:${_start.toString().padLeft(2, '0')}",
-        style: GoogleFonts.poppins(
-          color: widget.isDark ? Colors.white54 : Colors.grey.shade600,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    } else {
-      return GestureDetector(
-        onTap: widget.onResend,
-        child: Text(
-          "Resend Code",
-          style: GoogleFonts.poppins(
-            color: const Color(0xFF00C6FB),
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            decoration: TextDecoration.underline,
-          ),
-        ),
-      );
-    }
   }
 }

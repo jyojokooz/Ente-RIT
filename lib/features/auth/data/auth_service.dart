@@ -4,15 +4,12 @@
 // ===============================
 
 import 'dart:developer';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   /// Signs a new user up with Name, Email, Password, and Username.
   Future<UserCredential?> signUpWithEmailAndPassword(
@@ -21,7 +18,6 @@ class AuthService {
     String username,
     String name,
   ) async {
-    // 1. App-Level Security Check
     if (!email.trim().toLowerCase().endsWith('@rit.ac.in')) {
       throw Exception(
         'Only @rit.ac.in institution emails are allowed for sign up.',
@@ -39,6 +35,9 @@ class AuthService {
 
         await user.updateDisplayName(name);
 
+        // Send email verification link
+        await user.sendEmailVerification();
+
         final finalUsername =
             username.trim().isNotEmpty
                 ? username.trim()
@@ -55,6 +54,8 @@ class AuthService {
           'searchableUsername': finalUsername.toLowerCase(),
           'searchableDisplayName': name.trim().toLowerCase(),
           'role': 'student',
+          'isPrivate': false, // <-- Added default value
+          'isAdmin': false, // <-- Added default value
         });
 
         log('New user signed up: $name ($finalUsername)', name: 'AuthService');
@@ -68,87 +69,8 @@ class AuthService {
     }
   }
 
-  Future<UserCredential?> signInWithGoogle() async {
-    try {
-      await _googleSignIn.signOut();
-
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        return null; // User canceled the sign-in
-      }
-
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
-
-      if (userCredential.user != null) {
-        final user = userCredential.user!;
-        final isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
-
-        // 2. Google Sign-In Security Logic
-        // If it's a brand new user, enforce the @rit.ac.in rule.
-        // If it's an existing user (e.g., admin added a @gmail.com account), allow login.
-        if (isNewUser) {
-          if (!user.email!.toLowerCase().endsWith('@rit.ac.in')) {
-            // Revert the account creation immediately
-            await user.delete();
-            await _googleSignIn.signOut();
-            await _auth.signOut();
-            throw Exception(
-              'Only @rit.ac.in emails are allowed for new accounts. Contact admin for exceptions.',
-            );
-          }
-        }
-
-        final userDocRef = _firestore.collection('users').doc(user.uid);
-        final docSnapshot = await userDocRef.get();
-
-        if (!docSnapshot.exists) {
-          final username = user.email!.split('@').first;
-          await userDocRef.set({
-            'displayName': user.displayName ?? 'User',
-            'email': user.email,
-            'uid': user.uid,
-            'profilePhotoUrl': user.photoURL,
-            'lastLogin': Timestamp.now(),
-            'createdAt': Timestamp.now(),
-            'username': username,
-            'searchableUsername': username.toLowerCase(),
-            'searchableDisplayName': (user.displayName ?? '').toLowerCase(),
-            'role': 'student',
-          });
-        } else {
-          await userDocRef.update({'lastLogin': Timestamp.now()});
-        }
-      }
-
-      return userCredential;
-    } on PlatformException catch (error) {
-      log(
-        'Google Sign-In Platform Exception: ${error.message}',
-        name: 'AuthService',
-      );
-      throw Exception('A platform error occurred during sign-in.');
-    } catch (e) {
-      log('Unexpected error: $e', name: 'AuthService');
-      // Forward the exact error message if it's our custom exception
-      if (e.toString().contains('Only @rit.ac.in emails are allowed')) {
-        rethrow;
-      }
-      throw Exception('An unexpected error occurred.');
-    }
-  }
-
   Future<void> signOut() async {
     try {
-      await _googleSignIn.signOut();
       await _auth.signOut();
     } catch (e) {
       log('Error during sign out: $e', name: 'AuthService');

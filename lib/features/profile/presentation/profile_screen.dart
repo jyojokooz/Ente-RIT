@@ -1,4 +1,5 @@
 // ===============================
+// FILE NAME: profile_screen.dart
 // FILE PATH: lib/features/profile/presentation/profile_screen.dart
 // ===============================
 
@@ -69,8 +70,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     _scrollController.dispose();
     super.dispose();
   }
-
-  // --- ACTIONS ---
 
   void _scrollToPosts() {
     _scrollController.animateTo(
@@ -361,7 +360,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                             if (confirm == true) {
                               try {
-                                // This triggers Firebase Auth Deletion. Database hooks should handle the rest.
                                 await FirebaseAuth.instance.currentUser
                                     ?.delete();
                                 if (context.mounted) {
@@ -397,7 +395,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // --- HELPERS ---
-
   String _getAcronym(String name) {
     if (name.isEmpty) return "";
     String lowerName = name.toLowerCase();
@@ -439,7 +436,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // --- UI BUILDING ---
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -477,8 +473,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   .snapshots(),
           builder: (context, snapshot) {
             String username = "Profile";
+            // --- FIX: Read as map to prevent missing field crashes ---
             if (snapshot.hasData && snapshot.data!.exists) {
-              username = snapshot.data!.get('username') ?? 'Profile';
+              final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+              username = data['username'] ?? 'Profile';
             }
             return Text(
               username,
@@ -501,9 +499,12 @@ class _ProfileScreenState extends State<ProfileScreen>
               builder: (context, snapshot) {
                 bool isPrivate = false;
                 bool isAdmin = false;
+                // --- FIX: Read as map to prevent missing field crashes ---
                 if (snapshot.hasData && snapshot.data!.exists) {
-                  isPrivate = snapshot.data!.get('isPrivate') ?? false;
-                  isAdmin = snapshot.data!.get('isAdmin') ?? false;
+                  final data =
+                      snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                  isPrivate = data['isPrivate'] ?? false;
+                  isAdmin = data['isAdmin'] ?? false;
                 }
                 return Row(
                   children: [

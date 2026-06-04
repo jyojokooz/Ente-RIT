@@ -1,3 +1,8 @@
+// ===============================
+// FILE NAME: edit_profile_screen.dart
+// FILE PATH: lib/features/profile/presentation/edit_profile_screen.dart
+// ===============================
+
 import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -142,7 +147,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .ref()
           .child('users/${user.uid}')
           .child(fileName);
-      await ref.putFile(File(pickedFile.path));
+
+      // ---> FIX: Added SettableMetadata <---
+      await ref.putFile(
+        File(pickedFile.path),
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
       final downloadUrl = await ref.getDownloadURL();
 
       // Immediately save the new URL to Firestore so it reflects everywhere
