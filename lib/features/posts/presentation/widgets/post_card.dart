@@ -13,10 +13,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:my_project/core/widgets/full_screen_video_player.dart';
-import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
-import 'package:my_project/features/posts/presentation/widgets/share_post_sheet.dart';
+// --- FIXED IMPORT: Pointing to the new media_viewers connector ---
+import 'package:my_project/core/widgets/media_viewers/media_viewers_connector.dart';
 
+import 'package:my_project/features/posts/presentation/widgets/share_post_sheet.dart';
 import 'package:my_project/core/utils/app_cache_manager.dart';
 
 // --- GLOBAL AUDIO HANDLER ---

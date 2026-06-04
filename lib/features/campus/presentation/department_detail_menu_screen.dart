@@ -1,19 +1,18 @@
 // ===============================
 // FILE NAME: department_detail_menu_screen.dart
-// FILE PATH: lib/screens/department_detail_menu_screen.dart
+// FILE PATH: lib/features/campus/presentation/department_detail_menu_screen.dart
 // ===============================
-
-// ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:my_project/features/campus/presentation/department_sub_screens.dart';
+
+// --- IMPORT THE NEW CONNECTOR HERE ---
+import 'package:my_project/features/campus/presentation/department_sub_screens/department_connector.dart';
 import 'package:my_project/features/campus/presentation/department_notes_screen.dart';
 
 class DepartmentDetailMenuScreen extends StatelessWidget {
   final String deptName;
   final String deptAcronym;
-
   final String hodUrl;
   final String facultyUrl;
   final String placementUrl;

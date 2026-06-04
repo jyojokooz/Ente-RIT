@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: lost_found_detail_screen.dart
-// FILE PATH: lib/screens/lost_found_detail_screen.dart
+// FILE PATH: lib/features/lost_and_found/presentation/lost_found_detail_screen.dart
 // ===============================
 
 // ignore_for_file: deprecated_member_use
@@ -14,7 +14,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:my_project/features/chat/presentation/chat_screen.dart';
 import 'package:my_project/features/chat/presentation/chat_list_screen.dart';
-import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
+
+// --- FIXED IMPORT: Pointing to the new media_viewers connector ---
+import 'package:my_project/core/widgets/media_viewers/media_viewers_connector.dart';
 
 class LostFoundDetailScreen extends StatelessWidget {
   final QueryDocumentSnapshot itemDoc;
@@ -158,8 +160,7 @@ class LostFoundDetailScreen extends StatelessWidget {
                                           imageUrl: imageUrl,
                                           heroTag: 'lf_${itemDoc.id}',
                                           postId:
-                                              itemDoc
-                                                  .id, // <-- ADDED THIS TO FIX THE ERROR
+                                              null, // <-- FIXED: Passes null so it acts as a simple image viewer without likes/comments
                                         ),
                                   ),
                                 ),

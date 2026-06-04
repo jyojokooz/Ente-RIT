@@ -9,9 +9,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-// --- NEW IMPORTS: Direct Full Screen Viewers ---
-import 'package:my_project/core/widgets/full_screen_video_player.dart';
-import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
+// --- FIXED IMPORTS: Pointing to the new media_viewers connector ---
+import 'package:my_project/core/widgets/media_viewers/media_viewers_connector.dart';
 
 class ProfilePostsGrid extends StatelessWidget {
   final List<DocumentSnapshot> userPosts;

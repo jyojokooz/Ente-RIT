@@ -8,8 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import 'package:my_project/core/widgets/full_screen_video_player.dart';
-import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
+// --- FIXED IMPORTS: Pointing to the new media_viewers folder ---
+import 'package:my_project/core/widgets/media_viewers/full_screen_video_player.dart';
+import 'package:my_project/core/widgets/media_viewers/full_screen_image_viewer.dart';
 
 class ExploreTrendingGrid extends StatelessWidget {
   final String currentUserId;
@@ -120,12 +121,10 @@ class ExploreTrendingGrid extends StatelessWidget {
               final commentsCount = data['comments'] ?? 0;
               final isVideo = data['postType'] == 'video';
 
-              // --- FIX: Safely extract image length to calculate imageCount ---
               final imagesList = data['postImages'] as List<dynamic>? ?? [];
               final int imageCount = imagesList.length;
               final bool isMultiImage = imageCount > 1;
 
-              // Text extraction
               final caption = data['caption']?.toString().trim() ?? '';
               final title =
                   caption.isNotEmpty ? caption.split('\n').first : 'Post';
@@ -187,7 +186,6 @@ class ExploreTrendingGrid extends StatelessWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Background Image
                         if (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
                           Hero(
                             tag: heroTag,
@@ -220,7 +218,6 @@ class ExploreTrendingGrid extends StatelessWidget {
                             ),
                           ),
 
-                        // Dark Bottom Gradient for Stats
                         Positioned.fill(
                           child: Container(
                             decoration: BoxDecoration(
@@ -237,7 +234,6 @@ class ExploreTrendingGrid extends StatelessWidget {
                           ),
                         ),
 
-                        // Top Right Icons (Video / Carousel)
                         if (isVideo)
                           const Positioned(
                             top: 8,
@@ -283,7 +279,6 @@ class ExploreTrendingGrid extends StatelessWidget {
                             ),
                           ),
 
-                        // Bottom Content (Title & Stats)
                         Positioned(
                           bottom: 12,
                           left: 12,

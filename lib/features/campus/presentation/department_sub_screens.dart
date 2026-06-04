@@ -1,17 +1,20 @@
 // ===============================
 // FILE NAME: department_sub_screens.dart
-// FILE PATH: lib/screens/department_sub_screens.dart
+// FILE PATH: lib/features/campus/presentation/department_sub_screens.dart
 // ===============================
-
-// ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:my_project/features/campus/data/rit_scraper_service.dart';
-import 'package:my_project/core/widgets/full_screen_image_viewer.dart';
 
-// --- HOD INFO SCREEN ---
+import 'package:my_project/features/campus/data/rit_scraper_service.dart';
+
+// --- FIXED IMPORT: Pointing to the new media_viewers folder ---
+import 'package:my_project/core/widgets/media_viewers/full_screen_image_viewer.dart';
+
+// ==========================================
+// HOD INFO SCREEN
+// ==========================================
 class HodInfoScreen extends StatelessWidget {
   final String url;
   const HodInfoScreen({super.key, required this.url});
@@ -73,8 +76,7 @@ class HodInfoScreen extends StatelessWidget {
                               (_) => FullScreenImageViewer(
                                 imageUrl: hod.imageUrl,
                                 heroTag: 'hod_img',
-                                postId:
-                                    'hod_dummy', // <-- ADDED THIS TO FIX THE ERROR
+                                postId: null, // Fixed: No dummy ID
                               ),
                         ),
                       );
@@ -87,10 +89,7 @@ class HodInfoScreen extends StatelessWidget {
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
-                          colors: [
-                            Color(0xFF00C6FB),
-                            Color(0xFF005BEA),
-                          ], // Blue Gradient
+                          colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -109,7 +108,7 @@ class HodInfoScreen extends StatelessWidget {
                                   : Colors.grey.shade200,
                           backgroundImage:
                               hod.imageUrl.isNotEmpty
-                                  ? NetworkImage(hod.imageUrl)
+                                  ? CachedNetworkImageProvider(hod.imageUrl)
                                   : null,
                           child:
                               hod.imageUrl.isEmpty
@@ -150,7 +149,7 @@ class HodInfoScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: cardColor,
-                    borderRadius: BorderRadius.circular(30), // Heavy rounding
+                    borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       if (!isDark)
                         BoxShadow(
@@ -212,7 +211,9 @@ class HodInfoScreen extends StatelessWidget {
   }
 }
 
-// --- FACULTY LIST SCREEN ---
+// ==========================================
+// FACULTY LIST SCREEN
+// ==========================================
 class FacultyListScreen extends StatelessWidget {
   final String url;
   const FacultyListScreen({super.key, required this.url});
@@ -378,7 +379,7 @@ class _StaffGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.75, // Adjust for new card style
+        childAspectRatio: 0.75,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -470,7 +471,9 @@ class _StaffGrid extends StatelessWidget {
   }
 }
 
-// --- STAFF PROFILE SCREEN ---
+// ==========================================
+// STAFF PROFILE SCREEN
+// ==========================================
 class StaffProfileScreen extends StatelessWidget {
   final int staffId;
   const StaffProfileScreen({super.key, required this.staffId});
@@ -540,8 +543,7 @@ class StaffProfileScreen extends StatelessWidget {
                                           (_) => FullScreenImageViewer(
                                             imageUrl: profile.photoUrl,
                                             heroTag: 'staff_full_$staffId',
-                                            postId:
-                                                'staff_dummy_$staffId', // <-- ADDED THIS TO FIX THE ERROR
+                                            postId: null, // Fixed: No Dummy ID
                                           ),
                                     ),
                                   ),
@@ -554,7 +556,7 @@ class StaffProfileScreen extends StatelessWidget {
                                     border: Border.all(
                                       color: const Color(0xFFB165FF),
                                       width: 2,
-                                    ), // Purple accent
+                                    ),
                                   ),
                                   child: CircleAvatar(
                                     radius: 55,
@@ -654,7 +656,6 @@ class StaffProfileScreen extends StatelessWidget {
                   ],
               body: TabBarView(
                 children: [
-                  // Education Tab
                   profile.education.isEmpty
                       ? Center(
                         child: Text(
@@ -742,7 +743,6 @@ class StaffProfileScreen extends StatelessWidget {
                           );
                         },
                       ),
-                  // Experience Tab
                   profile.experience.isEmpty
                       ? Center(
                         child: Text(
@@ -861,7 +861,9 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
-// --- PLACEMENT INFO SCREEN ---
+// ==========================================
+// PLACEMENT INFO SCREEN
+// ==========================================
 class PlacementInfoScreen extends StatelessWidget {
   final String url;
   const PlacementInfoScreen({super.key, required this.url});
@@ -926,7 +928,7 @@ class PlacementInfoScreen extends StatelessWidget {
                     ],
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(30), // Heavy rounding
+                    borderRadius: BorderRadius.circular(30),
                     child: CachedNetworkImage(
                       imageUrl: images[index],
                       placeholder:
