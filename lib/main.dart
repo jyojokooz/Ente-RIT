@@ -29,33 +29,56 @@ import 'package:my_project/features/profile/presentation/profile_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    // Ignore duplicate app error in background
+  }
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final futures = await Future.wait([
-    dotenv.load(fileName: ".env"),
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
-    SharedPreferences.getInstance(),
-  ]);
+  // 1. Safely load env variables
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("DotEnv Error: $e");
+  }
 
-  // --- EXPLICIT FIRESTORE CACHING ---
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
-  // ---------------------------------------
+  // 2. Safely initialize Firebase (Catches the Duplicate App Error)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint("Firebase Init Error (Safe to ignore): $e");
+  }
 
-  final prefs = futures[2] as SharedPreferences;
+  // 3. Load SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+
+  // 4. Safely set Firestore settings
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (e) {
+    debugPrint("Firestore settings already set: $e");
+  }
+
+  // 5. Setup Theme
   final isDark = prefs.getBool('isDarkMode') ?? false;
-
   themeProvider = ThemeProvider(isDark ? ThemeMode.dark : ThemeMode.light);
 
+  // 6. Setup Background Messaging
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // 7. FINALLY, Start the App UI
   runApp(const MyApp());
 }
 
