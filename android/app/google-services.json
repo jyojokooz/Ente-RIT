@@ -8,6 +8,45 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:267885782991:android:c7ad6e9bfb4a7fdae514ba",
+        "android_client_info": {
+          "package_name": "com.enterit.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvsCVocPQbkpgkR1ZMoxYX_eyf8oD7u_0"
+        },
+        {
+          "current_key": "AIzaSyBfZvCu5wkDY2RZUwdoXwsaKt7_2dX9HdA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "267885782991-1qokbjl8auao3p9ap22rigbil6lb137c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "267885782991-nffc58ahjbk110p16hkhck0qlbkahbo3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.myProject"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:267885782991:android:7c70565560c3fc4de514ba",
         "android_client_info": {
           "package_name": "com.example.my_project"
@@ -31,11 +70,22 @@
           }
         },
         {
+          "client_id": "267885782991-u84vujdvn8au89mnuu1hpe85nqni2f0q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.my_project",
+            "certificate_hash": "5356ba46f97b88ea6630af9c7797d92ee997c1a3"
+          }
+        },
+        {
           "client_id": "267885782991-prhluvmnmdrstfcmh1sd69i4j77m8qrb.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
+        {
+          "current_key": "AIzaSyDvsCVocPQbkpgkR1ZMoxYX_eyf8oD7u_0"
+        },
         {
           "current_key": "AIzaSyBfZvCu5wkDY2RZUwdoXwsaKt7_2dX9HdA"
         }
