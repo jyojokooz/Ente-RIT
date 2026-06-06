@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: home_screen.dart
-// FILE PATH: lib/screens/pages/home_screen.dart
+// FILE PATH: lib/features/home/presentation/home_screen.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -38,7 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // UPDATED: Now matches Profile Screen's background color
     final bgColor = isDark ? const Color(0xFF0F0F13) : const Color(0xFFF8F9FE);
     final cardColor = isDark ? const Color(0xFF252528) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -93,6 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFFFF3E8E),
           backgroundColor: cardColor,
           child: SafeArea(
+            bottom:
+                false, // <--- CRUCIAL FIX: Allows the content to flow seamlessly under the transparent CurvedNavigationBar
             child: StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -142,7 +143,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 6. Main Post Feed
                     HomePostFeed(textColor: textColor),
 
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 100),
+                    ), // Added extra padding so last post clears the nav bar
                   ],
                 );
               },

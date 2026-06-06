@@ -48,6 +48,8 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
+        bottom:
+            false, // <--- CRUCIAL FIX: Let the grid flow under the transparent nav bar
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -109,9 +111,6 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
 
                   final allDocs = snapshot.data!.docs;
 
-                  // --- THE FIX IS HERE ---
-                  // We strictly filter the list to only include features that are BOTH
-                  // visible in the DB AND actually exist in the local code configuration.
                   final validDocs =
                       allDocs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
@@ -154,7 +153,9 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 10,
-                      ),
+                      ).copyWith(
+                        bottom: 100,
+                      ), // Padded so last items clear the nav bar
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 3,
@@ -165,9 +166,7 @@ class _ClassifyScreenState extends State<ClassifyScreen> {
                       itemCount: validDocs.length,
                       itemBuilder: (context, index) {
                         final id = validDocs[index].id;
-                        final config =
-                            FeatureConfig
-                                .featureMap[id]!; // Guaranteed to exist now
+                        final config = FeatureConfig.featureMap[id]!;
 
                         return _ModernFeatureCard(
                           label: config['label'],
@@ -259,7 +258,7 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
-          padding: const EdgeInsets.all(8), // Keeps text from touching edges
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(20),
@@ -297,7 +296,7 @@ class _ModernFeatureCardState extends State<_ModernFeatureCard>
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: textColor,
-                      height: 1.1, // Fixed line height to prevent text clipping
+                      height: 1.1,
                     ),
                   ),
                 ),
