@@ -1,13 +1,4 @@
-// ===============================
-// FILE NAME: home_header.dart
-// FILE PATH: lib/features/home/presentation/widgets/home_header.dart
-// ===============================
-
-// ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-
 import 'package:my_project/features/notifications/presentation/notifications_screen.dart';
 import 'package:my_project/features/chat/presentation/chat_list_screen.dart';
 import 'package:my_project/features/notifications/presentation/widgets/notification_badge.dart';
@@ -75,28 +66,20 @@ class HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // Reduced bottom padding so the stories sit closer to the header
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // --- DYNAMIC LOGO BASED ON THEME ---
           Image.asset(
             isDark
                 ? 'assets/enterit_logo.png'
                 : 'assets/enterit_logo_light.png',
             height: 38,
             fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              return Text(
-                'Ente RIT',
-                style: GoogleFonts.satisfy(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              );
-            },
+            // FIX: Removed the Text fallback so it doesn't flash laggy text
+            errorBuilder:
+                (context, error, stackTrace) =>
+                    const SizedBox(width: 120, height: 38),
           ),
           Row(
             children: [

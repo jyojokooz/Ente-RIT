@@ -1,29 +1,31 @@
 // ===============================
-// FILE NAME: home_post_feed.dart
-// FILE PATH: lib/widgets/home/home_post_feed.dart
+// FILE PATH: lib/features/home/presentation/widgets/home_post_feed.dart
 // ===============================
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:my_project/features/posts/providers/feed_provider.dart';
 import 'package:my_project/features/posts/presentation/widgets/post_card.dart';
 import 'package:my_project/features/posts/presentation/widgets/comments_sheet.dart';
 import 'package:my_project/features/posts/presentation/edit_post_screen.dart';
 import 'package:my_project/features/profile/presentation/profile_screen.dart';
-import 'package:my_project/core/utils/video_preload_service.dart'; // <-- IMPORT THE NEW PRELOAD SERVICE
+import 'package:my_project/core/utils/video_preload_service.dart';
 
-class HomePostFeed extends StatefulWidget {
+// 1. Change to ConsumerStatefulWidget
+class HomePostFeed extends ConsumerStatefulWidget {
   final Color textColor;
 
   const HomePostFeed({super.key, required this.textColor});
 
   @override
-  State<HomePostFeed> createState() => _HomePostFeedState();
+  ConsumerState<HomePostFeed> createState() => _HomePostFeedState();
 }
 
-class _HomePostFeedState extends State<HomePostFeed> {
+class _HomePostFeedState extends ConsumerState<HomePostFeed> {
   final User? user = FirebaseAuth.instance.currentUser;
 
   // Track the active feed tab
@@ -243,171 +245,149 @@ class _HomePostFeedState extends State<HomePostFeed> {
       );
     }
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('users')
-              .doc(user!.uid)
-              .snapshots(),
-      builder: (context, userSnap) {
-        if (userSnap.hasError || !userSnap.hasData) {
-          return const SliverToBoxAdapter(child: SizedBox.shrink());
-        }
+    // 2. Read from Riverpod providers instead of StreamBuilder
+    final userDocAsync = ref.watch(userDataProvider);
+    final postsAsync = ref.watch(postsFeedProvider);
 
-        final myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
+    return postsAsync.when(
+      loading:
+          () => SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              if (index == 0) return _buildTabsHeader();
+              return const Padding(
+                padding: EdgeInsets.only(top: 40.0),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF9983F3),
+                    ),
+                  ),
+                ),
+              );
+            }, childCount: 2),
+          ),
+      error:
+          (error, stack) => SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Center(
+                child: Text(
+                  "Error loading posts.",
+                  style: TextStyle(color: widget.textColor),
+                ),
+              ),
+            ),
+          ),
+      data: (allPosts) {
+        // Extract connection data from user profile (default to empty if still loading)
+        final myData =
+            userDocAsync.value?.data() as Map<String, dynamic>? ?? {};
         final List<dynamic> myConnections = myData['connections'] ?? [];
 
-        return StreamBuilder<QuerySnapshot>(
-          stream:
-              FirebaseFirestore.instance
-                  .collection('posts')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Center(
-                    child: Text(
-                      "Error loading posts.",
-                      style: TextStyle(color: widget.textColor),
-                    ),
+        List<DocumentSnapshot> visiblePosts =
+            allPosts.where((postDoc) {
+              final data = postDoc.data() as Map<String, dynamic>;
+              final authorId = data['userId'];
+              final isPrivate = data['isAuthorPrivate'] ?? false;
+
+              if (authorId == user!.uid) return true;
+              if (myConnections.contains(authorId)) return true;
+              if (isPrivate) return false;
+              return true;
+            }).toList();
+
+        if (_activeTab == 'Following') {
+          visiblePosts =
+              visiblePosts.where((doc) {
+                final authorId = (doc.data() as Map<String, dynamic>)['userId'];
+                return myConnections.contains(authorId) ||
+                    authorId == user!.uid;
+              }).toList();
+        } else if (_activeTab == 'Popular') {
+          visiblePosts.sort((a, b) {
+            final aLikes =
+                ((a.data() as Map<String, dynamic>)['likes'] as List?)
+                    ?.length ??
+                0;
+            final bLikes =
+                ((b.data() as Map<String, dynamic>)['likes'] as List?)
+                    ?.length ??
+                0;
+            return bLikes.compareTo(aLikes);
+          });
+        }
+
+        // --- PRELOAD THE FIRST 3 VIDEOS INSTANTLY ---
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final videoUrls =
+              visiblePosts
+                  .where(
+                    (doc) =>
+                        (doc.data() as Map<String, dynamic>)['postType'] ==
+                        'video',
+                  )
+                  .take(3)
+                  .map(
+                    (doc) =>
+                        (doc.data() as Map<String, dynamic>)['postMediaUrl']
+                            as String?,
+                  )
+                  .where((url) => url != null && url.isNotEmpty)
+                  .cast<String>()
+                  .toList();
+
+          if (videoUrls.isNotEmpty) {
+            VideoPreloadService.instance.preloadVideos(videoUrls);
+          }
+        });
+
+        return SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            if (index == 0) return _buildTabsHeader();
+            final postIndex = index - 1;
+
+            if (visiblePosts.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 40),
+                child: Center(
+                  child: Text(
+                    'No posts found for this filter.',
+                    style: GoogleFonts.poppins(color: Colors.grey),
                   ),
                 ),
               );
             }
 
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData) {
-              return SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  if (index == 0) return _buildTabsHeader();
-                  return const Padding(
-                    padding: EdgeInsets.only(top: 40.0),
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Color(0xFF9983F3),
-                        ),
-                      ),
-                    ),
-                  );
-                }, childCount: 2),
-              );
+            if (postIndex >= visiblePosts.length) {
+              return const SizedBox.shrink();
             }
 
-            List<DocumentSnapshot> visiblePosts =
-                snapshot.data!.docs.where((postDoc) {
-                  final data = postDoc.data() as Map<String, dynamic>;
-                  final authorId = data['userId'];
-                  final isPrivate = data['isAuthorPrivate'] ?? false;
+            final postSnapshot = visiblePosts[postIndex];
+            final postData = postSnapshot.data() as Map<String, dynamic>;
 
-                  if (authorId == user!.uid) return true;
-                  if (myConnections.contains(authorId)) return true;
-                  if (isPrivate) return false;
-                  return true;
-                }).toList();
-
-            if (_activeTab == 'Following') {
-              visiblePosts =
-                  visiblePosts.where((doc) {
-                    final authorId =
-                        (doc.data() as Map<String, dynamic>)['userId'];
-                    return myConnections.contains(authorId) ||
-                        authorId == user!.uid;
-                  }).toList();
-            } else if (_activeTab == 'Popular') {
-              visiblePosts.sort((a, b) {
-                final aLikes =
-                    ((a.data() as Map<String, dynamic>)['likes'] as List?)
-                        ?.length ??
-                    0;
-                final bLikes =
-                    ((b.data() as Map<String, dynamic>)['likes'] as List?)
-                        ?.length ??
-                    0;
-                return bLikes.compareTo(aLikes);
-              });
-            }
-
-            // --- THE FIX: PRELOAD THE FIRST 3 VIDEOS INSTANTLY ---
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final videoUrls =
-                  visiblePosts
-                      .where(
-                        (doc) =>
-                            (doc.data() as Map<String, dynamic>)['postType'] ==
-                            'video',
-                      )
-                      .take(3)
-                      .map(
-                        (doc) =>
-                            (doc.data() as Map<String, dynamic>)['postMediaUrl']
-                                as String?,
-                      )
-                      .where((url) => url != null && url.isNotEmpty)
-                      .cast<String>()
-                      .toList();
-
-              if (videoUrls.isNotEmpty) {
-                VideoPreloadService.instance.preloadVideos(videoUrls);
-              }
-            });
-
-            return SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index == 0) return _buildTabsHeader();
-                  final postIndex = index - 1;
-
-                  if (visiblePosts.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 40),
-                      child: Center(
-                        child: Text(
-                          'No posts found for this filter.',
-                          style: GoogleFonts.poppins(color: Colors.grey),
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (postIndex >= visiblePosts.length) {
-                    return const SizedBox.shrink();
-                  }
-
-                  final postSnapshot = visiblePosts[postIndex];
-                  final postData = postSnapshot.data() as Map<String, dynamic>;
-
-                  return PostCard(
-                    key: ValueKey(postSnapshot.id),
-                    postSnapshot: postSnapshot,
-                    onCommentPressed: () => _onCommentTapped(postSnapshot.id),
-                    onDeletePressed: () => _deletePost(postSnapshot.id),
-                    onProfileTapped:
-                        () => _onProfileTapped(postData['userId'] ?? ''),
-                    onLikePressed:
-                        (bool isLikedNow) => _toggleLike(
-                          postSnapshot.id,
-                          isLikedNow,
-                          postData['userId'] ?? '',
-                        ),
-                    onEditPressed:
-                        () => _editPost(
-                          postSnapshot.id,
-                          postData['caption'] ?? '',
-                          List<String>.from(postData['taggedUsers'] ?? []),
-                        ),
-                  );
-                },
-                childCount: visiblePosts.isEmpty ? 2 : visiblePosts.length + 1,
-              ),
+            return PostCard(
+              key: ValueKey(postSnapshot.id),
+              postSnapshot: postSnapshot,
+              onCommentPressed: () => _onCommentTapped(postSnapshot.id),
+              onDeletePressed: () => _deletePost(postSnapshot.id),
+              onProfileTapped: () => _onProfileTapped(postData['userId'] ?? ''),
+              onLikePressed:
+                  (bool isLikedNow) => _toggleLike(
+                    postSnapshot.id,
+                    isLikedNow,
+                    postData['userId'] ?? '',
+                  ),
+              onEditPressed:
+                  () => _editPost(
+                    postSnapshot.id,
+                    postData['caption'] ?? '',
+                    List<String>.from(postData['taggedUsers'] ?? []),
+                  ),
             );
-          },
+          }, childCount: visiblePosts.isEmpty ? 2 : visiblePosts.length + 1),
         );
       },
     );

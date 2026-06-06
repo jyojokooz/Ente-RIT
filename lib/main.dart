@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // <-- RIVERPOD ADDED
 
 import 'package:my_project/firebase_options.dart';
 import 'package:my_project/core/constants/theme_provider.dart';
@@ -58,7 +59,7 @@ Future<void> main() async {
     debugPrint("Firebase Init Error (Safe to ignore): $e");
   }
 
-  // 3. Load SharedPreferences
+  // 3. Load SharedPreferences BEFORE the app runs
   final prefs = await SharedPreferences.getInstance();
 
   // 4. Safely set Firestore settings
@@ -71,111 +72,112 @@ Future<void> main() async {
     debugPrint("Firestore settings already set: $e");
   }
 
-  // 5. Setup Theme
-  final isDark = prefs.getBool('isDarkMode') ?? false;
-  themeProvider = ThemeProvider(isDark ? ThemeMode.dark : ThemeMode.light);
-
-  // 6. Setup Background Messaging
+  // 5. Setup Background Messaging
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // 7. FINALLY, Start the App UI
-  runApp(const MyApp());
+  // 6. FINALLY, Start the App UI with ProviderScope
+  runApp(
+    ProviderScope(
+      overrides: [
+        // This injects the loaded SharedPreferences into Riverpod synchronously!
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
+// 7. Changed to ConsumerWidget to listen to Riverpod states
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: themeProvider,
-      builder: (context, child) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Ente RIT',
-          themeMode: themeProvider.themeMode,
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch the theme state directly (No more AnimatedBuilder!)
+    final currentThemeMode = ref.watch(themeProvider);
 
-          // --- LIGHT THEME ---
-          theme: ThemeData(
-            brightness: Brightness.light,
-            scaffoldBackgroundColor: const Color(0xFFF8F9FE),
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF9983F3),
-              secondary: Color(0xFF9983F3),
-              surface: Colors.white,
-              onPrimary: Colors.white,
-              onSurface: Colors.black87,
-            ),
-            textTheme: GoogleFonts.poppinsTextTheme(
-              ThemeData.light().textTheme,
-            ).apply(bodyColor: Colors.black87, displayColor: Colors.black87),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.white,
-              elevation: 0,
-              iconTheme: IconThemeData(color: Colors.black87),
-              titleTextStyle: TextStyle(color: Colors.black87, fontSize: 20),
-            ),
-            bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.white),
-            dividerColor: Colors.grey.shade200,
-          ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Ente RIT',
+      themeMode: currentThemeMode,
 
-          // --- DARK THEME ---
-          darkTheme: ThemeData(
-            brightness: Brightness.dark,
-            scaffoldBackgroundColor: Colors.black,
-            colorScheme: const ColorScheme.dark(
-              primary: Colors.yellow,
-              secondary: Colors.yellow,
-              surface: Color(0xFF151515),
-              onPrimary: Colors.black,
-              onSurface: Colors.white,
-            ),
-            textTheme: GoogleFonts.poppinsTextTheme(
-              ThemeData.dark().textTheme,
-            ).apply(bodyColor: Colors.white, displayColor: Colors.white),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.black,
-              elevation: 0,
-              iconTheme: IconThemeData(color: Colors.white),
-              titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
-            ),
-            bottomAppBarTheme: BottomAppBarThemeData(
-              color: Colors.grey.shade900,
-            ),
-            dividerColor: Colors.grey.shade800,
-          ),
+      // --- LIGHT THEME ---
+      theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF8F9FE),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF9983F3),
+          secondary: Color(0xFF9983F3),
+          surface: Colors.white,
+          onPrimary: Colors.white,
+          onSurface: Colors.black87,
+        ),
+        textTheme: GoogleFonts.poppinsTextTheme(
+          ThemeData.light().textTheme,
+        ).apply(bodyColor: Colors.black87, displayColor: Colors.black87),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.black87),
+          titleTextStyle: TextStyle(color: Colors.black87, fontSize: 20),
+        ),
+        bottomAppBarTheme: const BottomAppBarThemeData(color: Colors.white),
+        dividerColor: Colors.grey.shade200,
+      ),
 
-          home: const SplashScreen(),
+      // --- DARK THEME ---
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.yellow,
+          secondary: Colors.yellow,
+          surface: Color(0xFF151515),
+          onPrimary: Colors.black,
+          onSurface: Colors.white,
+        ),
+        textTheme: GoogleFonts.poppinsTextTheme(
+          ThemeData.dark().textTheme,
+        ).apply(bodyColor: Colors.white, displayColor: Colors.white),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.black,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.white),
+          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
+        ),
+        bottomAppBarTheme: BottomAppBarThemeData(color: Colors.grey.shade900),
+        dividerColor: Colors.grey.shade800,
+      ),
 
-          // Static Routes
-          routes: {
-            '/auth-gate': (context) => const AuthGate(),
-            '/home': (context) => const MainScreen(),
-            '/create-username': (context) => const CreateUsernameScreen(),
-            '/forgot-password': (context) => const ForgotPasswordScreen(),
-            '/create-post': (context) => const CreatePostScreen(),
-            '/search': (context) => const SearchScreen(),
-            '/requests': (context) => const RequestsScreen(),
-            '/chat-list': (context) => const ChatListScreen(),
-          },
+      home: const SplashScreen(),
 
-          // --- DYNAMIC ROUTING FOR QR CODES ---
-          onGenerateRoute: (settings) {
-            final uri = Uri.tryParse(settings.name ?? '');
+      // Static Routes
+      routes: {
+        '/auth-gate': (context) => const AuthGate(),
+        '/home': (context) => const MainScreen(),
+        '/create-username': (context) => const CreateUsernameScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/create-post': (context) => const CreatePostScreen(),
+        '/search': (context) => const SearchScreen(),
+        '/requests': (context) => const RequestsScreen(),
+        '/chat-list': (context) => const ChatListScreen(),
+      },
 
-            if (uri != null && uri.pathSegments.length == 2) {
-              final routeName = uri.pathSegments[0];
-              final userId = uri.pathSegments[1];
+      // --- DYNAMIC ROUTING FOR QR CODES ---
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
 
-              if (routeName == 'profile' || routeName == 'verify') {
-                return MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userId: userId),
-                );
-              }
-            }
-            return null;
-          },
-        );
+        if (uri != null && uri.pathSegments.length == 2) {
+          final routeName = uri.pathSegments[0];
+          final userId = uri.pathSegments[1];
+
+          if (routeName == 'profile' || routeName == 'verify') {
+            return MaterialPageRoute(
+              builder: (context) => ProfileScreen(userId: userId),
+            );
+          }
+        }
+        return null;
       },
     );
   }

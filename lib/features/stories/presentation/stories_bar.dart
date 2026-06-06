@@ -1,6 +1,5 @@
 // ===============================
-// FILE NAME: stories_bar.dart
-// FILE PATH: lib/screens/stories/stories_bar.dart
+// FILE PATH: lib/features/stories/presentation/stories_bar.dart
 // ===============================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,16 +7,20 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:my_project/features/stories/presentation/stories_connector.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class StoriesBar extends StatefulWidget {
+import 'package:my_project/features/stories/presentation/stories_connector.dart';
+import 'package:my_project/features/stories/providers/stories_provider.dart';
+
+// 1. Changed to ConsumerStatefulWidget
+class StoriesBar extends ConsumerStatefulWidget {
   const StoriesBar({super.key});
+
   @override
-  State<StoriesBar> createState() => _StoriesBarState();
+  ConsumerState<StoriesBar> createState() => _StoriesBarState();
 }
 
-class _StoriesBarState extends State<StoriesBar> {
-  final StoriesService _service = StoriesService();
+class _StoriesBarState extends ConsumerState<StoriesBar> {
   final currentUser = FirebaseAuth.instance.currentUser;
 
   // Vibrant Pink/Purple/Blue gradient matching your design image
@@ -67,13 +70,19 @@ class _StoriesBarState extends State<StoriesBar> {
 
   @override
   Widget build(BuildContext context) {
+    // 2. Watch the Riverpod provider instead of using StreamBuilder
+    final storiesAsync = ref.watch(activeStoriesProvider);
+
     return Container(
       height: 110,
       margin: const EdgeInsets.only(top: 4, bottom: 8),
-      child: StreamBuilder<List<Story>>(
-        stream: _service.getActiveStories(),
-        builder: (context, snapshot) {
-          final stories = snapshot.data ?? [];
+      child: storiesAsync.when(
+        loading:
+            () => const Center(
+              child: CircularProgressIndicator(color: Color(0xFF5A32FA)),
+            ),
+        error: (error, stack) => const SizedBox.shrink(),
+        data: (stories) {
           final Map<String, List<Story>> groupedStories = {};
 
           for (var story in stories) {
@@ -152,18 +161,16 @@ class _StoriesBarState extends State<StoriesBar> {
                               width: 1.5,
                             ),
                   ),
-                  padding: const EdgeInsets.all(
-                    2.5,
-                  ), // Gradient border thickness
+                  padding: const EdgeInsets.all(2.5),
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: bgColor,
                     ),
-                    padding: const EdgeInsets.all(
-                      2.5,
-                    ), // Inner gap before image
+                    padding: const EdgeInsets.all(2.5),
                     child: ClipOval(
+                      // Still safe to use a standard stream here since it's just one document fetch,
+                      // but can be upgraded to Riverpod later.
                       child: StreamBuilder<DocumentSnapshot>(
                         stream:
                             FirebaseFirestore.instance
@@ -192,7 +199,6 @@ class _StoriesBarState extends State<StoriesBar> {
                   ),
                 ),
               ),
-              // Plus Badge positioned exactly like the image
               Positioned(
                 bottom: 0,
                 right: 0,
@@ -204,10 +210,7 @@ class _StoriesBarState extends State<StoriesBar> {
                     decoration: BoxDecoration(
                       color: const Color(0xFF833AB4), // Vibrant purple
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: bgColor,
-                        width: 3.0, // Cuts into the avatar to look detached
-                      ),
+                      border: Border.all(color: bgColor, width: 3.0),
                     ),
                     child: const Icon(Icons.add, color: Colors.white, size: 16),
                   ),
@@ -271,21 +274,19 @@ class _StoriesBarState extends State<StoriesBar> {
                         )
                         : null,
               ),
-              padding: const EdgeInsets.all(2.5), // Gradient border thickness
+              padding: const EdgeInsets.all(2.5),
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: bgColor,
                 ),
-                padding: const EdgeInsets.all(2.5), // Inner gap before image
+                padding: const EdgeInsets.all(2.5),
                 child: ClipOval(
                   child: Image(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
             ),
             const SizedBox(height: 6),
-
-            // Get department to show below the name (e.g. "CSE '26" or Name)
             StreamBuilder<DocumentSnapshot>(
               stream:
                   FirebaseFirestore.instance
@@ -293,14 +294,12 @@ class _StoriesBarState extends State<StoriesBar> {
                       .doc(story.userId)
                       .snapshots(),
               builder: (context, userSnap) {
-                String labelText =
-                    story.userName.split(' ')[0]; // Fallback to first name
+                String labelText = story.userName.split(' ')[0];
 
                 if (userSnap.hasData && userSnap.data!.exists) {
                   final data = userSnap.data!.data() as Map<String, dynamic>;
                   final department = data['department'] ?? '';
                   if (department.isNotEmpty) {
-                    // Add a mock year just to match your design image style, or just the acronym
                     labelText = _getAcronym(department);
                   }
                 }

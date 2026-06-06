@@ -1,10 +1,4 @@
-// ===============================
-// FILE NAME: splash_screen.dart
-// FILE PATH: lib/features/dashboard/presentation/splash_screen.dart
-// ===============================
-
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // Import AuthGate for navigation
 import '../../auth/presentation/auth_gate.dart';
@@ -95,15 +89,8 @@ class _SplashScreenState extends State<SplashScreen>
                   width: 260, // Nice large width for the splash screen
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback to text if the image fails to load for any reason
-                    return Text(
-                      "Ente RIT",
-                      style: GoogleFonts.satisfy(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                    );
+                    // FIX: Return an empty box instead of text fallback to prevent flashing
+                    return const SizedBox(width: 260, height: 100);
                   },
                 ),
               ),
@@ -113,12 +100,7 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 60.0),
                   child: CircularProgressIndicator(
-                    color:
-                        isDark
-                            ? Colors.white
-                            : const Color(
-                              0xFFFF1EDF,
-                            ), // The Vibrant Pink from the logo
+                    color: isDark ? Colors.white : const Color(0xFFFF1EDF),
                   ),
                 ),
               ),

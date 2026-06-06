@@ -3,16 +3,16 @@
 // FILE PATH: lib/features/explore/presentation/widgets/explore_trending_grid.dart
 // ===============================
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// --- FIXED IMPORTS: Pointing to the new media_viewers folder ---
+import 'package:my_project/features/profile/providers/user_provider.dart';
 import 'package:my_project/core/widgets/media_viewers/full_screen_video_player.dart';
 import 'package:my_project/core/widgets/media_viewers/full_screen_image_viewer.dart';
 
-class ExploreTrendingGrid extends StatelessWidget {
+class ExploreTrendingGrid extends ConsumerWidget {
   final String currentUserId;
   final List<dynamic> myConnections;
   final Color cardColor;
@@ -29,24 +29,28 @@ class ExploreTrendingGrid extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('posts')
-              .orderBy('timestamp', descending: true)
-              .limit(50)
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SliverFillRemaining(
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 1. Instantly read trending posts from Riverpod memory cache
+    final trendingPostsAsync = ref.watch(trendingPostsProvider);
+
+    return trendingPostsAsync.when(
+      loading:
+          () => const SliverFillRemaining(
             child: Center(
               child: CircularProgressIndicator(color: Color(0xFFFF3E8E)),
             ),
-          );
-        }
-
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          ),
+      error:
+          (e, stack) => SliverFillRemaining(
+            child: Center(
+              child: Text(
+                'Error loading trending posts.',
+                style: TextStyle(color: subtitleColor),
+              ),
+            ),
+          ),
+      data: (allPosts) {
+        if (allPosts.isEmpty) {
           return SliverFillRemaining(
             child: Center(
               child: Column(
@@ -68,8 +72,9 @@ class ExploreTrendingGrid extends StatelessWidget {
           );
         }
 
+        // Filter out private posts from non-connections
         final visibleDocs =
-            snapshot.data!.docs.where((postDoc) {
+            allPosts.where((postDoc) {
               final data = postDoc.data() as Map<String, dynamic>;
               final authorId = data['userId'];
               final isPrivate = data['isAuthorPrivate'] ?? false;
@@ -78,6 +83,7 @@ class ExploreTrendingGrid extends StatelessWidget {
               return myConnections.contains(authorId);
             }).toList();
 
+        // Sort locally by highest likes
         visibleDocs.sort((a, b) {
           final aLikes =
               ((a.data() as Map<String, dynamic>)['likes'] as List<dynamic>? ??

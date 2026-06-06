@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 class AdminManageHomeBannersScreen extends StatefulWidget {
   const AdminManageHomeBannersScreen({super.key});
+
   @override
   State<AdminManageHomeBannersScreen> createState() =>
       _AdminManageHomeBannersScreenState();
@@ -87,7 +88,12 @@ class _AdminManageHomeBannersScreenState
   }
 
   Future<void> _uploadNewBanner() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    // FIX 1: Apply imageQuality to compress the image so it passes the 15MB Storage Rules Limit
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
     if (image == null) return;
 
     setState(() => _isUploading = true);
@@ -101,7 +107,12 @@ class _AdminManageHomeBannersScreenState
           .child('home_banners')
           .child(fileName);
 
-      await ref.putFile(File(image.path));
+      // FIX 2: Attach SettableMetadata so Firebase Storage knows it is an image
+      await ref.putFile(
+        File(image.path),
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
       final downloadUrl = await ref.getDownloadURL();
 
       // Save the banner data to Firestore

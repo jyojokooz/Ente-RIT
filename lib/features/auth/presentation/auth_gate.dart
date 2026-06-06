@@ -1,12 +1,6 @@
-// ===============================
-// FILE NAME: auth_gate.dart
-// FILE PATH: lib/features/auth/presentation/auth_gate.dart
-// ===============================
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:my_project/features/auth/presentation/create_username_screen.dart';
 import 'package:my_project/features/dashboard/presentation/main_screen.dart';
@@ -29,7 +23,7 @@ class AuthGate extends StatelessWidget {
           if (authSnapshot.hasData) {
             final user = authSnapshot.data!;
 
-            // --- PRODUCTION FIX: REQUIRE EMAIL VERIFICATION ---
+            // --- REQUIRE EMAIL VERIFICATION ---
             if (!user.emailVerified) {
               return const AuthScreen(); // Deny access to app
             }
@@ -86,28 +80,30 @@ class _HomeSkeletonLoader extends StatelessWidget {
           children: [
             Container(
               color: bgColor,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Ente RIT',
-                    style: GoogleFonts.poppins(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                      letterSpacing: -0.5,
-                    ),
+                  // FIX: Display the actual image instead of text in the skeleton loader
+                  Image.asset(
+                    isDark
+                        ? 'assets/enterit_logo.png'
+                        : 'assets/enterit_logo_light.png',
+                    height: 38,
+                    fit: BoxFit.contain,
+                    errorBuilder:
+                        (context, error, stackTrace) =>
+                            const SizedBox(width: 120, height: 38),
                   ),
                   Row(
                     children: [
-                      Icon(Icons.favorite_border, color: textColor, size: 28),
-                      const SizedBox(width: 8),
                       Icon(
-                        Icons.chat_bubble_outline,
+                        Icons.notifications_none_rounded,
                         color: textColor,
-                        size: 26,
+                        size: 28,
                       ),
+                      const SizedBox(width: 16),
+                      Icon(Icons.maps_ugc_rounded, color: textColor, size: 26),
                     ],
                   ),
                 ],

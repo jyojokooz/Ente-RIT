@@ -3,28 +3,28 @@
 // FILE PATH: lib/features/explore/presentation/explore_screen.dart
 // ===============================
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:my_project/features/explore/presentation/search_screen.dart';
 import 'package:my_project/features/profile/presentation/requests_screen.dart';
 import 'package:my_project/features/profile/presentation/find_friends_screen.dart';
+import 'package:my_project/features/profile/providers/user_provider.dart';
 
-// --- WIDGET IMPORTS ---
 import 'package:my_project/features/explore/presentation/widgets/explore_search_bar.dart';
 import 'package:my_project/features/explore/presentation/widgets/explore_menu_tile.dart';
 import 'package:my_project/features/explore/presentation/widgets/explore_trending_grid.dart';
 
-class ExploreScreen extends StatefulWidget {
+class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
 
   @override
-  State<ExploreScreen> createState() => _ExploreScreenState();
+  ConsumerState<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
+class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
 
   @override
@@ -64,7 +64,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // Component 1: Search Bar
+                  // Search Bar
                   ExploreSearchBar(
                     cardColor: cardColor,
                     subtitleColor: subtitleColor,
@@ -81,7 +81,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Component 2: Menu Tiles
+                  // Menu Tiles
                   ExploreMenuTile(
                     icon: Icons.people_alt_outlined,
                     iconColor: Colors.white,
@@ -145,18 +145,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
               child: Center(child: CircularProgressIndicator()),
             )
           else
-            StreamBuilder<DocumentSnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user!.uid)
-                      .snapshots(),
-              builder: (context, userSnap) {
-                if (!userSnap.hasData)
-                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+            Consumer(
+              builder: (context, ref, child) {
+                // Watch the user profile to get connection data
+                final userSnapAsync = ref.watch(userProfileProvider(user!.uid));
 
                 final myData =
-                    userSnap.data!.data() as Map<String, dynamic>? ?? {};
+                    userSnapAsync.value?.data() as Map<String, dynamic>? ?? {};
                 final List<dynamic> myConnections = myData['connections'] ?? [];
 
                 // Component 3: Explore Grid

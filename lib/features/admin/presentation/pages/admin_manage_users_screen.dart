@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: admin_manage_users_screen.dart
-// FILE PATH: lib/screens/admin/admin_manage_users_screen.dart
-// ===============================
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -99,14 +94,52 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
 
     if (confirmDelete) {
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .delete();
+        final firestore = FirebaseFirestore.instance;
+
+        // --- THE FIX: GLOBAL DATABASE CLEANUP ---
+        // 1. Remove from all connections
+        final connectionsQuery =
+            await firestore
+                .collection('users')
+                .where('connections', arrayContains: userId)
+                .get();
+        for (var doc in connectionsQuery.docs) {
+          doc.reference.update({
+            'connections': FieldValue.arrayRemove([userId]),
+          });
+        }
+
+        // 2. Remove from all sentRequests
+        final sentQuery =
+            await firestore
+                .collection('users')
+                .where('sentRequests', arrayContains: userId)
+                .get();
+        for (var doc in sentQuery.docs) {
+          doc.reference.update({
+            'sentRequests': FieldValue.arrayRemove([userId]),
+          });
+        }
+
+        // 3. Remove from all receivedRequests
+        final receivedQuery =
+            await firestore
+                .collection('users')
+                .where('receivedRequests', arrayContains: userId)
+                .get();
+        for (var doc in receivedQuery.docs) {
+          doc.reference.update({
+            'receivedRequests': FieldValue.arrayRemove([userId]),
+          });
+        }
+
+        // Finally, delete the actual user profile document
+        await firestore.collection('users').doc(userId).delete();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('User profile deleted.'),
+              content: Text('User profile deleted globally.'),
               backgroundColor: Colors.red,
             ),
           );
@@ -275,7 +308,7 @@ class _AdminManageUsersScreenState extends State<AdminManageUsersScreen> {
                             );
                           }
 
-                          // 3. Add Divider (Now allowed because list is generic)
+                          // 3. Add Divider
                           items.add(const PopupMenuDivider());
 
                           // 4. Add Delete Option

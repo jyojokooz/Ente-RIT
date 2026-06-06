@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: connections_screen.dart
-// FILE PATH: lib/screens/connections_screen.dart
-// ===============================
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,30 +5,43 @@ import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:my_project/features/profile/presentation/profile_screen.dart';
 
-class ConnectionsScreen extends StatelessWidget {
+class ConnectionsScreen extends StatefulWidget {
   final String title;
   final List<dynamic> userIds;
+  final String ownerId; // <-- ADDED: To know whose profile we are cleaning up
 
   const ConnectionsScreen({
     super.key,
     required this.title,
     required this.userIds,
+    required this.ownerId, // <-- ADDED
   });
+
+  @override
+  State<ConnectionsScreen> createState() => _ConnectionsScreenState();
+}
+
+class _ConnectionsScreenState extends State<ConnectionsScreen> {
+  final Set<String> _ghostUsers =
+      {}; // Tracks deleted users to hide them instantly
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // Modern color palette
     final bgColor = isDark ? const Color(0xFF161618) : const Color(0xFFF8F9FE);
     final textColor = isDark ? Colors.white : Colors.black87;
+
+    // Filter out ghost users locally so the UI updates instantly
+    final activeUsers =
+        widget.userIds.where((id) => !_ghostUsers.contains(id)).toList();
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
-          title,
+          widget.title,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             color: textColor,
@@ -49,7 +57,7 @@ class ConnectionsScreen extends StatelessWidget {
         ),
       ),
       body:
-          userIds.isEmpty
+          activeUsers.isEmpty
               ? _buildEmptyState(isDark, textColor)
               : ListView.builder(
                 physics: const BouncingScrollPhysics(),
@@ -57,9 +65,9 @@ class ConnectionsScreen extends StatelessWidget {
                   horizontal: 16,
                   vertical: 12,
                 ),
-                itemCount: userIds.length,
+                itemCount: activeUsers.length,
                 itemBuilder: (context, index) {
-                  final userId = userIds[index];
+                  final userId = activeUsers[index];
 
                   return FutureBuilder<DocumentSnapshot>(
                     future:
@@ -73,9 +81,24 @@ class ConnectionsScreen extends StatelessWidget {
                         return _buildShimmerTile(isDark);
                       }
 
-                      // Hide deleted/unavailable users completely
+                      // --- THE FIX: SELF-HEALING DATABASE LOGIC ---
                       if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                        return const SizedBox.shrink();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && !_ghostUsers.contains(userId)) {
+                            setState(() => _ghostUsers.add(userId));
+                            // Automatically remove the deleted user from the owner's connections
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(widget.ownerId)
+                                .update({
+                                  'connections': FieldValue.arrayRemove([
+                                    userId,
+                                  ]),
+                                })
+                                .catchError((_) {});
+                          }
+                        });
+                        return const SizedBox.shrink(); // Hide the ghost user
                       }
 
                       final userData =
@@ -199,16 +222,12 @@ class _MingleTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Avatar with Gradient Ring
             Container(
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF00C6FB),
-                    Color(0xFF005BEA),
-                  ], // Cyan to Blue
+                  colors: [Color(0xFF00C6FB), Color(0xFF005BEA)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
