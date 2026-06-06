@@ -1,6 +1,6 @@
 // ===============================
 // FILE NAME: story_creator_screen.dart
-// FILE PATH: lib/screens/stories/story_creator_screen.dart
+// FILE PATH: lib/features/stories/presentation/story_creator_screen.dart
 // ===============================
 
 // ignore_for_file: deprecated_member_use
@@ -35,7 +35,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
   late PageController _filterPageController;
   int _selectedFilterIndex = 0;
 
-  // Professional Color Matrices
   final List<Map<String, dynamic>> _filters = [
     {
       'name': 'Auto Glow',
@@ -357,7 +356,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
     File? thumbnail,
     bool isFrontCamera,
   ) {
-    // USE push() INSTEAD OF pushReplacement()
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -368,12 +366,9 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
               thumbnailFile: thumbnail,
               filterMatrix: _filters[_selectedFilterIndex]['matrix'],
               isFrontCamera: isFrontCamera,
-              // Safely pop the editor context
               onBack: () => Navigator.pop(editorContext),
               onUploadComplete: () {
-                // Pop the Editor
                 Navigator.pop(editorContext);
-                // Then Pop the Camera to return to the Home/Feed
                 if (mounted) {
                   Navigator.pop(context);
                 }
@@ -424,13 +419,11 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        bottom: false, // Ensures bottom bar touches the very bottom edge
+        bottom: false,
         child: Column(
           children: [
-            // --- 1. IDENTICAL FRAMED AREA ---
             Expanded(
               child: Padding(
-                // EXACT SAME padding in both screens
                 padding: const EdgeInsets.only(
                   top: 8.0,
                   left: 4.0,
@@ -442,7 +435,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Camera Preview (Forced to cover the exact frame without stretching)
                       if (_isCameraInitialized)
                         SizedBox.expand(
                           child: FittedBox(
@@ -471,7 +463,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                           child: CircularProgressIndicator(color: Colors.white),
                         ),
 
-                      // Subtle dark gradient at top for visibility of buttons
                       IgnorePointer(
                         child: Container(
                           decoration: BoxDecoration(
@@ -490,7 +481,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                         ),
                       ),
 
-                      // Top Controls inside the frame
                       Positioned(
                         top: 16,
                         left: 16,
@@ -506,28 +496,16 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                               ),
                               onPressed: () => Navigator.pop(context),
                             ),
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    _flashMode == FlashMode.torch
-                                        ? Icons.flash_on
-                                        : Icons.flash_off,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
-                                  onPressed: _toggleFlash,
-                                ),
-                                const SizedBox(width: 16),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.settings_outlined,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
-                                  onPressed: () {}, // Settings placeholder
-                                ),
-                              ],
+                            // REMOVED HARDCODED/UNRESPONSIVE SETTINGS BUTTON
+                            IconButton(
+                              icon: Icon(
+                                _flashMode == FlashMode.torch
+                                    ? Icons.flash_on
+                                    : Icons.flash_off,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              onPressed: _toggleFlash,
                             ),
                           ],
                         ),
@@ -538,14 +516,12 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
               ),
             ),
 
-            // --- 2. BOTTOM CONTROLS (FIXED EXACT HEIGHT: 160) ---
             Container(
               height: 160,
               color: Colors.black,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Filter Selector (Hidden when recording)
                   if (!_isRecording)
                     SizedBox(
                       height: 55,
@@ -594,13 +570,11 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
 
                   const SizedBox(height: 15),
 
-                  // Capture Row
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 30),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Gallery Button
                         GestureDetector(
                           onTap: _openGallery,
                           child: Container(
@@ -618,7 +592,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                           ),
                         ),
 
-                        // Capture Button
                         GestureDetector(
                           onTap: _takePicture,
                           onLongPress: _startVideoRecording,
@@ -649,7 +622,6 @@ class _StoryCreatorScreenState extends State<StoryCreatorScreen>
                           ),
                         ),
 
-                        // Switch Camera Button
                         GestureDetector(
                           onTap: _switchCamera,
                           child: Container(

@@ -1,9 +1,7 @@
 // ===============================
 // FILE NAME: story_editor_view.dart
-// FILE PATH: lib/screens/stories/story_editor_view.dart
+// FILE PATH: lib/features/stories/presentation/story_editor_view.dart
 // ===============================
-
-// ignore_for_file: deprecated_member_use
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -110,9 +108,8 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                             type: OverlayType.text,
                             content: val,
                             offset: Offset(
-                              MediaQuery.of(context).size.width / 2 - 50,
-                              MediaQuery.of(context).size.height /
-                                  3, // placed higher up
+                              MediaQuery.of(context).size.width / 2 - 80,
+                              MediaQuery.of(context).size.height / 3,
                             ),
                           ),
                         );
@@ -181,14 +178,11 @@ class _StoryEditorViewState extends State<StoryEditorView> {
 
   Future<void> _captureAndProceed() async {
     if (_isUploading) return;
-
     setState(() => _isUploading = true);
 
     try {
-      // Small delay to ensure any active keyboard/UI shifts are settled
       await Future.delayed(const Duration(milliseconds: 150));
 
-      // 1. Find the boundary to screenshot
       RenderRepaintBoundary? boundary =
           _previewContainerKey.currentContext?.findRenderObject()
               as RenderRepaintBoundary?;
@@ -197,8 +191,8 @@ class _StoryEditorViewState extends State<StoryEditorView> {
         throw Exception("Could not find the image canvas.");
       }
 
-      // 2. Take the screenshot (Reduced pixelRatio to 2.0 to prevent memory crashes)
-      ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      // FIX: Lowered pixelRatio to 1.5 to prevent memory crashes / ANRs on mid-range Androids
+      ui.Image image = await boundary.toImage(pixelRatio: 1.5);
       ByteData? byteData = await image.toByteData(
         format: ui.ImageByteFormat.png,
       );
@@ -219,7 +213,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
 
       if (!mounted) return;
 
-      // 3. Move to next image OR upload
       if (_currentEditIndex < widget.files.length - 1) {
         setState(() {
           _currentEditIndex++;
@@ -227,12 +220,11 @@ class _StoryEditorViewState extends State<StoryEditorView> {
         });
       } else {
         await _storiesService.uploadStories(_finalBakedFiles);
-
         if (!mounted) return;
         widget.onUploadComplete();
       }
     } catch (e) {
-      debugPrint("STORY UPLOAD ERROR: $e"); // Prints exact error to console
+      debugPrint("STORY UPLOAD ERROR: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -247,15 +239,14 @@ class _StoryEditorViewState extends State<StoryEditorView> {
     }
   }
 
-  // UI components for top right tool buttons
   Widget _buildToolButton(IconData icon, VoidCallback onTap, {String? text}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(10),
-        decoration: const BoxDecoration(
-          color: Colors.black45,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.5),
           shape: BoxShape.circle,
         ),
         child:
@@ -265,7 +256,7 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontSize: 18,
                   ),
                 )
                 : Icon(icon, color: Colors.white, size: 24),
@@ -275,9 +266,7 @@ class _StoryEditorViewState extends State<StoryEditorView> {
 
   @override
   Widget build(BuildContext context) {
-    // Prepare Media Background Layer
-    Widget
-    mediaLayer =
+    Widget mediaLayer =
         widget.postType == PostType.video
             ? Stack(
               fit: StackFit.expand,
@@ -294,7 +283,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                 ),
               ],
             )
-            // Image spans the exact dimensions of the expanded frame identically to the camera
             : SizedBox.expand(
               child: Image.file(
                 widget.files[_currentEditIndex],
@@ -302,7 +290,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
               ),
             );
 
-    // FLIP MIRROR HACK: Un-mirror front camera photos
     if (widget.isFrontCamera) {
       mediaLayer = Transform(
         alignment: Alignment.center,
@@ -319,10 +306,8 @@ class _StoryEditorViewState extends State<StoryEditorView> {
           children: [
             Column(
               children: [
-                // --- 1. IDENTICAL FRAMED AREA ---
                 Expanded(
                   child: Padding(
-                    // EXACT SAME padding in both screens
                     padding: const EdgeInsets.only(
                       top: 8.0,
                       left: 4.0,
@@ -334,7 +319,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          // Base Image wrapped in RepaintBoundary (We only screenshot the inner image)
                           RepaintBoundary(
                             key: _previewContainerKey,
                             child: Stack(
@@ -346,7 +330,7 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                                   ),
                                   child: mediaLayer,
                                 ),
-                                // Active Overlays (Text & Stickers)
+                                // Active Overlays
                                 ..._overlays[_currentEditIndex]!.map((item) {
                                   return TransformableOverlayWidget(
                                     item: item,
@@ -369,9 +353,7 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                             ),
                           ),
 
-                          // Top Controls (Overlayed over the frame)
                           if (!_isUploading) ...[
-                            // Top subtle dark gradient
                             IgnorePointer(
                               child: Container(
                                 height: 100,
@@ -380,15 +362,13 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
                                     colors: [
-                                      Colors.black.withOpacity(0.3),
+                                      Colors.black.withOpacity(0.4),
                                       Colors.transparent,
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-
-                            // Back Button
                             Positioned(
                               top: 16,
                               left: 16,
@@ -408,13 +388,12 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                                 ),
                               ),
                             ),
-
-                            // Right Tool Column (Aa, Sticker, etc.)
                             Positioned(
                               top: 16,
                               right: 16,
                               child: Column(
                                 children: [
+                                  // REMOVED: Non-functioning Magic Wand and Music Buttons
                                   _buildToolButton(
                                     Icons.text_fields,
                                     _addTextOverlay,
@@ -424,11 +403,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                                     Icons.emoji_emotions_outlined,
                                     _showStickerSheet,
                                   ),
-                                  _buildToolButton(
-                                    Icons.music_note_outlined,
-                                    () {},
-                                  ),
-                                  _buildToolButton(Icons.auto_fix_high, () {}),
                                 ],
                               ),
                             ),
@@ -439,119 +413,69 @@ class _StoryEditorViewState extends State<StoryEditorView> {
                   ),
                 ),
 
-                // --- 2. BOTTOM CONTROLS (FIXED EXACT HEIGHT: 160) ---
                 Container(
-                  height: 160,
+                  height: 120,
                   color: Colors.black,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                    horizontal: 20,
                     vertical: 16,
                   ),
                   child:
                       !_isUploading
-                          ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          ? Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  // "Your story" Pill Button
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: _captureAndProceed,
-                                      child: Container(
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade900,
-                                          borderRadius: BorderRadius.circular(
-                                            30,
+                              // Cleaned up Bottom Buttons (Removed fake "Close Friends")
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: _captureAndProceed,
+                                  child: Container(
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: Colors.grey,
+                                          backgroundImage: AssetImage(
+                                            'assets/default_avatar.png',
                                           ),
                                         ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            const CircleAvatar(
-                                              radius: 12,
-                                              backgroundColor: Colors.grey,
-                                              backgroundImage: AssetImage(
-                                                'assets/default_avatar.png',
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              "Your story",
-                                              style: GoogleFonts.poppins(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ],
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          "Share to Your Story",
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.black,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-
-                                  // "Close Friends" Pill Button
-                                  Expanded(
-                                    child: Container(
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade900,
-                                        borderRadius: BorderRadius.circular(30),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(2),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.green,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.star,
-                                              color: Colors.white,
-                                              size: 16,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            "Close Friends",
-                                            style: GoogleFonts.poppins(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w500,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: _captureAndProceed,
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blueAccent,
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(width: 10),
-
-                                  // Next Arrow Button
-                                  GestureDetector(
-                                    onTap: _captureAndProceed,
-                                    child: Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.blueAccent,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.arrow_forward_ios,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ),
+                                  child: const Icon(
+                                    Icons.send_rounded,
+                                    color: Colors.white,
+                                    size: 24,
                                   ),
-                                ],
+                                ),
                               ),
                             ],
                           )
@@ -560,7 +484,6 @@ class _StoryEditorViewState extends State<StoryEditorView> {
               ],
             ),
 
-            // LOADING OVERLAY (Drawn ON TOP while uploading)
             if (_isUploading)
               Container(
                 color: Colors.black87,
@@ -590,7 +513,7 @@ class _StoryEditorViewState extends State<StoryEditorView> {
   }
 }
 
-// Sub-widget for gestures (Remains identical)
+// --- FIX: DRAGGING AND SCALING MATHEMATICS ---
 class TransformableOverlayWidget extends StatefulWidget {
   final OverlayItem item;
   final ValueChanged<OverlayItem> onUpdate;
@@ -610,7 +533,6 @@ class _TransformableOverlayWidgetState
     extends State<TransformableOverlayWidget> {
   double _initialScale = 1.0;
   double _initialRotation = 0.0;
-  Offset _initialOffset = Offset.zero;
 
   @override
   Widget build(BuildContext context) {
@@ -621,12 +543,12 @@ class _TransformableOverlayWidgetState
         onScaleStart: (details) {
           _initialScale = widget.item.scale;
           _initialRotation = widget.item.rotation;
-          _initialOffset = widget.item.offset;
         },
         onScaleUpdate: (details) {
           setState(() {
-            widget.item.offset = _initialOffset + details.focalPointDelta;
-            widget.item.scale = (_initialScale * details.scale).clamp(0.5, 4.0);
+            // FIX: We must add the delta to the current offset, NOT the initial offset
+            widget.item.offset += details.focalPointDelta;
+            widget.item.scale = (_initialScale * details.scale).clamp(0.5, 5.0);
             widget.item.rotation = _initialRotation + details.rotation;
           });
           widget.onUpdate(widget.item);
