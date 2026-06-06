@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: full_screen_video_player.dart
-// FILE PATH: lib/core/widgets/media_viewers/full_screen_video_player.dart
-// ===============================
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,13 +13,9 @@ import 'package:my_project/core/utils/video_preload_service.dart';
 
 class FullScreenVideoPlayer extends StatefulWidget {
   final String videoUrl;
-  final String? postId; // Made Optional
+  final String? postId;
 
-  const FullScreenVideoPlayer({
-    super.key,
-    required this.videoUrl,
-    this.postId, // Optional
-  });
+  const FullScreenVideoPlayer({super.key, required this.videoUrl, this.postId});
 
   @override
   State<FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
@@ -33,7 +24,6 @@ class FullScreenVideoPlayer extends StatefulWidget {
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _controller;
-
   bool _isInitialized = false;
   bool _hasError = false;
   bool _showControls = true;
@@ -51,7 +41,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   void initState() {
     super.initState();
     _initializeVideo();
-
     _likeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -64,7 +53,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
   Future<void> _initializeVideo() async {
     try {
       var ctrl = VideoPreloadService.instance.takeController(widget.videoUrl);
-
       if (ctrl == null) {
         ctrl = VideoPlayerController.networkUrl(
           Uri.parse(widget.videoUrl),
@@ -72,15 +60,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
         );
         await ctrl.initialize();
       }
-
       if (!mounted) {
         ctrl.dispose();
         return;
       }
-
-      if (ctrl.value.hasError) {
-        throw Exception(ctrl.value.errorDescription);
-      }
+      if (ctrl.value.hasError) throw Exception(ctrl.value.errorDescription);
 
       ctrl.setVolume(_isMuted ? 0.0 : 1.0);
       ctrl.setLooping(true);
@@ -91,7 +75,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
         _controller = ctrl;
         _isInitialized = true;
       });
-
       _startHideTimer();
     } catch (e) {
       debugPrint("Video Player Initialization Error: $e");
@@ -123,11 +106,10 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
 
   void _toggleControls() {
     setState(() => _showControls = !_showControls);
-    if (_showControls) {
+    if (_showControls)
       _startHideTimer();
-    } else {
+    else
       _hideTimer?.cancel();
-    }
   }
 
   void _togglePlayPause() {
@@ -230,7 +212,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
               'userId': postAuthorId,
               'title': 'New Like',
               'body':
-                  '${userData['displayName'] ?? 'Someone'} liked your post.',
+                  '${userData['displayName'] ?? 'Someone'} liked your video.',
               'type': 'like',
               'relatedDocId': widget.postId,
               'triggeringUserId': currentUserId,
@@ -436,12 +418,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                     postData['likes'] as List<dynamic>? ?? [];
                                 final isLiked = likes.contains(currentUserId);
                                 final commentsCount = postData['comments'] ?? 0;
-                                final userName =
-                                    postData['username'] ??
-                                    postData['userName'] ??
-                                    'User';
-                                final userImage =
-                                    postData['userImageUrl'] ?? '';
                                 final caption = postData['caption'] ?? '';
 
                                 String displayCaption = caption;
@@ -455,60 +431,95 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                   }
                                 }
 
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '@$userName',
-                                            style: GoogleFonts.poppins(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                              shadows: [
-                                                const Shadow(
-                                                  color: Colors.black45,
-                                                  blurRadius: 4,
-                                                  offset: Offset(0, 1),
+                                // --- THE FIX: LIVE PROFILE FETCH ---
+                                return StreamBuilder<DocumentSnapshot>(
+                                  stream:
+                                      postAuthorId.isNotEmpty
+                                          ? FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(postAuthorId)
+                                              .snapshots()
+                                          : const Stream.empty(),
+                                  builder: (context, authorSnap) {
+                                    String userName =
+                                        postData['username'] ??
+                                        postData['userName'] ??
+                                        'User';
+                                    String userImage =
+                                        postData['userImageUrl'] ?? '';
+
+                                    if (authorSnap.hasData &&
+                                        authorSnap.data!.exists) {
+                                      final authorData =
+                                          authorSnap.data!.data()
+                                              as Map<String, dynamic>;
+                                      userName =
+                                          authorData['username'] ??
+                                          authorData['displayName'] ??
+                                          userName;
+                                      userImage =
+                                          authorData['profilePhotoUrl'] ??
+                                          userImage;
+                                    }
+
+                                    return Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '@$userName',
+                                                style: GoogleFonts.poppins(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                  shadows: [
+                                                    const Shadow(
+                                                      color: Colors.black45,
+                                                      blurRadius: 4,
+                                                      offset: Offset(0, 1),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (caption.isNotEmpty) ...[
-                                            const SizedBox(height: 8),
-                                            GestureDetector(
-                                              onTap:
-                                                  () => setState(
-                                                    () =>
-                                                        _isCaptionExpanded =
-                                                            !_isCaptionExpanded,
-                                                  ),
-                                              child: RichText(
-                                                text: TextSpan(
-                                                  text: displayCaption,
-                                                  style: GoogleFonts.poppins(
-                                                    color: Colors.white,
-                                                    fontSize: 14,
-                                                    shadows: [
-                                                      const Shadow(
-                                                        color: Colors.black45,
-                                                        blurRadius: 4,
-                                                        offset: Offset(0, 1),
+                                              ),
+                                              if (caption.isNotEmpty) ...[
+                                                const SizedBox(height: 8),
+                                                GestureDetector(
+                                                  onTap:
+                                                      () => setState(
+                                                        () =>
+                                                            _isCaptionExpanded =
+                                                                !_isCaptionExpanded,
                                                       ),
-                                                    ],
-                                                  ),
-                                                  children: [
-                                                    if (isTruncated)
-                                                      TextSpan(
-                                                        text: ' more',
-                                                        style:
-                                                            GoogleFonts.poppins(
+                                                  child: RichText(
+                                                    text: TextSpan(
+                                                      text: displayCaption,
+                                                      style: GoogleFonts.poppins(
+                                                        color: Colors.white,
+                                                        fontSize: 14,
+                                                        shadows: [
+                                                          const Shadow(
+                                                            color:
+                                                                Colors.black45,
+                                                            blurRadius: 4,
+                                                            offset: Offset(
+                                                              0,
+                                                              1,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      children: [
+                                                        if (isTruncated)
+                                                          TextSpan(
+                                                            text: ' more',
+                                                            style: GoogleFonts.poppins(
                                                               color:
                                                                   Colors
                                                                       .white70,
@@ -516,88 +527,91 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                                                   FontWeight
                                                                       .bold,
                                                             ),
-                                                      ),
-                                                  ],
+                                                          ),
+                                                      ],
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        StreamBuilder<DocumentSnapshot>(
-                                          stream:
-                                              FirebaseFirestore.instance
-                                                  .collection('users')
-                                                  .doc(currentUserId)
-                                                  .snapshots(),
-                                          builder: (context, userSnap) {
-                                            bool canMingle = false;
-                                            if (userSnap.hasData &&
-                                                userSnap.data!.exists) {
-                                              final myData =
-                                                  userSnap.data!.data()
-                                                      as Map<String, dynamic>;
-                                              final connections =
-                                                  myData['connections']
-                                                      as List<dynamic>? ??
-                                                  [];
-                                              final sentReqs =
-                                                  myData['sentRequests']
-                                                      as List<dynamic>? ??
-                                                  [];
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            StreamBuilder<DocumentSnapshot>(
+                                              stream:
+                                                  FirebaseFirestore.instance
+                                                      .collection('users')
+                                                      .doc(currentUserId)
+                                                      .snapshots(),
+                                              builder: (context, userSnap) {
+                                                bool canMingle = false;
+                                                if (userSnap.hasData &&
+                                                    userSnap.data!.exists) {
+                                                  final myData =
+                                                      userSnap.data!.data()
+                                                          as Map<
+                                                            String,
+                                                            dynamic
+                                                          >;
+                                                  final connections =
+                                                      myData['connections']
+                                                          as List<dynamic>? ??
+                                                      [];
+                                                  final sentReqs =
+                                                      myData['sentRequests']
+                                                          as List<dynamic>? ??
+                                                      [];
+                                                  if (postAuthorId.isNotEmpty &&
+                                                      postAuthorId !=
+                                                          currentUserId &&
+                                                      !connections.contains(
+                                                        postAuthorId,
+                                                      ) &&
+                                                      !sentReqs.contains(
+                                                        postAuthorId,
+                                                      )) {
+                                                    canMingle = true;
+                                                  }
+                                                }
 
-                                              if (postAuthorId.isNotEmpty &&
-                                                  postAuthorId !=
-                                                      currentUserId &&
-                                                  !connections.contains(
-                                                    postAuthorId,
-                                                  ) &&
-                                                  !sentReqs.contains(
-                                                    postAuthorId,
-                                                  )) {
-                                                canMingle = true;
-                                              }
-                                            }
-
-                                            return Stack(
-                                              clipBehavior: Clip.none,
-                                              alignment: Alignment.center,
-                                              children: [
-                                                CircleAvatar(
-                                                  radius: 22,
-                                                  backgroundColor:
-                                                      Colors.grey.shade800,
-                                                  backgroundImage:
-                                                      userImage.isNotEmpty
-                                                          ? CachedNetworkImageProvider(
-                                                            userImage,
-                                                          )
-                                                          : null,
-                                                  child:
-                                                      userImage.isEmpty
-                                                          ? const Icon(
-                                                            Icons.person,
-                                                            color: Colors.white,
-                                                          )
-                                                          : null,
-                                                ),
-                                                if (canMingle)
-                                                  Positioned(
-                                                    bottom: -8,
-                                                    child: GestureDetector(
-                                                      onTap:
-                                                          () =>
-                                                              _sendMingleRequest(
-                                                                postAuthorId,
-                                                              ),
-                                                      child: Container(
-                                                        decoration:
-                                                            BoxDecoration(
+                                                return Stack(
+                                                  clipBehavior: Clip.none,
+                                                  alignment: Alignment.center,
+                                                  children: [
+                                                    CircleAvatar(
+                                                      radius: 22,
+                                                      backgroundColor:
+                                                          Colors.grey.shade800,
+                                                      backgroundImage:
+                                                          userImage.isNotEmpty
+                                                              ? CachedNetworkImageProvider(
+                                                                userImage,
+                                                              )
+                                                              : null,
+                                                      child:
+                                                          userImage.isEmpty
+                                                              ? const Icon(
+                                                                Icons.person,
+                                                                color:
+                                                                    Colors
+                                                                        .white,
+                                                              )
+                                                              : null,
+                                                    ),
+                                                    if (canMingle)
+                                                      Positioned(
+                                                        bottom: -8,
+                                                        child: GestureDetector(
+                                                          onTap:
+                                                              () =>
+                                                                  _sendMingleRequest(
+                                                                    postAuthorId,
+                                                                  ),
+                                                          child: Container(
+                                                            decoration: BoxDecoration(
                                                               color:
                                                                   const Color(
                                                                     0xFFFF2056,
@@ -612,99 +626,105 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer>
                                                                 width: 1.5,
                                                               ),
                                                             ),
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              2,
+                                                            padding:
+                                                                const EdgeInsets.all(
+                                                                  2,
+                                                                ),
+                                                            child: const Icon(
+                                                              Icons.add,
+                                                              color:
+                                                                  Colors.white,
+                                                              size: 14,
                                                             ),
-                                                        child: const Icon(
-                                                          Icons.add,
-                                                          color: Colors.white,
-                                                          size: 14,
+                                                          ),
                                                         ),
                                                       ),
+                                                  ],
+                                                );
+                                              },
+                                            ),
+                                            const SizedBox(height: 24),
+                                            GestureDetector(
+                                              onTap: () => _toggleLike(likes),
+                                              child: Column(
+                                                children: [
+                                                  ScaleTransition(
+                                                    scale: _likeScaleAnimation,
+                                                    child: Icon(
+                                                      Icons.favorite,
+                                                      color:
+                                                          isLiked
+                                                              ? const Color(
+                                                                0xFFFF2056,
+                                                              )
+                                                              : Colors.white,
+                                                      size: 35,
                                                     ),
                                                   ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                        const SizedBox(height: 24),
-                                        GestureDetector(
-                                          onTap: () => _toggleLike(likes),
-                                          child: Column(
-                                            children: [
-                                              ScaleTransition(
-                                                scale: _likeScaleAnimation,
-                                                child: Icon(
-                                                  Icons.favorite,
-                                                  color:
-                                                      isLiked
-                                                          ? const Color(
-                                                            0xFFFF2056,
-                                                          )
-                                                          : Colors.white,
-                                                  size: 35,
-                                                ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    _formatCount(likes.length),
+                                                    style: GoogleFonts.poppins(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _formatCount(likes.length),
-                                                style: GoogleFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 12,
-                                                ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            GestureDetector(
+                                              onTap: _openComments,
+                                              child: Column(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.chat_bubble_rounded,
+                                                    color: Colors.white,
+                                                    size: 32,
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    _formatCount(commentsCount),
+                                                    style: GoogleFonts.poppins(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        GestureDetector(
-                                          onTap: _openComments,
-                                          child: Column(
-                                            children: [
-                                              const Icon(
-                                                Icons.chat_bubble_rounded,
-                                                color: Colors.white,
-                                                size: 32,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            GestureDetector(
+                                              onTap: _openShare,
+                                              child: Column(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.reply_rounded,
+                                                    color: Colors.white,
+                                                    size: 36,
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    "Share",
+                                                    style: GoogleFonts.poppins(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _formatCount(commentsCount),
-                                                style: GoogleFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        GestureDetector(
-                                          onTap: _openShare,
-                                          child: Column(
-                                            children: [
-                                              const Icon(
-                                                Icons.reply_rounded,
-                                                color: Colors.white,
-                                                size: 36,
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                "Share",
-                                                style: GoogleFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ],
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 );
                               },
                             ),

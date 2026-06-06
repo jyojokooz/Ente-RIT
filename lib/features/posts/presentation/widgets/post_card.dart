@@ -1,8 +1,3 @@
-// ===============================
-// FILE NAME: post_card.dart
-// FILE PATH: lib/features/posts/presentation/widgets/post_card.dart
-// ===============================
-
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,10 +7,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // <-- ADDED FOR LIVE UPDATES
 
 import 'package:my_project/core/widgets/media_viewers/media_viewers_connector.dart';
 import 'package:my_project/features/posts/presentation/widgets/share_post_sheet.dart';
 import 'package:my_project/core/utils/app_cache_manager.dart';
+import 'package:my_project/features/profile/providers/user_provider.dart'; // <-- ADDED FOR LIVE UPDATES
 
 // --- GLOBAL AUDIO HANDLER ---
 class GlobalAudioHandler {
@@ -70,7 +67,8 @@ class GlobalAudioHandler {
   }
 }
 
-class PostCard extends StatefulWidget {
+// CHANGED TO ConsumerStatefulWidget FOR RIVERPOD
+class PostCard extends ConsumerStatefulWidget {
   final DocumentSnapshot postSnapshot;
   final Function() onCommentPressed;
   final Function() onDeletePressed;
@@ -89,10 +87,11 @@ class PostCard extends StatefulWidget {
   });
 
   @override
-  State<PostCard> createState() => _PostCardState();
+  ConsumerState<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
+class _PostCardState extends ConsumerState<PostCard>
+    with TickerProviderStateMixin {
   bool _isPlayingMusic = false;
   AnimationController? _likeController;
   late Animation<double> _likeScaleAnimation;
@@ -117,7 +116,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Like Button Bounce Animation
     _likeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
@@ -126,7 +124,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       CurvedAnimation(parent: _likeController!, curve: Curves.elasticOut),
     );
 
-    // Pinch-to-Zoom Snapback Animation
     _zoomAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -136,7 +133,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     _initializeLikeState();
 
-    // Initialize Video if Post is a Video
     final postData = widget.postSnapshot.data() as Map<String, dynamic>?;
     if (postData != null && postData['postType'] == 'video') {
       String url = postData['postMediaUrl'] ?? postData['postImageUrl'] ?? '';
@@ -146,7 +142,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 Uri.parse(url),
                 httpHeaders: {'User-Agent': 'EnteRITApp'},
               )
-              ..setVolume(0.0) // Start muted
+              ..setVolume(0.0)
               ..setLooping(true)
               ..initialize()
                   .then((_) {
@@ -196,7 +192,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Snaps the image back to original size when pinch is released
   void _resetZoom() {
     _zoomAnimation = Matrix4Tween(
       begin: _transformController.value,
@@ -210,7 +205,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _zoomAnimationController!.forward(from: 0);
   }
 
-  // Play/Pause Video based on scroll visibility
   void _onVisibilityChanged(VisibilityInfo info) {
     if (info.visibleFraction > 0.6) {
       if (_videoController != null && !_videoController!.value.isPlaying) {
@@ -227,32 +221,25 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
-  // Large Double Tap Heart Animation
   void _triggerDoubleTapLike() {
     setState(() => _showHeartOverlay = true);
-
     Timer(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _showHeartOverlay = false);
     });
-
     if (!_isLiked) {
       _triggerLikeButtonPress();
     }
   }
 
-  // Small Like Button Press
   void _triggerLikeButtonPress() {
     final bool newLikeState = !_isLiked;
-
     setState(() {
       _isLiked = newLikeState;
       _likesCount += newLikeState ? 1 : -1;
     });
-
     if (_likeController != null) {
       _likeController!.forward().then((_) => _likeController!.reverse());
     }
-
     widget.onLikePressed(newLikeState);
   }
 
@@ -281,6 +268,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final String postAuthorId = postData['userId'] ?? '';
     final String postType = postData['postType'] ?? 'image';
 
+    // --- THE FIX: LIVE PROFILE OVERRIDE ---
+    // Watches the live profile of the author so old posts instantly update to the new photo!
+    final authorAsync = ref.watch(userProfileProvider(postAuthorId));
+
+    String displayName = postData['userName'] ?? 'Unknown';
+    String profilePic = postData['userImageUrl'] ?? '';
+
+    if (authorAsync.hasValue && authorAsync.value!.exists) {
+      final authorData = authorAsync.value!.data() as Map<String, dynamic>;
+      displayName = authorData['displayName'] ?? displayName;
+      profilePic = authorData['profilePhotoUrl'] ?? profilePic;
+    }
+    // ---------------------------------------
+
     List<String> mediaUrls = [];
     if (postData['postImages'] != null &&
         (postData['postImages'] as List).isNotEmpty) {
@@ -297,10 +298,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final int commentsCount = postData['comments'] ?? 0;
     final Map<String, dynamic>? musicData = postData['music'];
     final String location = postData['location'] ?? '';
-
-    // Directly use stored names to prevent disappearing text
-    final String displayName = postData['userName'] ?? 'Unknown';
-    final String profilePic = postData['userImageUrl'] ?? '';
 
     String formattedTime = timestamp != null ? _formatTime(timestamp) : '';
     String subText = '';
@@ -319,9 +316,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ==========================================
-            // 1. INSTAGRAM STYLE HEADER
-            // ==========================================
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
@@ -493,10 +487,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ],
               ),
             ),
-
-            // ==========================================
-            // 2. EDGE-TO-EDGE MEDIA RENDERING
-            // ==========================================
             if (mediaUrls.isNotEmpty)
               GestureDetector(
                 onDoubleTap: _triggerDoubleTapLike,
@@ -516,14 +506,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 },
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    // Stops vertical images from being ridiculously long, but allows natural width filling
                     maxHeight: MediaQuery.of(context).size.height * 0.75,
                     minWidth: double.infinity,
                   ),
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // --- MEDIA DISPLAYER ---
                       postType == 'video'
                           ? (_isVideoInitialized && _videoController != null
                               ? AspectRatio(
@@ -545,7 +533,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                               ))
                           : InteractiveViewer(
                             transformationController: _transformController,
-                            panEnabled: false, // Prevents panning unless zoomed
+                            panEnabled: false,
                             scaleEnabled: true,
                             minScale: 1.0,
                             maxScale: 4.0,
@@ -554,9 +542,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             child: CachedNetworkImage(
                               imageUrl: mediaUrls.first,
                               width: double.infinity,
-                              fit:
-                                  BoxFit
-                                      .cover, // Fills width smoothly without gaps
+                              fit: BoxFit.cover,
                               placeholder:
                                   (c, u) => Container(
                                     color:
@@ -574,8 +560,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                                   ),
                             ),
                           ),
-
-                      // --- VIDEO MUTE TOGGLE ---
                       if (postType == 'video')
                         Positioned(
                           bottom: 12,
@@ -603,8 +587,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-
-                      // --- MULTI IMAGE BADGE ---
                       if (mediaUrls.length > 1)
                         Positioned(
                           top: 12,
@@ -628,8 +610,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-
-                      // --- DOUBLE TAP HEART OVERLAY ---
                       if (_showHeartOverlay)
                         TweenAnimationBuilder<double>(
                           tween: Tween(begin: 0.5, end: 1.2),
@@ -650,10 +630,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
-            // ==========================================
-            // 3. ACTION BAR
-            // ==========================================
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Row(
@@ -698,10 +674,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ],
               ),
             ),
-
-            // ==========================================
-            // 4. LIKES & CAPTION
-            // ==========================================
             if (_likesCount > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -714,7 +686,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
             if (caption.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -750,10 +721,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
-            // ==========================================
-            // 5. COMMENTS TRIGGER
-            // ==========================================
             if (commentsCount > 0)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -771,7 +738,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
             const SizedBox(height: 8),
           ],
         ),
