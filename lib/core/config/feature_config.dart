@@ -15,7 +15,7 @@ import 'package:my_project/features/chat/presentation/peer_rooms_screen.dart';
 import 'package:my_project/features/campus/presentation/id_card_screen.dart';
 import 'package:my_project/features/tools/code_playground/code_playground_screen.dart';
 import 'package:my_project/features/tools/community/dev_community_screen.dart';
-import 'package:my_project/features/tools/games/game_view_screen.dart';
+import 'package:my_project/features/tools/games/games_hub_screen.dart';
 import 'package:my_project/features/campus/presentation/etlab_webview_screen.dart';
 
 // New Features Imports
@@ -220,14 +220,11 @@ class FeatureConfig {
     },
     'games': {
       'label': 'Games',
-      'description': 'Take a break & play',
       'icon': Icons.sports_esports_rounded,
-      'color': const Color(0xFF00CDAC),
-      'screen': const GameViewScreen(
-        title: 'Smash Karts',
-        url: 'https://poki.com/en/g/smash-karts',
-      ),
-      'category': 'Tech',
+      'color': const Color(0xFFF72585), // Neon Pink
+      'screen': const GamesHubScreen(),
+      'category': 'Social',
+      'description': 'Play games and compete on the college leaderboard.',
     },
     'nonote': {
       'label': 'No-Note',
