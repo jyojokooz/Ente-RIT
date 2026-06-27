@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 
 // A data model class for chat messages, now with helper methods for Firestore.
 class ChatMessage {
@@ -57,6 +59,10 @@ class Room {
 class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  String _hashPassword(String password) {
+    return sha256.convert(utf8.encode(password)).toString();
+  }
+
   Stream<List<Room>> get onRoomListChanged {
     return _firestore.collection('rooms').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Room.fromSnapshot(doc)).toList();
@@ -65,7 +71,8 @@ class ChatService {
 
   Future<bool> createRoom(String name, String password, String hostId) async {
     final trimmedName = name.trim();
-    if (trimmedName.isEmpty || password.trim().isEmpty) {
+    final trimmedPassword = password.trim();
+    if (trimmedName.isEmpty || trimmedPassword.isEmpty) {
       return false;
     }
     try {
@@ -75,7 +82,7 @@ class ChatService {
         return false;
       }
       await roomDocRef.set({
-        'password': password,
+        'passwordHash': _hashPassword(trimmedPassword),
         'hostId': hostId,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -103,11 +110,27 @@ class ChatService {
 
   Future<bool> verifyPassword(String roomName, String password) async {
     try {
+      final trimmedPassword = password.trim();
       final doc = await _firestore.collection('rooms').doc(roomName).get();
       if (!doc.exists) {
         return false;
       }
-      return doc.data()?['password'] == password;
+      final data = doc.data();
+      final storedHash = data?['passwordHash'] as String?;
+      if (storedHash != null && storedHash.isNotEmpty) {
+        return storedHash == _hashPassword(trimmedPassword);
+      }
+
+      // Legacy room support: migrate plaintext password to hash on first valid check.
+      final legacyPassword = data?['password'] as String?;
+      if (legacyPassword != null && legacyPassword == trimmedPassword) {
+        await doc.reference.update({
+          'passwordHash': _hashPassword(trimmedPassword),
+          'password': FieldValue.delete(),
+        });
+        return true;
+      }
+      return false;
     } catch (e) {
       return false;
     }
