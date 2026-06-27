@@ -8,7 +8,33 @@ const admin = require("firebase-admin");
 
 // IMPORTS FOR EMAIL OTP
 const nodemailer = require("nodemailer");
-const cors = require("cors")({ origin: true });
+const cors = require("cors")({
+  origin: [
+    "https://fir-auth-bfed9.web.app",
+    "https://fir-auth-bfed9.firebaseapp.com",
+  ],
+});
+
+const OTP_WINDOW_MS = 10 * 60 * 1000;
+const OTP_MAX_REQUESTS = 5;
+const otpRequestTracker = new Map();
+
+function isOtpRateLimited(identifier) {
+  const now = Date.now();
+  const record = otpRequestTracker.get(identifier);
+
+  if (!record || now - record.windowStart > OTP_WINDOW_MS) {
+    otpRequestTracker.set(identifier, {count: 1, windowStart: now});
+    return false;
+  }
+
+  if (record.count >= OTP_MAX_REQUESTS) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
+}
 
 // Initialize Admin SDK once
 if (admin.apps.length === 0) {
@@ -183,8 +209,21 @@ exports.sendOtpEmail = functions
         return res.status(400).send({ error: "Email and OTP are required" });
       }
 
-      if (!email.toLowerCase().endsWith("@rit.ac.in")) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const otpCode = String(otp).trim();
+      const clientIp =
+        (req.headers["x-forwarded-for"] || "").toString().split(",")[0].trim() ||
+        req.ip ||
+        "unknown";
+
+      if (!normalizedEmail.endsWith("@rit.ac.in")) {
         return res.status(403).send({ error: "Unauthorized domain." });
+      }
+      if (!/^\d{4,8}$/.test(otpCode)) {
+        return res.status(400).send({ error: "Invalid OTP format." });
+      }
+      if (isOtpRateLimited(`${normalizedEmail}:${clientIp}`)) {
+        return res.status(429).send({ error: "Too many OTP requests. Try later." });
       }
 
       // Read secrets securely
@@ -202,14 +241,14 @@ exports.sendOtpEmail = functions
 
       const mailOptions = {
         from: `"Ente RIT Support" <${senderEmail}>`,
-        to: email,
+        to: normalizedEmail,
         subject: "Your Verification Code for Ente RIT",
         html: `
           <div style="font-family: Arial, sans-serif; padding: 20px;">
             <h2>Welcome to Ente RIT!</h2>
             <p>Hi ${name || "there"},</p>
             <p>Your verification code is:</p>
-            <h1 style="letter-spacing: 5px;">${otp}</h1>
+            <h1 style="letter-spacing: 5px;">${otpCode}</h1>
             <p>This code expires in 10 minutes.</p>
           </div>
         `,
@@ -217,15 +256,11 @@ exports.sendOtpEmail = functions
 
       try {
         await transporter.sendMail(mailOptions);
-        console.log("Email sent successfully to:", email);
+        console.log("Email sent successfully to:", normalizedEmail);
         return res.status(200).send({ success: true });
       } catch (error) {
-        // THIS LOG IS CRITICAL: View this in Firebase Console > Functions > Logs
-        console.error("DETAILED SMTP ERROR:", error);
-        return res.status(500).send({
-          error: "Failed to send email",
-          details: error.message, // Temporarily send detail to Flutter to see the error
-        });
+        console.error("SMTP ERROR:", error);
+        return res.status(500).send({ error: "Failed to send email" });
       }
     });
   });
