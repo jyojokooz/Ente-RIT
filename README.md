@@ -1,5 +1,5 @@
 <h1 align="center" style="background: linear-gradient(to right, #ff416c, #0077ff); -webkit-background-clip: text; color: transparent;">
-  🎓 KAMPUS KONNECT
+  🎓 Ente RIT
 </h1>
 
 <p align="center">
